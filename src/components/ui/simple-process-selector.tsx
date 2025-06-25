@@ -1,0 +1,47 @@
+'use client'
+
+import React from 'react'
+
+interface SimpleProcessSelectorProps {
+  selectedProcess: 'ccm' | 'prr'
+  onProcessChange: (process: 'ccm' | 'prr') => void
+  loading?: boolean
+}
+
+export function SimpleProcessSelector({ 
+  selectedProcess, 
+  onProcessChange, 
+  loading = false 
+}: SimpleProcessSelectorProps) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-sm font-medium text-gray-700">Proceso:</span>
+      <div className="flex bg-gray-100 rounded-lg p-1">
+        <button
+          onClick={() => onProcessChange('ccm')}
+          disabled={loading}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            selectedProcess === 'ccm'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+          }`}
+        >
+          CCM
+        </button>
+        <button
+          onClick={() => onProcessChange('prr')}
+          disabled={loading}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            selectedProcess === 'prr'
+              ? 'bg-green-600 text-white shadow-sm'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+          }`}
+        >
+          PRR
+        </button>
+      </div>
+    </div>
+  )
+} 
+ 
+ 

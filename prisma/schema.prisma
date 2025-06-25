@@ -1,0 +1,120 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // uncomment next line if you use Prisma <5.10
+  // directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+// Modelo para usuarios del dashboard
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relaciones
+  processes Process[]
+  reports   Report[]
+
+  @@map("users")
+}
+
+// Roles de usuario
+enum Role {
+  ADMIN
+  MANAGER
+  USER
+}
+
+// Modelo para procesos de negocio
+model Process {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  status      ProcessStatus @default(ACTIVE)
+  ownerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relaciones
+  owner   User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  metrics Metric[]
+  reports Report[]
+
+  @@map("processes")
+}
+
+// Estado del proceso
+enum ProcessStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+// Modelo para métricas/KPIs
+model Metric {
+  id          String     @id @default(cuid())
+  name        String
+  description String?
+  value       Float
+  target      Float?
+  unit        String?
+  category    String
+  processId   String
+  recordedAt  DateTime   @default(now())
+  createdAt   DateTime   @default(now())
+
+  // Relaciones
+  process Process @relation(fields: [processId], references: [id], onDelete: Cascade)
+
+  @@map("metrics")
+}
+
+// Modelo para reportes generados
+model Report {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  type        ReportType
+  data        Json       // Datos del reporte en formato JSON
+  processId   String
+  generatedBy String
+  createdAt   DateTime   @default(now())
+
+  // Relaciones
+  process   Process @relation(fields: [processId], references: [id], onDelete: Cascade)
+  generator User    @relation(fields: [generatedBy], references: [id])
+
+  @@map("reports")
+}
+
+// Tipos de reporte
+enum ReportType {
+  KPI_SUMMARY
+  TREND_ANALYSIS
+  PERFORMANCE
+  CUSTOM
+}
+
+// Modelo para configuraciones del dashboard
+model DashboardConfig {
+  id     String @id @default(cuid())
+  userId String @unique
+  config Json   // Configuración personalizada del usuario
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("dashboard_configs")
+}
