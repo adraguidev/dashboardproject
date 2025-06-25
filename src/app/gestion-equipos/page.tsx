@@ -253,7 +253,7 @@ function GestionEquiposContent() {
 
         {/* Add Form */}
         {showAddForm && (
-          <div className="mb-6 bg-white border border-gray-200 rounded-lg p-6">
+                    <div className="mb-6 bg-white border border-gray-200 rounded-lg p-6">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">Nuevo Evaluador</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <input
@@ -318,17 +318,17 @@ function GestionEquiposContent() {
         )}
 
         {/* Table */}
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <div className="bg-white border border-gray-200 rounded-lg">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombres y Apellidos</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre en Base</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Régimen</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Turno</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modalidad</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sub Equipo</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombres y Apellidos</th>
+                <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre en Base</th>
+                <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Régimen</th>
+                <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Turno</th>
+                <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modalidad</th>
+                <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sub Equipo</th>
+                <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -344,59 +344,59 @@ function GestionEquiposContent() {
                   <tr key={evaluador.id} className="hover:bg-gray-50">
                     {editingId === evaluador.id ? (
                       <>
-                        <td className="px-6 py-4">
+                        <td className="px-2 py-2">
                           <input
                             type="text"
-                            className="w-full px-2 py-1 border border-gray-300 rounded-md"
+                            className="w-full px-2 py-1 border border-gray-300 rounded-md text-sm"
                             value={editFormData.nombres_apellidos}
                             onChange={(e) => setEditFormData({ ...editFormData, nombres_apellidos: e.target.value })}
                           />
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-2 py-2">
                           <input
                             type="text"
-                            className="w-full px-2 py-1 border border-gray-300 rounded-md"
+                            className="w-full px-2 py-1 border border-gray-300 rounded-md text-sm"
                             value={editFormData.nombre_en_base}
                             onChange={(e) => setEditFormData({ ...editFormData, nombre_en_base: e.target.value })}
                           />
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-2 py-2">
                           <select
-                            className="w-full px-2 py-1 border border-gray-300 rounded-md"
+                            className="w-full px-2 py-1 border border-gray-300 rounded-md text-sm"
                             value={editFormData.regimen}
                             onChange={(e) => setEditFormData({ ...editFormData, regimen: e.target.value })}
                           >
                             {REGIMENES.map(r => <option key={r} value={r}>{r}</option>)}
                           </select>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-2 py-2">
                            <select
-                            className="w-full px-2 py-1 border border-gray-300 rounded-md"
+                            className="w-full px-2 py-1 border border-gray-300 rounded-md text-sm"
                             value={editFormData.turno}
                             onChange={(e) => setEditFormData({ ...editFormData, turno: e.target.value })}
                           >
                             {TURNOS.map(t => <option key={t} value={t}>{t}</option>)}
                           </select>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-2 py-2">
                           <select
-                            className="w-full px-2 py-1 border border-gray-300 rounded-md"
+                            className="w-full px-2 py-1 border border-gray-300 rounded-md text-sm"
                             value={editFormData.modalidad}
                             onChange={(e) => setEditFormData({ ...editFormData, modalidad: e.target.value })}
                           >
                             {MODALIDADES.map(m => <option key={m} value={m}>{m}</option>)}
                           </select>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-2 py-2">
                           <select
-                            className="w-full px-2 py-1 border border-gray-300 rounded-md"
+                            className="w-full px-2 py-1 border border-gray-300 rounded-md text-sm"
                             value={editFormData.sub_equipo}
                             onChange={(e) => setEditFormData({ ...editFormData, sub_equipo: e.target.value })}
                           >
                             {SUB_EQUIPOS.map(se => <option key={se} value={se}>{se}</option>)}
                           </select>
                         </td>
-                        <td className="px-6 py-4 flex items-center gap-3">
+                        <td className="px-2 py-2 flex items-center gap-2">
                           <button
                             onClick={handleUpdate}
                             disabled={updating}
@@ -411,17 +411,17 @@ function GestionEquiposContent() {
                       </>
                     ) : (
                       <>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{evaluador.nombres_apellidos}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{evaluador.nombre_en_base}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{evaluador.regimen}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{evaluador.turno}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{evaluador.modalidad}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <td className="px-2 py-4 text-sm text-gray-700 break-words max-w-xs">{evaluador.nombres_apellidos}</td>
+                        <td className="px-2 py-4 text-sm text-gray-700 break-words max-w-xs">{evaluador.nombre_en_base}</td>
+                        <td className="px-2 py-4 whitespace-nowrap text-sm text-gray-700">{evaluador.regimen}</td>
+                        <td className="px-2 py-4 whitespace-nowrap text-sm text-gray-700">{evaluador.turno}</td>
+                        <td className="px-2 py-4 whitespace-nowrap text-sm text-gray-700">{evaluador.modalidad}</td>
+                        <td className="px-2 py-4 whitespace-nowrap text-sm">
                           <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getSubEquipoColor(evaluador.sub_equipo)}`}>
                             {evaluador.sub_equipo}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium flex gap-4">
+                        <td className="px-2 py-4 whitespace-nowrap text-sm font-medium flex gap-2">
                           <button onClick={() => handleEdit(evaluador)} className="text-blue-600 hover:text-blue-800">
                             <Edit className="w-4 h-4" />
                           </button>

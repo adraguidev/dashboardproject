@@ -19,7 +19,7 @@ export function ProcessModules({
   selectedModule, 
   onModuleChange 
 }: ProcessModulesProps) {
-  const { report: reportData, loading, error } = usePendientesReport({
+  const { report: reportData, loading, error, groupBy, changeGrouping } = usePendientesReport({
     process: selectedProcess
   })
 
@@ -75,6 +75,8 @@ export function ProcessModules({
                 otherProcessEvaluadores={otherProcessEvaluadores}
                 loading={loading}
                 className="w-full"
+                groupBy={groupBy}
+                onGroupingChange={changeGrouping}
               />
             ) : (
               <PendientesReportTable

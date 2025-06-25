@@ -52,93 +52,133 @@ const COLOR_LEGEND: ColorLegend[] = [
   }
 ]
 
-function extractYearFromDate(fechaexpendiente: string | null | undefined): string | null {
-  if (!fechaexpendiente) return null
-  
+// Helper to parse date strings from multiple formats
+function parseDate(fecha: string | null | undefined): Date | null {
+  if (!fecha) return null;
   try {
-    // Intentar varios formatos de fecha
-    let date: Date
-    
-    // Si está en formato ISO (YYYY-MM-DD)
-    if (fechaexpendiente.includes('-')) {
-      date = new Date(fechaexpendiente)
-    }
-    // Si está en formato DD/MM/YYYY
-    else if (fechaexpendiente.includes('/')) {
-      const parts = fechaexpendiente.split('/')
+    let date: Date;
+    // ISO format YYYY-MM-DD
+    if (fecha.includes('-')) {
+      date = new Date(fecha);
+    } 
+    // DD/MM/YYYY format
+    else if (fecha.includes('/')) {
+      const parts = fecha.split('/');
       if (parts.length === 3) {
-        // Asumiendo DD/MM/YYYY
-        date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`)
+        date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
       } else {
-        return null
+        return null;
       }
-    }
-    // Otros formatos
+    } 
+    // Fallback for other formats
     else {
-      date = new Date(fechaexpendiente)
+      date = new Date(fecha);
     }
-    
-    if (isNaN(date.getTime())) {
-      return null
-    }
-    
-    return date.getFullYear().toString()
+    return isNaN(date.getTime()) ? null : date;
   } catch (error) {
-    console.warn('Error parsing date:', fechaexpendiente, error)
-    return null
+    console.warn('Error parsing date:', fecha, error);
+    return null;
   }
+}
+
+// Extracts a period string (e.g., "2024", "T1-2024") from a date
+function extractPeriodFromDate(
+  fechaexpendiente: string | null | undefined,
+  groupBy: 'year' | 'quarter' | 'month'
+): string | null {
+  const date = parseDate(fechaexpendiente);
+  if (!date) return null;
+
+  const year = date.getFullYear();
+  
+  switch (groupBy) {
+    case 'quarter':
+      const quarter = Math.floor(date.getMonth() / 3) + 1;
+      return `T${quarter}-${year}`;
+    case 'month':
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      return `${year}-${month}`;
+    case 'year':
+    default:
+      return year.toString();
+  }
+}
+
+// Custom sort function for periods like "T1-2024", "2024-01", etc.
+function customPeriodSort(a: string, b: string): number {
+  const getComparableValue = (period: string): number => {
+    if (!period) return 0;
+
+    // For quarters: "T1-2024" -> 2024.1
+    if (period.startsWith('T')) {
+      const parts = period.split('-');
+      if (parts.length !== 2) return 0;
+      const year = parseInt(parts[1]);
+      const quarter = parseInt(parts[0].substring(1));
+      return year + quarter / 10; // T1 -> .1, T2 -> .2
+    }
+
+    // For months: "2024-05" -> 2024.05
+    if (period.includes('-')) {
+      const parts = period.split('-');
+      if (parts.length !== 2) return 0;
+      const year = parseInt(parts[0]);
+      const month = parseInt(parts[1]);
+      return year + month / 100; // Jan -> .01, Dec -> .12
+    }
+
+    // For years: "2024" -> 2024
+    return parseInt(period) || 0;
+  };
+
+  return getComparableValue(a) - getComparableValue(b);
 }
 
 function generatePendientesReport(
   data: any[], 
   evaluadores: Evaluador[], 
-  process: 'ccm' | 'prr'
+  process: 'ccm' | 'prr',
+  groupBy: 'year' | 'quarter' | 'month'
 ): PendientesReportSummary {
-  const operadorMap = new Map<string, { [year: string]: number }>()
-  const allYears = new Set<string>()
+  const operadorMap = new Map<string, { [period: string]: number }>();
+  const allPeriods = new Set<string>();
   
-  // Crear mapa de evaluadores por nombre_en_base
-  const evaluadorMap = new Map<string, Evaluador>()
+  const evaluadorMap = new Map<string, Evaluador>();
   evaluadores.forEach(evaluador => {
-    evaluadorMap.set(evaluador.nombre_en_base, evaluador)
-  })
+    evaluadorMap.set(evaluador.nombre_en_base, evaluador);
+  });
   
-  // Procesar cada registro
   data.forEach(record => {
-    const operadorName = record.operador || 'Sin Operador'
-    const year = extractYearFromDate(record.fechaexpendiente)
+    const operadorName = record.operador || 'Sin Operador';
+    const period = extractPeriodFromDate(record.fechaexpendiente, groupBy);
     
-    if (!year) {
-      console.warn('Fecha inválida encontrada:', record.fechaexpendiente)
-      return
+    if (!period) {
+      console.warn('Fecha inválida o no procesable:', record.fechaexpendiente);
+      return;
     }
     
-    allYears.add(year)
+    allPeriods.add(period);
     
     if (!operadorMap.has(operadorName)) {
-      operadorMap.set(operadorName, {})
+      operadorMap.set(operadorName, {});
     }
     
-    const operadorData = operadorMap.get(operadorName)!
-    operadorData[year] = (operadorData[year] || 0) + 1
-  })
+    const operadorData = operadorMap.get(operadorName)!;
+    operadorData[period] = (operadorData[period] || 0) + 1;
+  });
   
-  // Convertir a array ordenado
-  const years = Array.from(allYears).sort()
-  const reportData: PendientesReportData[] = []
-  const totalByYear: { [year: string]: number } = {}
+  const periods = Array.from(allPeriods).sort(customPeriodSort);
+  const reportData: PendientesReportData[] = [];
+  const totalByPeriod: { [period: string]: number } = {};
   
-  // Inicializar totales por año
-  years.forEach(year => {
-    totalByYear[year] = 0
-  })
+  periods.forEach(period => {
+    totalByPeriod[period] = 0;
+  });
   
-  // Generar datos por operador
-  operadorMap.forEach((yearData, operadorName) => {
-    // Buscar evaluador correspondiente
-    const evaluador = evaluadorMap.get(operadorName)
-    const subEquipo = evaluador?.sub_equipo
-    const { colorClass } = getColorConfig(subEquipo)
+  operadorMap.forEach((periodData, operadorName) => {
+    const evaluador = evaluadorMap.get(operadorName);
+    const subEquipo = evaluador?.sub_equipo;
+    const { colorClass } = getColorConfig(subEquipo);
     
     const operadorReport: PendientesReportData = {
       operador: operadorName,
@@ -146,39 +186,39 @@ function generatePendientesReport(
       total: 0,
       subEquipo: subEquipo || 'NO_ENCONTRADO',
       colorClass
-    }
+    };
     
-    years.forEach(year => {
-      const count = yearData[year] || 0
-      operadorReport.years[year] = count
-      operadorReport.total += count
-      totalByYear[year] += count
-    })
+    periods.forEach(period => {
+      const count = periodData[period] || 0;
+      operadorReport.years[period] = count;
+      operadorReport.total += count;
+      totalByPeriod[period] += count;
+    });
     
-    reportData.push(operadorReport)
-  })
+    reportData.push(operadorReport);
+  });
   
-  // Ordenar por total descendente
-  reportData.sort((a, b) => b.total - a.total)
+  reportData.sort((a, b) => b.total - a.total);
   
-  const grandTotal = Object.values(totalByYear).reduce((sum, count) => sum + count, 0)
+  const grandTotal = Object.values(totalByPeriod).reduce((sum, count) => sum + count, 0);
   
   return {
     data: reportData,
-    years,
-    totalByYear,
+    years: periods,
+    totalByYear: totalByPeriod,
     grandTotal,
     process,
     legend: COLOR_LEGEND
-  }
+  };
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const process = searchParams.get('process') // 'ccm' o 'prr'
+    const { searchParams } = new URL(request.url);
+    const process = searchParams.get('process') as 'ccm' | 'prr' | null;
+    const groupBy = (searchParams.get('groupBy') || 'quarter') as 'year' | 'quarter' | 'month';
 
-    console.log(`🔍 Generando reporte de pendientes para proceso: ${process}`)
+    console.log(`🔍 Generando reporte de pendientes para proceso: ${process}, agrupado por: ${groupBy}`);
 
     if (!process || (process !== 'ccm' && process !== 'prr')) {
       return NextResponse.json(
@@ -210,9 +250,9 @@ export async function GET(request: NextRequest) {
 
     console.log(`✅ Datos obtenidos: ${data.length} registros pendientes, ${evaluadores.length} evaluadores`)
 
-    const report = generatePendientesReport(data, evaluadores, process)
+    const report = generatePendientesReport(data, evaluadores, process, groupBy);
 
-    console.log(`📋 Reporte generado: ${report.data.length} operadores, ${report.years.length} años, ${report.grandTotal} total`)
+    console.log(`📋 Reporte generado: ${report.data.length} operadores, ${report.years.length} periodos, ${report.grandTotal} total`)
 
     return NextResponse.json({
       success: true,
@@ -257,5 +297,4 @@ export async function GET(request: NextRequest) {
     )
   }
 } 
- 
  

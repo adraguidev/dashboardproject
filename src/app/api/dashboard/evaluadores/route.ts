@@ -152,17 +152,31 @@ export async function PUT(request: NextRequest) {
     }
 
     const data = await request.json()
-    const { nombre_en_base, nombre_real, sub_equipo, activo, fecha_ingreso, fecha_salida, lider } = data
+    // Aseguramos que los datos coincidan con lo que envía el frontend
+    const { 
+      nombres_apellidos, 
+      nombre_en_base, 
+      regimen, 
+      turno, 
+      modalidad, 
+      sub_equipo 
+    } = data
 
     const tableName = `evaluadores_${process}`
     
     console.log(`🔄 Actualizando en tabla: ${tableName}, ID: ${id}`)
     
+    // Construcción dinámica de la query para evitar errores con campos nulos
     const result = await db.execute(
       sql`
         UPDATE ${sql.identifier(tableName)} 
-        SET nombre_en_base = ${nombre_en_base}, nombre_real = ${nombre_real}, sub_equipo = ${sub_equipo}, activo = ${activo}, 
-            fecha_ingreso = ${fecha_ingreso}, fecha_salida = ${fecha_salida}, lider = ${lider}
+        SET 
+          nombre_en_base = ${nombre_en_base ?? null},
+          nombres_apellidos = ${nombres_apellidos ?? null},
+          regimen = ${regimen ?? null},
+          turno = ${turno ?? null},
+          modalidad = ${modalidad ?? null},
+          sub_equipo = ${sub_equipo ?? null}
         WHERE id = ${id} 
         RETURNING *
       `

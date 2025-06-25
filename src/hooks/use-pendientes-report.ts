@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { PendientesReportSummary } from '@/types/dashboard'
 
 interface UsePendientesReportOptions {
@@ -17,15 +17,16 @@ export function usePendientesReport({
   const [report, setReport] = useState<PendientesReportSummary | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [groupBy, setGroupBy] = useState<'quarter' | 'month' | 'year'>('year')
 
-  const fetchReport = async () => {
+  const fetchReport = useCallback(async () => {
     setLoading(true)
     setError(null)
 
     try {
-      console.log(`🔍 Fetching pendientes report: ${process.toUpperCase()}`)
+      console.log(`🔍 Fetching pendientes report: ${process.toUpperCase()} grouped by ${groupBy}`)
 
-      const response = await fetch(`/api/dashboard/pendientes-report?process=${process}`)
+      const response = await fetch(`/api/dashboard/pendientes-report?process=${process}&groupBy=${groupBy}`)
       
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`)
@@ -53,39 +54,41 @@ export function usePendientesReport({
     } finally {
       setLoading(false)
     }
+  }, [process, groupBy])
+
+  const changeGrouping = (newGroupBy: 'quarter' | 'month' | 'year') => {
+    setGroupBy(newGroupBy)
   }
 
-  const refresh = () => {
-    fetchReport()
-  }
-
-  // Cargar datos iniciales
+  // Cargar datos iniciales y recargar cuando cambia el proceso o el agrupamiento
   useEffect(() => {
     fetchReport()
-  }, [process])
+  }, [fetchReport])
 
   // Auto-refresh si está habilitado
   useEffect(() => {
     if (!autoRefresh) return
 
     const interval = setInterval(() => {
-      console.log(`🔄 Auto-refresh pendientes report ${process.toUpperCase()}`)
+      console.log(`🔄 Auto-refresh pendientes report ${process.toUpperCase()} with grouping ${groupBy}`)
       fetchReport()
     }, refreshInterval)
 
     return () => clearInterval(interval)
-  }, [autoRefresh, refreshInterval, process])
+  }, [autoRefresh, refreshInterval, fetchReport, process, groupBy])
 
   return {
     // Data
     report,
+    groupBy,
     
     // State
     loading,
     error,
     
     // Actions
-    refresh,
+    refresh: fetchReport,
+    changeGrouping,
     
     // Stats
     stats: report ? {

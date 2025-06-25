@@ -53,8 +53,9 @@ export function AdvancedDataTable<T>({
   className = '',
   emptyMessage = 'No hay datos disponibles',
   loading = false,
-  getRowClassName
-}: AdvancedDataTableProps<T>) {
+  getRowClassName,
+  footer
+}: AdvancedDataTableProps<T> & { footer?: React.ReactNode }) {
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: '', direction: null })
   const [columnFilters, setColumnFilters] = useState<ColumnFilters>({})
   const [globalFilter, setGlobalFilter] = useState('')
@@ -323,23 +324,27 @@ export function AdvancedDataTable<T>({
         {/* Column filters */}
         {showFilters && (
           <div className="mt-4 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-            {columns.filter(col => col.filterable !== false).map(column => (
-              <div key={column.key}>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Filtrar {column.title}
-                </label>
-                <input
-                  type="text"
-                  placeholder={`Filtrar por ${column.title.toLowerCase()}...`}
-                  value={columnFilters[column.key] || ''}
-                  onChange={(e) => setColumnFilters(prev => ({
-                    ...prev,
-                    [column.key]: e.target.value
-                  }))}
-                  className="w-full px-3 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-            ))}
+            {columns.map(column => {
+              if (!column.filterable) return null
+
+              return (
+                <div key={column.key}>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Filtrar {column.title}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={`Filtrar por ${column.title.toLowerCase()}...`}
+                    value={columnFilters[column.key] || ''}
+                    onChange={(e) => setColumnFilters(prev => ({
+                      ...prev,
+                      [column.key]: e.target.value
+                    }))}
+                    className="w-full px-3 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
@@ -439,6 +444,11 @@ export function AdvancedDataTable<T>({
               })
             )}
           </tbody>
+          {footer && (
+            <tfoot>
+              {footer}
+            </tfoot>
+          )}
         </table>
       </div>
 

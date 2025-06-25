@@ -27,19 +27,9 @@ export function useEvaluadores({
         throw new Error(`Error ${response.status}: ${response.statusText}`)
       }
 
-      const result: { 
-        success: boolean; 
-        data: Evaluador[]; 
-        error?: string 
-      } = await response.json()
-
-      if (!result.success) {
-        throw new Error(result.error || 'Error desconocido')
-      }
-
-      setEvaluadores(result.data)
-
-      console.log(`✅ Evaluadores cargados: ${result.data.length}`)
+      const data: Evaluador[] = await response.json()
+      setEvaluadores(data)
+      console.log(`✅ Evaluadores cargados: ${data.length}`)
 
     } catch (err) {
       console.error('❌ Error fetching evaluadores:', err)
