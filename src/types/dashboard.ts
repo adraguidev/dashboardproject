@@ -189,7 +189,6 @@ export interface ColorLegend {
   subEquipo: string
   color: string
   colorClass: string
+  count: number
   description: string
-} 
- 
- 
+}

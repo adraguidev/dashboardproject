@@ -61,16 +61,7 @@ export function AdvancedPendientesReportTable({
   // Data for 'Sin Asignar' card, counting only 2024 and 2025
   const sinAsignarCount = useMemo(() => {
     const sinOperadorEntry = reportData.data.find(item => item.operador === 'Sin Operador');
-    if (!sinOperadorEntry) {
-      return 0;
-    }
-
-    return Object.entries(sinOperadorEntry.years).reduce((sum, [period, count]) => {
-      if (period.startsWith('2024') || period.startsWith('2025')) {
-        return sum + count;
-      }
-      return sum;
-    }, 0);
+    return sinOperadorEntry ? sinOperadorEntry.total : 0;
   }, [reportData.data]);
 
   // Memoize filtered data based on the active tab
@@ -308,7 +299,7 @@ export function AdvancedPendientesReportTable({
           {reportData.legend.map(legend => (
             <div key={legend.subEquipo} className="flex items-center space-x-2">
               <div className={`w-4 h-4 rounded ${legend.colorClass}`}></div>
-              <p className="text-xs text-gray-500">Sin Asignar: {sinAsignarCount}</p>
+              <p className="text-xs text-gray-500">{legend.subEquipo}: {legend.count}</p>
             </div>
           ))}
         </div>
