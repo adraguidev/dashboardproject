@@ -24,30 +24,35 @@ const COLOR_LEGEND: ColorLegend[] = [
     subEquipo: 'EVALUACION',
     color: 'Blanco',
     colorClass: 'bg-white border border-gray-300',
+    count: 0,
     description: 'Operadores de Evaluación'
   },
   {
     subEquipo: 'REASIGNADOS',
     color: 'Naranja',
     colorClass: 'bg-orange-100',
+    count: 0,
     description: 'Operadores Reasignados'
   },
   {
     subEquipo: 'SUSPENDIDA',
     color: 'Naranja Oscuro',
     colorClass: 'bg-orange-300',
+    count: 0,
     description: 'Operadores Suspendidos'
   },
   {
     subEquipo: 'RESPONSABLE',
     color: 'Verde',
     colorClass: 'bg-green-100',
+    count: 0,
     description: 'Operadores Responsables'
   },
   {
     subEquipo: 'NO_ENCONTRADO',
     color: 'Gris',
     colorClass: 'bg-gray-200',
+    count: 0,
     description: 'Operador no encontrado en registros'
   }
 ]
@@ -202,13 +207,22 @@ function generatePendientesReport(
   
   const grandTotal = Object.values(totalByPeriod).reduce((sum, count) => sum + count, 0);
   
+  // Calcular conteos para la leyenda
+  const legendWithCounts = COLOR_LEGEND.map(legendItem => {
+    const count = reportData.filter(item => item.subEquipo === legendItem.subEquipo).length;
+    return {
+      ...legendItem,
+      count
+    };
+  });
+  
   return {
     data: reportData,
     years: periods,
     totalByYear: totalByPeriod,
     grandTotal,
     process,
-    legend: COLOR_LEGEND
+    legend: legendWithCounts
   };
 }
 

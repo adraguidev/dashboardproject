@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useUser } from "@stackframe/stack"
+import Link from "next/link"
 
 export default function DebugJWTPage() {
   const user = useUser()
@@ -44,12 +45,12 @@ export default function DebugJWTPage() {
           <p className="text-gray-600 mb-6">
             Debes iniciar sesión para ejecutar el diagnóstico JWT.
           </p>
-          <a 
+          <Link 
             href="/handler/sign-in" 
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
           >
             Iniciar Sesión
-          </a>
+          </Link>
         </div>
       </div>
     )

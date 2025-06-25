@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { DashboardService } from '@/services/dashboard-service'
 import { sampleKPIs } from '@/data/sample-data'
 
 export async function GET() {
