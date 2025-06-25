@@ -299,7 +299,7 @@ export function AdvancedPendientesReportTable({
           {reportData.legend.map(legend => (
             <div key={legend.subEquipo} className="flex items-center space-x-2">
               <div className={`w-4 h-4 rounded ${legend.colorClass}`}></div>
-              <p className="text-xs text-gray-500">{legend.subEquipo}: {legend.count}</p>
+              <p className="text-xs text-gray-500">{legend.subEquipo} {legend.count}</p>
             </div>
           ))}
         </div>
