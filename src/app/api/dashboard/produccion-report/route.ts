@@ -86,15 +86,47 @@ function parseDate(fecha: string | null | undefined): Date | null {
   }
 }
 
-// Generar lista de los últimos 20 días
-function getLast20Days(): string[] {
+// Función para determinar si una fecha es día laborable (lunes a viernes)
+function isWorkday(dateStr: string): boolean {
+  const date = new Date(dateStr);
+  const dayOfWeek = date.getDay(); // 0 = domingo, 1 = lunes, ..., 6 = sábado
+  return dayOfWeek >= 1 && dayOfWeek <= 5;
+}
+
+// Generar lista de días según parámetros
+function generateDays(daysCount: number, dayType: 'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA'): string[] {
   const dates: string[] = [];
   const today = new Date();
+  let foundDays = 0;
+  let daysBack = 0;
   
-  for (let i = 19; i >= 0; i--) {
+  // Buscar hacia atrás hasta encontrar el número de días requeridos del tipo especificado
+  while (foundDays < daysCount && daysBack < 365) { // límite de seguridad de 1 año
     const date = new Date(today);
-    date.setDate(today.getDate() - i);
-    dates.push(date.toISOString().split('T')[0]); // YYYY-MM-DD format
+    date.setDate(today.getDate() - daysBack);
+    const dateStr = date.toISOString().split('T')[0];
+    
+    let includeDate = false;
+    
+    switch (dayType) {
+      case 'LABORABLES':
+        includeDate = isWorkday(dateStr);
+        break;
+      case 'FIN_DE_SEMANA':
+        includeDate = !isWorkday(dateStr);
+        break;
+      case 'TODOS':
+      default:
+        includeDate = true;
+        break;
+    }
+    
+    if (includeDate) {
+      dates.unshift(dateStr); // Agregar al principio para mantener orden cronológico
+      foundDays++;
+    }
+    
+    daysBack++;
   }
   
   return dates;
@@ -103,10 +135,35 @@ function getLast20Days(): string[] {
 function generateProduccionReport(
   data: any[], 
   evaluadores: Evaluador[], 
-  process: 'ccm' | 'prr'
+  process: 'ccm' | 'prr',
+  daysCount: number = 20,
+  dayType: 'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA' = 'TODOS'
 ): ProduccionReportSummary {
   const operadorMap = new Map<string, { [fecha: string]: number }>();
-  const last20Days = getLast20Days();
+  const targetDays = generateDays(daysCount, dayType);
+  
+  console.log(`📅 Días objetivo generados: ${targetDays.length} días`);
+  console.log(`📅 Primeros 5 días: ${targetDays.slice(0, 5).join(', ')}`);
+  console.log(`📅 Últimos 5 días: ${targetDays.slice(-5).join(', ')}`);
+  
+  // Verificar qué fechas existen en los datos reales
+  const fechasEnDatos = new Set<string>();
+  data.forEach(record => {
+    if (record.fechapre) {
+      const parsedDate = parseDate(record.fechapre);
+      if (parsedDate) {
+        const dateStr = parsedDate.toISOString().split('T')[0];
+        fechasEnDatos.add(dateStr);
+      }
+    }
+  });
+  
+  console.log(`📊 Total fechas únicas en datos: ${fechasEnDatos.size}`);
+  const fechasArray = Array.from(fechasEnDatos).sort();
+  if (fechasArray.length > 0) {
+    console.log(`📊 Fecha más antigua en datos: ${fechasArray[0]}`);
+    console.log(`📊 Fecha más reciente en datos: ${fechasArray[fechasArray.length - 1]}`);
+  }
   
   const evaluadorMap = new Map<string, Evaluador>();
   evaluadores.forEach(evaluador => {
@@ -127,8 +184,8 @@ function generateProduccionReport(
     
     const dateStr = parsedDate.toISOString().split('T')[0]; // YYYY-MM-DD
     
-    // Solo considerar fechas en los últimos 20 días
-    if (!last20Days.includes(dateStr)) return;
+    // Solo considerar fechas en los días objetivo
+    if (!targetDays.includes(dateStr)) return;
     
     if (!operadorMap.has(operadorName)) {
       operadorMap.set(operadorName, {});
@@ -141,7 +198,7 @@ function generateProduccionReport(
   const reportData: ProduccionReportData[] = [];
   const totalByDate: { [fecha: string]: number } = {};
   
-  last20Days.forEach(fecha => {
+  targetDays.forEach((fecha: string) => {
     totalByDate[fecha] = 0;
   });
   
@@ -158,7 +215,7 @@ function generateProduccionReport(
       colorClass
     };
     
-    last20Days.forEach(fecha => {
+    targetDays.forEach((fecha: string) => {
       const count = fechaData[fecha] || 0;
       operadorReport.fechas[fecha] = count;
       operadorReport.total += count;
@@ -174,6 +231,11 @@ function generateProduccionReport(
   
   const grandTotal = Object.values(totalByDate).reduce((sum, count) => sum + count, 0);
   
+  // Verificar cuántas fechas tienen datos reales
+  const fechasConDatos = targetDays.filter(fecha => totalByDate[fecha] > 0);
+  console.log(`📈 Fechas con datos: ${fechasConDatos.length} de ${targetDays.length} días objetivo`);
+  console.log(`📈 Fechas con datos: ${fechasConDatos.slice(0, 10).join(', ')}${fechasConDatos.length > 10 ? '...' : ''}`);
+  
   // Calcular conteos para la leyenda
   const legendWithCounts = COLOR_LEGEND.map(legendItem => {
     const count = reportData.filter(item => item.subEquipo === legendItem.subEquipo).length;
@@ -185,12 +247,12 @@ function generateProduccionReport(
   
   return {
     data: reportData,
-    fechas: last20Days,
+    fechas: targetDays,
     totalByDate,
     grandTotal,
     process,
     legend: legendWithCounts,
-    periodo: 'Últimos 20 días'
+    periodo: `Últimos ${daysCount} ${dayType.toLowerCase().replace('_', ' ')}`
   };
 }
 
@@ -198,8 +260,10 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const process = searchParams.get('process') as 'ccm' | 'prr' | null;
+    const days = parseInt(searchParams.get('days') || '20');
+    const dayType = (searchParams.get('dayType') || 'TODOS') as 'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA';
 
-    console.log(`🏭 Generando reporte de producción para proceso: ${process}`);
+    console.log(`🏭 Generando reporte de producción para proceso: ${process}, días: ${days}, tipo: ${dayType}`);
 
     if (!process || (process !== 'ccm' && process !== 'prr')) {
       return NextResponse.json(
@@ -208,21 +272,38 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    if (days < 1 || days > 365) {
+      return NextResponse.json(
+        { error: 'Parámetro "days" debe estar entre 1 y 365' },
+        { status: 400 }
+      )
+    }
+
+    if (!['TODOS', 'LABORABLES', 'FIN_DE_SEMANA'].includes(dayType)) {
+      return NextResponse.json(
+        { error: 'Parámetro "dayType" debe ser TODOS, LABORABLES o FIN_DE_SEMANA' },
+        { status: 400 }
+      )
+    }
+
     let data: any[] = []
     let evaluadores: Evaluador[] = []
 
+    // Usar un rango amplio para obtener datos (máximo 365 días hacia atrás para evitar sobrecarga)
+    const maxDaysToFetch = Math.min(days + 30, 365); // Un poco más de margen
+
     if (process === 'ccm') {
-      console.log('📊 Obteniendo TODOS los datos CCM de producción y evaluadores...')
+      console.log(`📊 Obteniendo TODOS los datos CCM de producción y evaluadores (últimos ${maxDaysToFetch} días)...`)
       const [ccmData, ccmEvaluadores] = await Promise.all([
-        neonDB.getAllCCMProduccion(),
+        neonDB.getAllCCMProduccion(maxDaysToFetch),
         neonDB.getEvaluadoresCCM()
       ])
       data = ccmData
       evaluadores = ccmEvaluadores
     } else {
-      console.log('📊 Obteniendo TODOS los datos PRR de producción y evaluadores...')
+      console.log(`📊 Obteniendo TODOS los datos PRR de producción y evaluadores (últimos ${maxDaysToFetch} días)...`)
       const [prrData, prrEvaluadores] = await Promise.all([
-        neonDB.getAllPRRProduccion(),
+        neonDB.getAllPRRProduccion(maxDaysToFetch),
         neonDB.getEvaluadoresPRR()
       ])
       data = prrData
@@ -231,7 +312,7 @@ export async function GET(request: NextRequest) {
 
     console.log(`✅ Datos obtenidos: ${data.length} registros de producción, ${evaluadores.length} evaluadores`)
 
-    const report = generateProduccionReport(data, evaluadores, process);
+    const report = generateProduccionReport(data, evaluadores, process, days, dayType);
 
     console.log(`📋 Reporte generado: ${report.data.length} operadores, ${report.fechas.length} días, ${report.grandTotal} total`)
 

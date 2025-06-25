@@ -1,22 +1,168 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import { Card } from './card'
-import { ProduccionReportSummary } from '@/types/dashboard'
+import { ProduccionReportSummary, Evaluador } from '@/types/dashboard'
 
 interface ProduccionReportTableProps {
   report: ProduccionReportSummary | null
+  otherProcessEvaluadores?: Evaluador[]
   loading?: boolean
   error?: string | null
   className?: string
+  onFiltersChange?: (days: number, dayType: 'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA') => void
 }
+
+type TabType = 'general' | 'otros' | 'por-revisar'
 
 export function ProduccionReportTable({
   report,
+  otherProcessEvaluadores = [],
   loading = false,
   error = null,
-  className = ''
+  className = '',
+  onFiltersChange
 }: ProduccionReportTableProps) {
+  const [activeTab, setActiveTab] = useState<TabType>('general')
+  const [daysRange, setDaysRange] = useState<15 | 20 | 30 | 60>(20)
+  const [dayType, setDayType] = useState<'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA'>('TODOS')
+
+  // Función para manejar cambios en los filtros
+  const handleFiltersChange = (newDays: number, newDayType: 'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA') => {
+    setDaysRange(newDays as 15 | 20 | 30 | 60)
+    setDayType(newDayType)
+    if (onFiltersChange) {
+      onFiltersChange(newDays, newDayType)
+    }
+  }
+
+  // A simple normalization for comparison: uppercase and alphanumeric.
+  const normalizeSimple = (name: string): string => {
+    if (!name) return '';
+    return name.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  };
+
+  // Create a set of normalized names from the 'nombre_en_base' property for fast lookup.
+  const externalNombresEnBase = useMemo(() =>
+    new Set(
+      otherProcessEvaluadores
+        .filter(e => e && e.nombre_en_base) 
+        .map(e => normalizeSimple(e.nombre_en_base))
+    )
+  , [otherProcessEvaluadores]);
+
+  // Check if an operator from the report exists in the external list.
+  const isOperadorInExternos = useCallback((operador: string) => {
+    const normalizedOperador = normalizeSimple(operador);
+    if (!normalizedOperador) return false;
+
+    // To handle truncated names, check if any external name starts with the operator name or vice-versa.
+    for (const externalName of externalNombresEnBase) {
+      if (externalName.startsWith(normalizedOperador) || normalizedOperador.startsWith(externalName)) {
+        return true;
+      }
+    }
+    return false;
+  }, [externalNombresEnBase]);
+
+  // Base data filtering
+  const baseData = useMemo(() => {
+    if (!report) return [];
+    return report.data.filter(item => item.operador !== 'Sin Operador');
+  }, [report]);
+
+  // Memoize filtered data based on the active tab
+  const filteredOperators = useMemo(() => {
+    switch (activeTab) {
+      case 'general':
+        return baseData.filter(item => item.subEquipo !== 'NO_ENCONTRADO');
+      case 'otros':
+        return baseData.filter(item => 
+          item.subEquipo === 'NO_ENCONTRADO' && 
+          !isOperadorInExternos(item.operador)
+        );
+      case 'por-revisar':
+        return baseData.filter(item => 
+          item.subEquipo === 'NO_ENCONTRADO' && 
+          isOperadorInExternos(item.operador)
+        );
+      default:
+        return baseData;
+    }
+  }, [baseData, activeTab, isOperadorInExternos]);
+
+  // Memoize grand total for the filtered data (para las pestañas, usa todas las fechas)
+  const totals = useMemo(() => {
+    if (!report) return { total: 0 } as { [key: string]: number; total: number };
+    
+    const initialTotals: { [key: string]: number; total: number } = { total: 0 };
+
+    const periodTotals = report.fechas.reduce((acc, fecha) => {
+      acc[fecha] = filteredOperators.reduce((sum, item) => sum + (item.fechas[fecha] || 0), 0);
+      return acc;
+    }, initialTotals);
+
+    periodTotals.total = filteredOperators.reduce((sum, item) => sum + item.total, 0);
+
+    return periodTotals;
+  }, [filteredOperators, report]);
+
+  // Calcular totales solo para los operadores de la pestaña activa
+  const filteredTotals = useMemo(() => {
+    if (!report) return { total: 0 } as { [key: string]: number; total: number };
+    
+    const initialTotals: { [key: string]: number; total: number } = { total: 0 };
+
+    // Calcular totales por fecha solo para operadores filtrados
+    const periodTotals = report.fechas.reduce((acc, fecha) => {
+      acc[fecha] = filteredOperators.reduce((sum, item) => sum + (item.fechas[fecha] || 0), 0);
+      return acc;
+    }, initialTotals);
+
+    // Calcular total general para operadores filtrados
+    periodTotals.total = filteredOperators.reduce((sum, item) => {
+      return sum + report.fechas.reduce((dateSum, fecha) => dateSum + (item.fechas[fecha] || 0), 0);
+    }, 0);
+
+    return periodTotals;
+  }, [report, filteredOperators]);
+
+  // Función para formatear fecha
+  const formatDate = useCallback((dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('es-ES', { 
+      day: '2-digit',
+      month: '2-digit'
+    });
+  }, []);
+
+  // Determinar qué fechas mostrar (solo las que tienen datos en la pestaña activa)
+  const visibleFechas = useMemo(() => {
+    if (!report) return [];
+    return report.fechas.filter(fecha => (filteredTotals as any)[fecha] > 0);
+  }, [report, filteredTotals]);
+
+  const tabs = useMemo((): { id: TabType; name: string; count: number; description: string }[] => [
+    { 
+      id: 'general' as TabType, 
+      name: 'General', 
+      count: baseData.filter(item => item.subEquipo !== 'NO_ENCONTRADO').length, 
+      description: 'Operadores del proceso actual con sub-equipo asignado.' 
+    },
+    { 
+      id: 'otros' as TabType, 
+      name: 'Otros', 
+      count: baseData.filter(item => item.subEquipo === 'NO_ENCONTRADO' && !isOperadorInExternos(item.operador)).length, 
+      description: 'Operadores no identificados en ninguna de las listas de procesos.' 
+    },
+    { 
+      id: 'por-revisar' as TabType, 
+      name: 'Por Revisar', 
+      count: baseData.filter(item => item.subEquipo === 'NO_ENCONTRADO' && isOperadorInExternos(item.operador)).length, 
+      description: 'Operadores del proceso actual que se encontraron en la lista del proceso contrario (CCM/PRR).'
+    },
+  ], [baseData, isOperadorInExternos]);
+
   if (loading) {
     return (
       <Card className={`p-6 ${className}`}>
@@ -54,45 +200,86 @@ export function ProduccionReportTable({
     )
   }
 
-  // Función para formatear fecha
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('es-ES', { 
-      day: '2-digit',
-      month: '2-digit'
-    });
-  };
+
 
   return (
     <Card className={`overflow-hidden ${className}`}>
       {/* Encabezado */}
       <div className="p-4 bg-gray-50 border-b">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">
-            Reporte de Producción por Día y Operador - {report.process.toUpperCase()}
-          </h3>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Reporte de Producción</h3>
+            <p className="text-sm text-gray-500">Análisis de producción por día y operador - {report.process.toUpperCase()}</p>
+          </div>
           <div className="text-sm text-gray-600">
-            Total: <span className="font-bold">{report.grandTotal.toLocaleString()}</span> expedientes procesados
+            Total: <span className="font-bold">{filteredTotals.total.toLocaleString()}</span> expedientes procesados
           </div>
         </div>
 
-        <div className="text-sm text-gray-600 mb-4">
-          <span className="font-medium">Período:</span> {report.periodo}
+        {/* Selectores */}
+        <div className="flex flex-wrap gap-4 items-center mb-4">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Días:</label>
+            <select 
+              value={daysRange} 
+              onChange={(e) => handleFiltersChange(Number(e.target.value), dayType)}
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value={15}>15 días</option>
+              <option value={20}>20 días</option>
+              <option value={30}>30 días</option>
+              <option value={60}>60 días</option>
+            </select>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Tipo:</label>
+            <select 
+              value={dayType} 
+              onChange={(e) => handleFiltersChange(daysRange, e.target.value as 'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA')}
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="TODOS">Todos</option>
+              <option value="LABORABLES">Laborables</option>
+              <option value="FIN_DE_SEMANA">Fin de Semana</option>
+            </select>
+          </div>
+          
+          <div className="text-sm text-gray-600">
+            <span className="font-medium">Mostrando:</span> {visibleFechas.length} días con datos
+          </div>
         </div>
 
-        {/* Leyenda de colores */}
-        <div className="flex flex-wrap gap-4 text-xs">
-          <span className="font-semibold text-gray-700">Leyenda:</span>
-          {report.legend.map((legendItem) => (
-            <div key={legendItem.subEquipo} className="flex items-center gap-2">
-              <div className={`w-4 h-4 rounded ${legendItem.colorClass}`}></div>
-              <span className="text-gray-600">
-                {legendItem.description}
-              </span>
-            </div>
-          ))}
+        <div className="text-sm text-gray-600">
+          <span className="font-medium">Período base:</span> {report.periodo}
         </div>
       </div>
+
+      {/* Tabs System */}
+      <div className="p-4 bg-white border-b">
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                {`${tab.name} (${tab.count})`}
+              </button>
+            ))}
+          </nav>
+        </div>
+        <div className="mt-2 text-sm text-gray-600">
+          {tabs.find(tab => tab.id === activeTab)?.description}
+        </div>
+      </div>
+
+
 
       {/* Tabla */}
       <div className="overflow-x-auto">
@@ -105,7 +292,7 @@ export function ProduccionReportTable({
               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
                 Sub Equipo
               </th>
-              {report.fechas.map(fecha => (
+              {visibleFechas.map((fecha: string) => (
                 <th 
                   key={fecha}
                   className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[60px]"
@@ -120,7 +307,7 @@ export function ProduccionReportTable({
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {report.data.map((operadorData) => (
+            {filteredOperators.map((operadorData) => (
               <tr 
                 key={operadorData.operador}
                 className={`transition-colors ${operadorData.colorClass || ''}`}
@@ -145,7 +332,7 @@ export function ProduccionReportTable({
                     {operadorData.subEquipo === 'NO_ENCONTRADO' ? 'N/A' : operadorData.subEquipo}
                   </span>
                 </td>
-                {report.fechas.map(fecha => {
+                {visibleFechas.map((fecha: string) => {
                   const count = operadorData.fechas[fecha] || 0
                   return (
                     <td 
@@ -161,7 +348,7 @@ export function ProduccionReportTable({
                   )
                 })}
                 <td className="px-4 py-3 text-sm text-center font-bold bg-blue-50 text-blue-900">
-                  {operadorData.total.toLocaleString()}
+                  {visibleFechas.reduce((sum: number, fecha: string) => sum + (operadorData.fechas[fecha] || 0), 0).toLocaleString()}
                 </td>
               </tr>
             ))}
@@ -174,37 +361,32 @@ export function ProduccionReportTable({
               <td className="px-4 py-3 text-sm text-center font-bold text-green-900">
                 -
               </td>
-              {report.fechas.map(fecha => (
+              {visibleFechas.map((fecha: string) => (
                 <td 
                   key={fecha}
                   className="px-3 py-3 text-sm text-center font-bold text-green-900"
                 >
-                  {report.totalByDate[fecha]?.toLocaleString() || '0'}
+                  {(filteredTotals as any)[fecha]?.toLocaleString() || '0'}
                 </td>
               ))}
               <td className="px-4 py-3 text-sm text-center font-bold text-green-900 bg-green-200">
-                {report.grandTotal.toLocaleString()}
+                {filteredTotals.total.toLocaleString()}
               </td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      {/* Estadísticas adicionales */}
-      <div className="p-4 bg-gray-50 border-t text-sm text-gray-600">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <span className="font-medium">Operadores:</span> {report.data.length}
-          </div>
-          <div>
-            <span className="font-medium">Período:</span> {report.periodo}
-          </div>
-          <div>
-            <span className="font-medium">Proceso:</span> {report.process.toUpperCase()}
-          </div>
-          <div>
-            <span className="font-medium">Total General:</span> {report.grandTotal.toLocaleString()}
-          </div>
+      {/* Leyenda de colores */}
+      <div className="p-4 bg-gray-50 border-t">
+        <h4 className="text-sm font-medium text-gray-900 mb-3">Código de Colores por Sub Equipo:</h4>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          {report.legend.map(legend => (
+            <div key={legend.subEquipo} className="flex items-center space-x-2">
+              <div className={`w-4 h-4 rounded ${legend.colorClass}`}></div>
+              <p className="text-xs text-gray-500">{legend.subEquipo} {legend.count}</p>
+            </div>
+          ))}
         </div>
       </div>
     </Card>

@@ -412,18 +412,18 @@ export class NeonDataAPI {
   }
 
   /**
-   * Obtener TODOS los datos de CCM de producción para reporte (últimos 20 días)
+   * Obtener TODOS los datos de CCM de producción para reporte
    * Basado en fechapre y operadorpre
    */
-  async getAllCCMProduccion() {
-    // Calcular fecha de hace 20 días
+  async getAllCCMProduccion(daysBack: number = 20) {
+    // Calcular fecha de hace N días
     const today = new Date()
-    const twentyDaysAgo = new Date(today)
-    twentyDaysAgo.setDate(today.getDate() - 20)
-    const fechaInicio = twentyDaysAgo.toISOString().split('T')[0] // formato YYYY-MM-DD
+    const startDate = new Date(today)
+    startDate.setDate(today.getDate() - daysBack)
+    const fechaInicio = startDate.toISOString().split('T')[0] // formato YYYY-MM-DD
 
     const params: Record<string, string> = {
-      'fechapre': `gte.${fechaInicio}`, // fechas >= hace 20 días
+      'fechapre': `gte.${fechaInicio}`, // fechas >= hace N días
       'operadorpre': 'not.is.null', // operadorpre no nulo
       'select': 'operadorpre,fechapre,numerotramite,dependencia',
       'order': 'fechapre.desc'
@@ -433,18 +433,18 @@ export class NeonDataAPI {
   }
 
   /**
-   * Obtener TODOS los datos de PRR de producción para reporte (últimos 20 días)
+   * Obtener TODOS los datos de PRR de producción para reporte
    * Basado en fechapre y operadorpre
    */
-  async getAllPRRProduccion() {
-    // Calcular fecha de hace 20 días
+  async getAllPRRProduccion(daysBack: number = 20) {
+    // Calcular fecha de hace N días
     const today = new Date()
-    const twentyDaysAgo = new Date(today)
-    twentyDaysAgo.setDate(today.getDate() - 20)
-    const fechaInicio = twentyDaysAgo.toISOString().split('T')[0] // formato YYYY-MM-DD
+    const startDate = new Date(today)
+    startDate.setDate(today.getDate() - daysBack)
+    const fechaInicio = startDate.toISOString().split('T')[0] // formato YYYY-MM-DD
 
     const params: Record<string, string> = {
-      'fechapre': `gte.${fechaInicio}`, // fechas >= hace 20 días
+      'fechapre': `gte.${fechaInicio}`, // fechas >= hace N días
       'operadorpre': 'not.is.null', // operadorpre no nulo
       'select': 'operadorpre,fechapre,numerotramite,dependencia',
       'order': 'fechapre.desc'

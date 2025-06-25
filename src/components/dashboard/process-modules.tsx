@@ -25,7 +25,7 @@ export function ProcessModules({
     process: selectedProcess
   })
 
-  const { report: produccionReport, loading: produccionLoading, error: produccionError } = useProduccionReport({
+  const { report: produccionReport, otherProcessEvaluadores: produccionOtherEvaluadores, loading: produccionLoading, error: produccionError, refetch: refetchProduccion } = useProduccionReport({
     process: selectedProcess
   })
 
@@ -108,9 +108,14 @@ export function ProcessModules({
           <div className="p-6">
             <ProduccionReportTable
               report={produccionReport}
+              otherProcessEvaluadores={produccionOtherEvaluadores}
               loading={produccionLoading}
               error={produccionError}
               className="w-full"
+              onFiltersChange={(days, dayType) => {
+                console.log(`🔄 Cambiando filtros: ${days} días, tipo: ${dayType}`)
+                refetchProduccion(days, dayType)
+              }}
             />
           </div>
         )
