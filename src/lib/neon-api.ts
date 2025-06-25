@@ -17,44 +17,73 @@ export class NeonDataAPI {
   }
 
   /**
-   * Realizar petición GET a la API
+   * Realizar petición GET con reintentos automáticos para manejar base de datos dormida
    */
   private async get<T = any>(endpoint: string, params?: Record<string, string>): Promise<T[]> {
-    try {
-      const url = new URL(endpoint, this.baseUrl)
-      
-      if (params) {
-        Object.entries(params).forEach(([key, value]) => {
-          url.searchParams.append(key, value)
-        })
-      }
-
-      console.log(`🔍 GET ${url.toString()}`)
-      
-      const response = await fetch(url.toString(), {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'User-Agent': 'UFSM-Dashboard/1.0'
-        },
-        // Agregar timeout para evitar colgarse
-        signal: AbortSignal.timeout(10000) // 10 segundos
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-
-      const data = await response.json()
-      console.log(`✅ Respuesta recibida: ${Array.isArray(data) ? data.length : 'N/A'} elementos`)
-      
-      return Array.isArray(data) ? data : [data]
-
-    } catch (error) {
-      console.error('❌ Error en petición GET:', error)
-      throw error
+    // Construir URL con parámetros
+    let url = `${this.baseUrl}${endpoint}`
+    if (params) {
+      const urlParams = new URLSearchParams(params)
+      url += `?${urlParams.toString()}`
     }
+
+    console.log(`🔍 Petición GET: ${url}`)
+
+    const maxRetries = 3
+    const baseDelay = 2000 // 2 segundos
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'User-Agent': 'UFSM-Dashboard/1.0'
+          },
+          // Agregar timeout para evitar colgarse
+          signal: AbortSignal.timeout(15000) // 15 segundos para el primer intento
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          console.log(`✅ Respuesta recibida (intento ${attempt}/${maxRetries}): ${Array.isArray(data) ? data.length : 'N/A'} elementos`)
+          return Array.isArray(data) ? data : [data]
+        }
+
+        // Si es un error 503 (Service Unavailable) y no es el último intento, reintentar
+        if (response.status === 503 && attempt < maxRetries) {
+          const delay = baseDelay * attempt // Incrementar delay con cada intento
+          console.log(`⚠️ HTTP 503: Base de datos probablemente dormida. Reintentando en ${delay}ms... (intento ${attempt}/${maxRetries})`)
+          await new Promise(resolve => setTimeout(resolve, delay))
+          continue
+        }
+
+        // Para otros errores o último intento fallido
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+
+      } catch (error) {
+        // Si es el último intento, lanzar el error
+        if (attempt === maxRetries) {
+          console.error(`❌ Error en petición GET después de ${maxRetries} intentos:`, error)
+          throw error
+        }
+
+        // Si es un error de timeout o red y no es el último intento, reintentar
+        if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('fetch'))) {
+          const delay = baseDelay * attempt
+          console.log(`⚠️ Error de conexión. Reintentando en ${delay}ms... (intento ${attempt}/${maxRetries})`)
+          await new Promise(resolve => setTimeout(resolve, delay))
+          continue
+        }
+
+        // Para otros tipos de error, lanzar inmediatamente
+        throw error
+      }
+    }
+
+    // Este punto no debería alcanzarse nunca
+    throw new Error('Error inesperado en el bucle de reintentos')
   }
 
   /**
