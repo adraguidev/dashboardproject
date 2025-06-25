@@ -2,17 +2,20 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { PendientesReportSummary } from '@/types/dashboard'
+import { getCached, setCached } from '@/lib/frontend-cache'
 
 interface UsePendientesReportOptions {
   process: 'ccm' | 'prr'
   autoRefresh?: boolean
   refreshInterval?: number
+  enabled?: boolean
 }
 
 export function usePendientesReport({
   process,
   autoRefresh = false,
-  refreshInterval = 60000 // 1 minuto por defecto
+  refreshInterval = 60000, // 1 minuto por defecto
+  enabled = true
 }: UsePendientesReportOptions) {
   const [report, setReport] = useState<PendientesReportSummary | null>(null)
   const [loading, setLoading] = useState(false)
@@ -20,32 +23,42 @@ export function usePendientesReport({
   const [groupBy, setGroupBy] = useState<'quarter' | 'month' | 'year'>('year')
 
   const fetchReport = useCallback(async () => {
+    if (!enabled) return
+
     setLoading(true)
     setError(null)
 
     try {
       console.log(`🔍 Fetching pendientes report: ${process.toUpperCase()} grouped by ${groupBy}`)
 
-      const response = await fetch(`/api/dashboard/pendientes-report?process=${process}&groupBy=${groupBy}`)
-      
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`)
+      const cacheKey = `pendientes_${process}_${groupBy}`
+      const cached = getCached<PendientesReportSummary>(cacheKey)
+      if (cached) {
+        console.log('📦 Pendientes cache hit')
+        setReport(cached)
+      } else {
+        const response = await fetch(`/api/dashboard/pendientes-report?process=${process}&groupBy=${groupBy}`)
+        
+        if (!response.ok) {
+          throw new Error(`Error ${response.status}: ${response.statusText}`)
+        }
+
+        const result: { 
+          success: boolean; 
+          report: PendientesReportSummary; 
+          meta: any; 
+          error?: string 
+        } = await response.json()
+
+        if (!result.success) {
+          throw new Error(result.error || 'Error desconocido')
+        }
+
+        setReport(result.report)
+        setCached(cacheKey, result.report)
+
+        console.log(`✅ Reporte cargado: ${result.report.data.length} operadores, ${result.report.grandTotal} total pendientes`)
       }
-
-      const result: { 
-        success: boolean; 
-        report: PendientesReportSummary; 
-        meta: any; 
-        error?: string 
-      } = await response.json()
-
-      if (!result.success) {
-        throw new Error(result.error || 'Error desconocido')
-      }
-
-      setReport(result.report)
-
-      console.log(`✅ Reporte cargado: ${result.report.data.length} operadores, ${result.report.grandTotal} total pendientes`)
 
     } catch (err) {
       console.error('❌ Error fetching pendientes report:', err)
@@ -54,7 +67,7 @@ export function usePendientesReport({
     } finally {
       setLoading(false)
     }
-  }, [process, groupBy])
+  }, [enabled, process, groupBy])
 
   const changeGrouping = (newGroupBy: 'quarter' | 'month' | 'year') => {
     setGroupBy(newGroupBy)
@@ -62,12 +75,14 @@ export function usePendientesReport({
 
   // Cargar datos iniciales y recargar cuando cambia el proceso o el agrupamiento
   useEffect(() => {
-    fetchReport()
-  }, [fetchReport])
+    if (enabled) {
+      fetchReport()
+    }
+  }, [enabled, fetchReport])
 
   // Auto-refresh si está habilitado
   useEffect(() => {
-    if (!autoRefresh) return
+    if (!autoRefresh || !enabled) return
 
     const interval = setInterval(() => {
       console.log(`🔄 Auto-refresh pendientes report ${process.toUpperCase()} with grouping ${groupBy}`)
@@ -75,7 +90,7 @@ export function usePendientesReport({
     }, refreshInterval)
 
     return () => clearInterval(interval)
-  }, [autoRefresh, refreshInterval, fetchReport, process, groupBy])
+  }, [autoRefresh, refreshInterval, fetchReport, process, groupBy, enabled])
 
   return {
     // Data

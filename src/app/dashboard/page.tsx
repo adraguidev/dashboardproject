@@ -2,16 +2,17 @@
 
 import { useState } from 'react'
 import { useDashboard } from '@/hooks/use-dashboard'
+import { clearAllCache } from '@/lib/frontend-cache'
 import { DashboardHeader } from '@/components/dashboard/dashboard-header'
 import { ProcessModules } from '@/components/dashboard/process-modules'
-import { DatabaseStatus } from '@/components/dashboard/database-status'
 import { ErrorDisplay } from '@/components/ui/error-boundary'
+import { AiChatFloating } from '@/components/ui/ai-chat-floating'
 
 export default function DashboardPage() {
   const [selectedProcess, setSelectedProcess] = useState<'ccm' | 'prr'>('ccm')
   const [activeModule, setActiveModule] = useState('pendientes')
 
-  const { isLoading, error, refreshData } = useDashboard()
+  const { isLoading, error } = useDashboard()
 
   const handleProcessChange = (process: 'ccm' | 'prr') => {
     setSelectedProcess(process)
@@ -19,6 +20,12 @@ export default function DashboardPage() {
 
   const handleModuleChange = (moduleId: string) => {
     setActiveModule(moduleId)
+  }
+
+  const handleFullRefresh = () => {
+    clearAllCache()
+    // recarga para simplificar; garantiza que los hooks vuelvan a disparar
+    window.location.reload()
   }
 
   if (error) {
@@ -30,9 +37,11 @@ export default function DashboardPage() {
           loading={isLoading}
         />
         <div className="max-w-6xl mx-auto px-6 py-8">
-          <DatabaseStatus className="mb-6" />
-          <ErrorDisplay error={error} onRetry={refreshData} />
+          <ErrorDisplay error={error} onRetry={handleFullRefresh} />
         </div>
+        
+        {/* AI Chat Floating Button */}
+        <AiChatFloating />
       </div>
     )
   }
@@ -43,17 +52,12 @@ export default function DashboardPage() {
       <DashboardHeader
         selectedProcess={selectedProcess}
         onProcessChange={handleProcessChange}
-        onRefresh={refreshData}
+        onRefresh={handleFullRefresh}
         loading={isLoading}
       />
 
       {/* Main Content Container - Balanced width */}
       <div className="max-w-6xl mx-auto px-6 py-6">
-        {/* Status Bar - Compact */}
-        <div className="mb-6">
-          <DatabaseStatus />
-        </div>
-
         {/* Main Content */}
         <div className="bg-white border border-gray-200/60 rounded-xl shadow-sm overflow-hidden">
           <ProcessModules
@@ -63,6 +67,9 @@ export default function DashboardPage() {
           />
         </div>
       </div>
+
+      {/* AI Chat Floating Button */}
+      <AiChatFloating />
     </div>
   )
 } 

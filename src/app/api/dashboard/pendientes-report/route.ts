@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { neonDB } from '@/lib/neon-api'
+import { redisGet, redisSet } from '@/lib/redis'
 import { PendientesReportData, PendientesReportSummary, Evaluador, ColorLegend } from '@/types/dashboard'
+import { parseDateSafe } from '@/lib/date-utils'
 
 // Configuración de colores por sub_equipo
 const getColorConfig = (subEquipo: string | undefined): { colorClass: string; color: string } => {
@@ -57,33 +59,9 @@ const COLOR_LEGEND: ColorLegend[] = [
   }
 ]
 
-// Helper to parse date strings from multiple formats
+// Helper to parse date strings (usa utilidad global)
 function parseDate(fecha: string | null | undefined): Date | null {
-  if (!fecha) return null;
-  try {
-    let date: Date;
-    // ISO format YYYY-MM-DD
-    if (fecha.includes('-')) {
-      date = new Date(fecha);
-    } 
-    // DD/MM/YYYY format
-    else if (fecha.includes('/')) {
-      const parts = fecha.split('/');
-      if (parts.length === 3) {
-        date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-      } else {
-        return null;
-      }
-    } 
-    // Fallback for other formats
-    else {
-      date = new Date(fecha);
-    }
-    return isNaN(date.getTime()) ? null : date;
-  } catch (error) {
-    console.warn('Error parsing date:', fecha, error);
-    return null;
-  }
+  return parseDateSafe(fecha);
 }
 
 // Extracts a period string (e.g., "2024", "T1-2024") from a date
@@ -232,6 +210,16 @@ export async function GET(request: NextRequest) {
     const process = searchParams.get('process') as 'ccm' | 'prr' | null;
     const groupBy = (searchParams.get('groupBy') || 'quarter') as 'year' | 'quarter' | 'month';
 
+    const cacheKey = `pendientes_${process}_${groupBy}`;
+    try {
+      const cached = await redisGet(cacheKey);
+      if (cached) {
+        return NextResponse.json({ success: true, report: cached, cached: true });
+      }
+    } catch (e) {
+      console.warn('Redis off (pendientes)', e);
+    }
+
     console.log(`🔍 Generando reporte de pendientes para proceso: ${process}, agrupado por: ${groupBy}`);
 
     if (!process || (process !== 'ccm' && process !== 'prr')) {
@@ -265,6 +253,8 @@ export async function GET(request: NextRequest) {
     console.log(`✅ Datos obtenidos: ${data.length} registros pendientes, ${evaluadores.length} evaluadores`)
 
     const report = generatePendientesReport(data, evaluadores, process, groupBy);
+
+    await redisSet(cacheKey, report);
 
     console.log(`📋 Reporte generado: ${report.data.length} operadores, ${report.years.length} periodos, ${report.grandTotal} total`)
 

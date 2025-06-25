@@ -61,8 +61,8 @@ export function DatabaseStatus({ className = '' }: DatabaseStatusProps) {
 
   useEffect(() => {
     checkDatabaseStatus()
-    const interval = setInterval(checkDatabaseStatus, 30000) // Check every 30 seconds
-    return () => clearInterval(interval)
+    // const interval = setInterval(checkDatabaseStatus, 30000) // Check every 30 seconds
+    // return () => clearInterval(interval)
   }, [])
 
   const getStatusConfig = () => {

@@ -5,10 +5,12 @@ import { Card } from '../ui/card'
 import { PendientesReportTable } from '../ui/pendientes-report-table'
 import { AdvancedPendientesReportTable } from '../ui/advanced-pendientes-report-table'
 import { ProduccionReportTable } from '../ui/produccion-report-table'
+import { IngresosChart } from '../ui/ingresos-chart'
 import { usePendientesReport } from '@/hooks/use-pendientes-report'
 import { useProduccionReport } from '@/hooks/use-produccion-report'
+import { useIngresos } from '@/hooks/use-ingresos'
 import { useEvaluadores } from '@/hooks/use-evaluadores'
-import { BarChart3, CheckCircle, Clock, TrendingUp, Construction, Factory } from 'lucide-react'
+import { BarChart3, CheckCircle, Clock, TrendingUp, Construction, Factory, TrendingDown } from 'lucide-react'
 
 interface ProcessModulesProps {
   selectedProcess: 'ccm' | 'prr'
@@ -22,11 +24,19 @@ export function ProcessModules({
   onModuleChange 
 }: ProcessModulesProps) {
   const { report: reportData, loading, error, groupBy, changeGrouping } = usePendientesReport({
-    process: selectedProcess
+    process: selectedProcess,
+    enabled: selectedModule === 'pendientes'
   })
 
   const { report: produccionReport, otherProcessEvaluadores: produccionOtherEvaluadores, loading: produccionLoading, error: produccionError, refetch: refetchProduccion } = useProduccionReport({
-    process: selectedProcess
+    process: selectedProcess,
+    enabled: selectedModule === 'produccion'
+  })
+
+  const { report: ingresosReport, isLoading: ingresosLoading, error: ingresosError, refreshData: refreshIngresos, updatePeriod: updateIngresosPeriod } = useIngresos({
+    process: selectedProcess,
+    days: 30,
+    enabled: selectedModule === 'ingresos'
   })
 
   // Obtener evaluadores del otro proceso para comparación
@@ -43,6 +53,14 @@ export function ProcessModules({
       description: 'Análisis de expedientes pendientes',
       status: 'active',
       color: 'text-blue-600'
+    },
+    {
+      id: 'ingresos',
+      name: 'Ingresos',
+      icon: TrendingDown,
+      description: 'Gráfico de ingreso de expedientes por fecha',
+      status: 'active',
+      color: 'text-indigo-600'
     },
     {
       id: 'produccion',
@@ -100,6 +118,22 @@ export function ProcessModules({
                 className="w-full"
               />
             )}
+          </div>
+        )
+
+      case 'ingresos':
+        return (
+          <div className="p-6">
+            <IngresosChart
+              report={ingresosReport}
+              loading={ingresosLoading}
+              error={ingresosError}
+              className="w-full"
+              onPeriodChange={(days) => {
+                console.log(`📅 Cambiando período de ingresos: ${days} días`)
+                updateIngresosPeriod(days)
+              }}
+            />
           </div>
         )
 

@@ -4,6 +4,7 @@ import React, { useState, useMemo, useCallback } from 'react'
 import { Card } from './card'
 import { ProduccionReportSummary, Evaluador } from '@/types/dashboard'
 import { ProduccionChart } from './produccion-chart'
+import { formatDateShort } from '@/lib/date-utils'
 
 interface ProduccionReportTableProps {
   report: ProduccionReportSummary | null
@@ -140,13 +141,9 @@ export function ProduccionReportTable({
     };
   }, [report, filteredOperators, filteredTotals]);
 
-  // Función para formatear fecha
+  // Función para formatear fecha usando utilidad global
   const formatDate = useCallback((dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('es-ES', { 
-      day: '2-digit',
-      month: '2-digit'
-    });
+    return formatDateShort(dateStr);
   }, []);
 
   // Determinar qué fechas mostrar (solo las que tienen datos en la pestaña activa)
@@ -309,7 +306,7 @@ export function ProduccionReportTable({
                 <th 
                   key={fecha}
                   className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[60px]"
-                  title={fecha}
+                  title={`Fecha: ${fecha} (${formatDate(fecha)})`}
                 >
                   {formatDate(fecha)}
                 </th>

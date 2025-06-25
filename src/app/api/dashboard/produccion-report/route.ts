@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { neonDB } from '@/lib/neon-api'
+import { redisGet, redisSet } from '@/lib/redis'
 import { ProduccionReportData, ProduccionReportSummary, Evaluador, ColorLegend } from '@/types/dashboard'
+import { parseDateSafe, isWorkday as isWorkdayUtil } from '@/lib/date-utils'
 
 // Configuración de colores por sub_equipo (reutilizo la misma lógica de pendientes)
 const getColorConfig = (subEquipo: string | undefined): { colorClass: string; color: string } => {
@@ -57,53 +59,39 @@ const COLOR_LEGEND: ColorLegend[] = [
   }
 ]
 
-// Helper para parsear fechas
+// Helper para parsear fechas (usa utilidad global)
 function parseDate(fecha: string | null | undefined): Date | null {
-  if (!fecha) return null;
-  try {
-    let date: Date;
-    // ISO format YYYY-MM-DD
-    if (fecha.includes('-')) {
-      date = new Date(fecha);
-    } 
-    // DD/MM/YYYY format
-    else if (fecha.includes('/')) {
-      const parts = fecha.split('/');
-      if (parts.length === 3) {
-        date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-      } else {
-        return null;
-      }
-    } 
-    // Fallback for other formats
-    else {
-      date = new Date(fecha);
-    }
-    return isNaN(date.getTime()) ? null : date;
-  } catch (error) {
-    console.warn('Error parsing date:', fecha, error);
-    return null;
-  }
+  return parseDateSafe(fecha);
 }
 
-// Función para determinar si una fecha es día laborable (lunes a viernes)
+// Función para determinar si una fecha es día laborable (usa utilidad global)
 function isWorkday(dateStr: string): boolean {
-  const date = new Date(dateStr);
-  const dayOfWeek = date.getDay(); // 0 = domingo, 1 = lunes, ..., 6 = sábado
-  return dayOfWeek >= 1 && dayOfWeek <= 5;
+  return isWorkdayUtil(dateStr);
 }
 
-// Generar lista de días según parámetros
-function generateDays(daysCount: number, dayType: 'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA'): string[] {
+// Generar lista de días según parámetros basado en datos reales
+function generateDays(data: any[], daysCount: number, dayType: 'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA'): string[] {
+  // Extraer todas las fechas reales de los datos
+  const fechasReales = data
+    .map(record => parseDate(record.fechapre))
+    .filter(date => date !== null)
+    .sort((a, b) => b!.getTime() - a!.getTime()); // Más reciente primero
+
+  if (fechasReales.length === 0) {
+    console.warn('No se encontraron fechas válidas en los datos');
+    return [];
+  }
+
+  // Usar la fecha más reciente de los datos como punto de partida
+  const fechaMasReciente = fechasReales[0]!;
   const dates: string[] = [];
-  const today = new Date();
   let foundDays = 0;
   let daysBack = 0;
   
-  // Buscar hacia atrás hasta encontrar el número de días requeridos del tipo especificado
+  // Buscar hacia atrás desde la fecha más reciente encontrada
   while (foundDays < daysCount && daysBack < 365) { // límite de seguridad de 1 año
-    const date = new Date(today);
-    date.setDate(today.getDate() - daysBack);
+    const date = new Date(fechaMasReciente);
+    date.setDate(fechaMasReciente.getDate() - daysBack);
     const dateStr = date.toISOString().split('T')[0];
     
     let includeDate = false;
@@ -140,11 +128,38 @@ function generateProduccionReport(
   dayType: 'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA' = 'TODOS'
 ): ProduccionReportSummary {
   const operadorMap = new Map<string, { [fecha: string]: number }>();
-  const targetDays = generateDays(daysCount, dayType);
+  const targetDays = generateDays(data, daysCount, dayType);
   
-  console.log(`📅 Días objetivo generados: ${targetDays.length} días`);
-  console.log(`📅 Primeros 5 días: ${targetDays.slice(0, 5).join(', ')}`);
-  console.log(`📅 Últimos 5 días: ${targetDays.slice(-5).join(', ')}`);
+  if (targetDays.length === 0) {
+    console.warn('No se pudieron generar días objetivo - sin datos válidos');
+    // Devolver reporte vacío
+    return {
+      data: [],
+      fechas: [],
+      totalByDate: {},
+      grandTotal: 0,
+      process,
+      legend: COLOR_LEGEND,
+      periodo: `Últimos ${daysCount} ${dayType.toLowerCase().replace('_', ' ')} (sin datos)`
+    };
+  }
+  
+  console.log(`📅 Rango ajustado: ${targetDays[0]} hasta ${targetDays[targetDays.length - 1]} (${targetDays.length} días)`);
+  
+  // Debug: Verificar algunos días de la semana para asegurar que los filtros funcionen
+  if (dayType !== 'TODOS' && targetDays.length > 0) {
+    const sampleDays = targetDays.slice(0, 5).map(fecha => {
+      const parts = fecha.split('-');
+      const year = parseInt(parts[0]);
+      const month = parseInt(parts[1]) - 1;
+      const day = parseInt(parts[2]);
+      const date = new Date(year, month, day);
+      const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+      const isLaboral = isWorkday(fecha);
+      return `${fecha} (${dayNames[date.getDay()]}, ${isLaboral ? 'Laborable' : 'Fin de semana'})`;
+    });
+    console.log(`📅 Verificación días ${dayType}: ${sampleDays.join(', ')}`);
+  }
   
   // Verificar qué fechas existen en los datos reales
   const fechasEnDatos = new Set<string>();
@@ -312,7 +327,19 @@ export async function GET(request: NextRequest) {
 
     console.log(`✅ Datos obtenidos: ${data.length} registros de producción, ${evaluadores.length} evaluadores`)
 
+    const cacheKey = `produccion_${process}_${days}_${dayType}`;
+    try {
+      const cached = await redisGet(cacheKey);
+      if (cached) {
+        return NextResponse.json({ success: true, report: cached, cached: true });
+      }
+    } catch (e) {
+      console.warn('Redis off (produccion)', e);
+    }
+
     const report = generateProduccionReport(data, evaluadores, process, days, dayType);
+
+    await redisSet(cacheKey, report);
 
     console.log(`📋 Reporte generado: ${report.data.length} operadores, ${report.fechas.length} días, ${report.grandTotal} total`)
 

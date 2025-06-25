@@ -19,6 +19,7 @@ import {
 } from 'recharts'
 import { Card } from '@/components/ui/card'
 import { ProduccionReportSummary } from '@/types/dashboard'
+import { formatDateSafe, getDayOfWeekSafe, parseDateSafe } from '@/lib/date-utils'
 import { TrendingUp, TrendingDown, Calendar, Users, BarChart3 } from 'lucide-react'
 
 interface ProduccionChartProps {
@@ -26,6 +27,8 @@ interface ProduccionChartProps {
   loading?: boolean
   className?: string
 }
+
+
 
 export function ProduccionChart({ report, loading = false, className = '' }: ProduccionChartProps) {
   // Preparar datos para el gráfico (solo días con datos > 0)
@@ -35,16 +38,16 @@ export function ProduccionChart({ report, loading = false, className = '' }: Pro
     return report.fechas
       .map(fecha => {
         const count = report.totalByDate[fecha] || 0
-        const day = new Date(fecha).getDay()
+        const day = getDayOfWeekSafe(fecha)
         const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
         
         return {
           fecha,
-          fechaCorta: new Date(fecha).toLocaleDateString('es-ES', { 
+          fechaCorta: formatDateSafe(fecha, { 
             month: '2-digit', 
             day: '2-digit' 
           }),
-          fechaCompleta: new Date(fecha).toLocaleDateString('es-ES', { 
+          fechaCompleta: formatDateSafe(fecha, { 
             weekday: 'long',
             year: 'numeric', 
             month: 'long', 
@@ -53,7 +56,7 @@ export function ProduccionChart({ report, loading = false, className = '' }: Pro
           dia: dayNames[day],
           produccion: count,
           esFinDeSemana: day === 0 || day === 6,
-          fechaDate: new Date(fecha)
+          fechaDate: parseDateSafe(fecha) || new Date() // Crear fecha segura
         }
       })
       .filter(item => item.produccion > 0) // Solo días con datos

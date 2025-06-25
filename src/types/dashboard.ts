@@ -211,3 +211,51 @@ export interface ProduccionReportSummary {
   legend: ColorLegend[]
   periodo: string // Descripción del período
 }
+
+// Nuevos tipos para el módulo de Ingresos
+export interface IngresosChartData {
+  fecha: string // Fecha en formato YYYY-MM-DD
+  numeroTramite: number // Cantidad de trámites en esa fecha
+  tendencia?: number // Valor opcional para línea de tendencia
+}
+
+export interface IngresosReport {
+  data: IngresosChartData[]
+  totalTramites: number
+  fechaInicio: string
+  fechaFin: string
+  process: 'ccm' | 'prr'
+  periodo: string // Descripción del período (ej: "Últimos 30 días")
+  promedioTramitesPorDia: number
+  diasConDatos: number
+  // Datos mensuales
+  monthlyData: MonthlyIngresosData
+  // Datos semanales
+  weeklyData: WeeklyIngresosData
+}
+
+export interface MonthlyIngresosData {
+  currentYear: number
+  previousYear: number
+  months: MonthlyIngresosEntry[]
+}
+
+export interface MonthlyIngresosEntry {
+  month: string // "Enero", "Febrero", etc.
+  monthNumber: number // 1-12
+  currentYearCount: number
+  previousYearCount: number
+}
+
+export interface WeeklyIngresosData {
+  year: number
+  weeks: WeeklyIngresosEntry[]
+}
+
+export interface WeeklyIngresosEntry {
+  weekNumber: number // 1-52/53
+  weekRange: string // "1-7 Ene"
+  startDate: string // "2025-01-01"
+  endDate: string // "2025-01-07"
+  count: number
+}

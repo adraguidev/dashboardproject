@@ -3,6 +3,8 @@
  * Conecta directamente a la API REST de la base de datos
  */
 
+import { logDebug, logInfo, logWarn, logError } from './logger'
+
 interface NeonDataResponse<T = any> {
   data: T[]
   count?: number
@@ -27,10 +29,10 @@ export class NeonDataAPI {
       url += `?${urlParams.toString()}`
     }
 
-    console.log(`🔍 Petición GET: ${url}`)
+    logDebug(`🔍 Petición GET: ${url}`)
 
-    const maxRetries = 3
-    const baseDelay = 2000 // 2 segundos
+    const maxRetries = 5
+    const baseDelay = 3000 // 3 segundos
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -47,14 +49,14 @@ export class NeonDataAPI {
 
         if (response.ok) {
           const data = await response.json()
-          console.log(`✅ Respuesta recibida (intento ${attempt}/${maxRetries}): ${Array.isArray(data) ? data.length : 'N/A'} elementos`)
+          logInfo(`✅ Respuesta recibida (intento ${attempt}/${maxRetries}): ${Array.isArray(data) ? data.length : 'N/A'} elementos`)
           return Array.isArray(data) ? data : [data]
         }
 
         // Si es un error 503 (Service Unavailable) y no es el último intento, reintentar
         if (response.status === 503 && attempt < maxRetries) {
           const delay = baseDelay * attempt // Incrementar delay con cada intento
-          console.log(`⚠️ HTTP 503: Base de datos probablemente dormida. Reintentando en ${delay}ms... (intento ${attempt}/${maxRetries})`)
+          logWarn(`⚠️ HTTP 503: Base de datos probablemente dormida. Reintentando en ${delay}ms... (intento ${attempt}/${maxRetries})`)
           await new Promise(resolve => setTimeout(resolve, delay))
           continue
         }
@@ -65,14 +67,14 @@ export class NeonDataAPI {
       } catch (error) {
         // Si es el último intento, lanzar el error
         if (attempt === maxRetries) {
-          console.error(`❌ Error en petición GET después de ${maxRetries} intentos:`, error)
+          logError(`❌ Error en petición GET después de ${maxRetries} intentos:`, error)
           throw error
         }
 
         // Si es un error de timeout o red y no es el último intento, reintentar
         if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('fetch'))) {
           const delay = baseDelay * attempt
-          console.log(`⚠️ Error de conexión. Reintentando en ${delay}ms... (intento ${attempt}/${maxRetries})`)
+          logWarn(`⚠️ Error de conexión. Reintentando en ${delay}ms... (intento ${attempt}/${maxRetries})`)
           await new Promise(resolve => setTimeout(resolve, delay))
           continue
         }
@@ -128,7 +130,7 @@ export class NeonDataAPI {
       
       return 0
     } catch (error) {
-      console.error('Error contando table_ccm:', error)
+      logError('Error contando table_ccm:', error)
       return 0
     }
   }
@@ -155,7 +157,7 @@ export class NeonDataAPI {
       
       return 0
     } catch (error) {
-      console.error('Error contando table_prr:', error)
+      logError('Error contando table_prr:', error)
       return 0
     }
   }
@@ -190,9 +192,9 @@ export class NeonDataAPI {
       
       return response.ok
     } catch (error) {
-      console.error('Conexión a Neon Data API falló:', error)
+      logError('Conexión a Neon Data API falló:')
       if (error instanceof Error) {
-        console.error('Error details:', error.message)
+        logError('Error details:', error.message)
       }
       return false
     }
@@ -270,19 +272,50 @@ export class NeonDataAPI {
     return this.get('/table_prr', params)
   }
 
+  private async fetchAllRows(endpoint: string, baseParams: Record<string, string>, batchSize?: number): Promise<any[]> {
+    // Permitir override por variable de entorno
+    const envBatch = parseInt(process.env.BATCH_SIZE || '', 10)
+    const effectiveBatchSize = batchSize ?? (Number.isFinite(envBatch) && envBatch > 0 ? envBatch : 2000)
+    // Descarga todos los registros de la tabla en lotes para evitar respuestas gigantes
+    let offset = 0
+    const resultados: any[] = []
+
+    while (true) {
+      const params: Record<string, string> = {
+        ...baseParams,
+        limit: effectiveBatchSize.toString(),
+        offset: offset.toString()
+      }
+
+      const lote = await this.get(endpoint, params)
+      resultados.push(...lote)
+
+      // Si el lote es menor que el tamaño solicitado, ya no hay más datos
+      if (lote.length < effectiveBatchSize) {
+        break
+      }
+
+      offset += effectiveBatchSize
+    }
+
+    return resultados
+  }
+
   /**
    * Obtener TODOS los datos de CCM pendientes para reporte (sin límite)
    */
   async getAllCCMPendientes() {
-    const params: Record<string, string> = {
+    const baseParams: Record<string, string> = {
       'ultimaetapa': 'eq.EVALUACIÓN - I',
       'estadopre': 'is.null',
       'estadotramite': 'eq.PENDIENTE',
-      'select': 'operador,fechaexpendiente,numerotramite,dependencia',
+      // Sólo las columnas que realmente usa el reporte de pendientes
+      'select': 'operador,fechaexpendiente',
       'order': 'fechaexpendiente.desc'
     }
 
-    return this.get('/table_ccm', params)
+    logInfo('📦 Descargando CCM pendientes en lotes…')
+    return this.fetchAllRows('/table_ccm', baseParams)
   }
 
   /**
@@ -300,15 +333,17 @@ export class NeonDataAPI {
       'RECEPCIÓN DINM - F'
     ]
 
-    const params: Record<string, string> = {
+    const baseParams: Record<string, string> = {
       'ultimaetapa': `in.(${ultimaetapaValues.map(v => `"${v}"`).join(',')})`,
       'estadopre': 'is.null',
       'estadotramite': 'eq.PENDIENTE',
-      'select': 'operador,fechaexpendiente,numerotramite,dependencia',
+      // Columnas mínimas necesarias para el reporte
+      'select': 'operador,fechaexpendiente',
       'order': 'fechaexpendiente.desc'
     }
 
-    return this.get('/table_prr', params)
+    logInfo('📦 Descargando PRR pendientes en lotes…')
+    return this.fetchAllRows('/table_prr', baseParams)
   }
 
   /**
@@ -339,7 +374,7 @@ export class NeonDataAPI {
       
       return 0
     } catch (error) {
-      console.error('Error contando CCM pendientes:', error)
+      logError('Error contando CCM pendientes:')
       return 0
     }
   }
@@ -383,7 +418,7 @@ export class NeonDataAPI {
       
       return 0
     } catch (error) {
-      console.error('Error contando PRR pendientes:', error)
+      logError('Error contando PRR pendientes:')
       return 0
     }
   }
@@ -443,13 +478,20 @@ export class NeonDataAPI {
   /**
    * Obtener TODOS los datos de CCM de producción para reporte
    * Basado en fechapre y operadorpre
+   * Obtiene más datos de los solicitados para detectar el rango real de fechas
    */
   async getAllCCMProduccion(daysBack: number = 20) {
-    // Calcular fecha de hace N días
+    // Obtener un rango amplio de datos para detectar fechas reales
+    // Usar hasta 90 días adicionales para asegurar que encontramos datos
+    const maxDaysToFetch = Math.max(daysBack + 90, 180)
+    
+    // Calcular fecha de hace N días (amplio)
     const today = new Date()
     const startDate = new Date(today)
-    startDate.setDate(today.getDate() - daysBack)
+    startDate.setDate(today.getDate() - maxDaysToFetch)
     const fechaInicio = startDate.toISOString().split('T')[0] // formato YYYY-MM-DD
+
+    logInfo(`📊 Obteniendo datos CCM producción: últimos ${maxDaysToFetch} días desde ${fechaInicio}`)
 
     const params: Record<string, string> = {
       'fechapre': `gte.${fechaInicio}`, // fechas >= hace N días
@@ -464,13 +506,20 @@ export class NeonDataAPI {
   /**
    * Obtener TODOS los datos de PRR de producción para reporte
    * Basado en fechapre y operadorpre
+   * Obtiene más datos de los solicitados para detectar el rango real de fechas
    */
   async getAllPRRProduccion(daysBack: number = 20) {
-    // Calcular fecha de hace N días
+    // Obtener un rango amplio de datos para detectar fechas reales
+    // Usar hasta 90 días adicionales para asegurar que encontramos datos
+    const maxDaysToFetch = Math.max(daysBack + 90, 180)
+    
+    // Calcular fecha de hace N días (amplio)
     const today = new Date()
     const startDate = new Date(today)
-    startDate.setDate(today.getDate() - daysBack)
+    startDate.setDate(today.getDate() - maxDaysToFetch)
     const fechaInicio = startDate.toISOString().split('T')[0] // formato YYYY-MM-DD
+
+    logInfo(`📊 Obteniendo datos PRR producción: últimos ${maxDaysToFetch} días desde ${fechaInicio}`)
 
     const params: Record<string, string> = {
       'fechapre': `gte.${fechaInicio}`, // fechas >= hace N días
@@ -480,6 +529,66 @@ export class NeonDataAPI {
     }
 
     return this.get('/table_prr', params)
+  }
+
+  /**
+   * Obtener datos de ingresos de CCM para gráfico
+   * Basado en fechaexpendiente
+   * Obtiene TODOS los datos para análisis completo de ingresos mensuales y semanales
+   */
+  async getCCMIngresos(daysBack: number = 30) {
+    // Para el análisis mensual y semanal, obtenemos los últimos 2 años de datos.
+    // Esto evita timeouts al no traer la tabla completa, pero asegura que tenemos
+    // datos para el año actual y el anterior.
+    const maxDaysToFetch = 730; // ~2 años
+    
+    const today = new Date()
+    const startDate = new Date(today)
+    startDate.setDate(today.getDate() - maxDaysToFetch)
+    const fechaInicio = startDate.toISOString().split('T')[0] // formato YYYY-MM-DD
+
+    logInfo(`📊 Obteniendo datos CCM ingresos: últimos ${maxDaysToFetch} días desde ${fechaInicio}`)
+
+    const params: Record<string, string> = {
+      'fechaexpendiente': `gte.${fechaInicio}`,
+      'select': 'fechaexpendiente,numerotramite',
+      'order': 'fechaexpendiente.desc'
+    }
+
+    const resultado = await this.get('/table_ccm', params)
+    logInfo(`✅ CCM: Obtenidos ${resultado.length} registros para análisis de ingresos`)
+
+    return resultado
+  }
+
+  /**
+   * Obtener datos de ingresos de PRR para gráfico
+   * Basado en fechaexpendiente
+   * Obtiene TODOS los datos para análisis completo de ingresos mensuales y semanales
+   */
+  async getPRRIngresos(daysBack: number = 30) {
+    // Para el análisis mensual y semanal, obtenemos los últimos 2 años de datos.
+    // Esto evita timeouts al no traer la tabla completa, pero asegura que tenemos
+    // datos para el año actual y el anterior.
+    const maxDaysToFetch = 730; // ~2 años
+    
+    const today = new Date()
+    const startDate = new Date(today)
+    startDate.setDate(today.getDate() - maxDaysToFetch)
+    const fechaInicio = startDate.toISOString().split('T')[0] // formato YYYY-MM-DD
+
+    logInfo(`📊 Obteniendo datos PRR ingresos: últimos ${maxDaysToFetch} días desde ${fechaInicio}`)
+
+    const params: Record<string, string> = {
+      'fechaexpendiente': `gte.${fechaInicio}`,
+      'select': 'fechaexpendiente,numerotramite',
+      'order': 'fechaexpendiente.desc'
+    }
+
+    const resultado = await this.get('/table_prr', params)
+    logInfo(`✅ PRR: Obtenidos ${resultado.length} registros para análisis de ingresos`)
+
+    return resultado
   }
 
   /**
@@ -556,7 +665,7 @@ export class NeonDataAPI {
       
       return 0
     } catch (error) {
-      console.error('Error contando CCM producción:', error)
+      logError('Error contando CCM producción:')
       return 0
     }
   }
@@ -593,7 +702,7 @@ export class NeonDataAPI {
       
       return 0
     } catch (error) {
-      console.error('Error contando PRR producción:', error)
+      logError('Error contando PRR producción:')
       return 0
     }
   }
