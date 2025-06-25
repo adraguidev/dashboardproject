@@ -192,3 +192,22 @@ export interface ColorLegend {
   count: number
   description: string
 }
+
+// Nuevos tipos para reporte de producción
+export interface ProduccionReportData {
+  operador: string
+  fechas: { [fecha: string]: number } // fechas con conteos
+  total: number
+  subEquipo?: string // Sub equipo del evaluador
+  colorClass?: string // Clase CSS para el color de fila
+}
+
+export interface ProduccionReportSummary {
+  data: ProduccionReportData[]
+  fechas: string[] // Lista de fechas (últimos 20 días)
+  totalByDate: { [fecha: string]: number }
+  grandTotal: number
+  process: 'ccm' | 'prr'
+  legend: ColorLegend[]
+  periodo: string // Descripción del período
+}

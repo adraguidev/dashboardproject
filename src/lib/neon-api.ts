@@ -410,6 +410,164 @@ export class NeonDataAPI {
   async getEvaluadoresPRR() {
     return this.get('/evaluadores_prr')
   }
+
+  /**
+   * Obtener TODOS los datos de CCM de producción para reporte (últimos 20 días)
+   * Basado en fechapre y operadorpre
+   */
+  async getAllCCMProduccion() {
+    // Calcular fecha de hace 20 días
+    const today = new Date()
+    const twentyDaysAgo = new Date(today)
+    twentyDaysAgo.setDate(today.getDate() - 20)
+    const fechaInicio = twentyDaysAgo.toISOString().split('T')[0] // formato YYYY-MM-DD
+
+    const params: Record<string, string> = {
+      'fechapre': `gte.${fechaInicio}`, // fechas >= hace 20 días
+      'operadorpre': 'not.is.null', // operadorpre no nulo
+      'select': 'operadorpre,fechapre,numerotramite,dependencia',
+      'order': 'fechapre.desc'
+    }
+
+    return this.get('/table_ccm', params)
+  }
+
+  /**
+   * Obtener TODOS los datos de PRR de producción para reporte (últimos 20 días)
+   * Basado en fechapre y operadorpre
+   */
+  async getAllPRRProduccion() {
+    // Calcular fecha de hace 20 días
+    const today = new Date()
+    const twentyDaysAgo = new Date(today)
+    twentyDaysAgo.setDate(today.getDate() - 20)
+    const fechaInicio = twentyDaysAgo.toISOString().split('T')[0] // formato YYYY-MM-DD
+
+    const params: Record<string, string> = {
+      'fechapre': `gte.${fechaInicio}`, // fechas >= hace 20 días
+      'operadorpre': 'not.is.null', // operadorpre no nulo
+      'select': 'operadorpre,fechapre,numerotramite,dependencia',
+      'order': 'fechapre.desc'
+    }
+
+    return this.get('/table_prr', params)
+  }
+
+  /**
+   * Obtener datos filtrados de CCM para módulo "Producción" con paginación
+   */
+  async getCCMProduccion(limit: number = 100, offset: number = 0) {
+    // Calcular fecha de hace 20 días
+    const today = new Date()
+    const twentyDaysAgo = new Date(today)
+    twentyDaysAgo.setDate(today.getDate() - 20)
+    const fechaInicio = twentyDaysAgo.toISOString().split('T')[0]
+
+    const params: Record<string, string> = {
+      'fechapre': `gte.${fechaInicio}`,
+      'operadorpre': 'not.is.null',
+      'limit': limit.toString(),
+      'offset': offset.toString(),
+      'order': 'fechapre.desc,numerotramite.asc'
+    }
+
+    return this.get('/table_ccm', params)
+  }
+
+  /**
+   * Obtener datos filtrados de PRR para módulo "Producción" con paginación
+   */
+  async getPRRProduccion(limit: number = 100, offset: number = 0) {
+    // Calcular fecha de hace 20 días
+    const today = new Date()
+    const twentyDaysAgo = new Date(today)
+    twentyDaysAgo.setDate(today.getDate() - 20)
+    const fechaInicio = twentyDaysAgo.toISOString().split('T')[0]
+
+    const params: Record<string, string> = {
+      'fechapre': `gte.${fechaInicio}`,
+      'operadorpre': 'not.is.null',
+      'limit': limit.toString(),
+      'offset': offset.toString(),
+      'order': 'fechapre.desc,numerotramite.asc'
+    }
+
+    return this.get('/table_prr', params)
+  }
+
+  /**
+   * Contar registros de CCM para módulo "Producción"
+   */
+  async countCCMProduccion(): Promise<number> {
+    try {
+      const today = new Date()
+      const twentyDaysAgo = new Date(today)
+      twentyDaysAgo.setDate(today.getDate() - 20)
+      const fechaInicio = twentyDaysAgo.toISOString().split('T')[0]
+
+      const params = new URLSearchParams({
+        'fechapre': `gte.${fechaInicio}`,
+        'operadorpre': 'not.is.null'
+      })
+
+      const response = await fetch(`${this.baseUrl}/table_ccm?${params.toString()}`, {
+        method: 'HEAD',
+        headers: {
+          'Prefer': 'count=exact',
+          'User-Agent': 'UFSM-Dashboard/1.0'
+        },
+        signal: AbortSignal.timeout(10000)
+      })
+      
+      const contentRange = response.headers.get('content-range')
+      if (contentRange) {
+        const match = contentRange.match(/\/(\d+)$/)
+        return match ? parseInt(match[1]) : 0
+      }
+      
+      return 0
+    } catch (error) {
+      console.error('Error contando CCM producción:', error)
+      return 0
+    }
+  }
+
+  /**
+   * Contar registros de PRR para módulo "Producción"
+   */
+  async countPRRProduccion(): Promise<number> {
+    try {
+      const today = new Date()
+      const twentyDaysAgo = new Date(today)
+      twentyDaysAgo.setDate(today.getDate() - 20)
+      const fechaInicio = twentyDaysAgo.toISOString().split('T')[0]
+
+      const params = new URLSearchParams({
+        'fechapre': `gte.${fechaInicio}`,
+        'operadorpre': 'not.is.null'
+      })
+
+      const response = await fetch(`${this.baseUrl}/table_prr?${params.toString()}`, {
+        method: 'HEAD',
+        headers: {
+          'Prefer': 'count=exact',
+          'User-Agent': 'UFSM-Dashboard/1.0'
+        },
+        signal: AbortSignal.timeout(10000)
+      })
+      
+      const contentRange = response.headers.get('content-range')
+      if (contentRange) {
+        const match = contentRange.match(/\/(\d+)$/)
+        return match ? parseInt(match[1]) : 0
+      }
+      
+      return 0
+    } catch (error) {
+      console.error('Error contando PRR producción:', error)
+      return 0
+    }
+  }
 }
 
 // Instancia singleton

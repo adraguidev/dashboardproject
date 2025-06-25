@@ -4,9 +4,11 @@ import React, { useState } from 'react'
 import { Card } from '../ui/card'
 import { PendientesReportTable } from '../ui/pendientes-report-table'
 import { AdvancedPendientesReportTable } from '../ui/advanced-pendientes-report-table'
+import { ProduccionReportTable } from '../ui/produccion-report-table'
 import { usePendientesReport } from '@/hooks/use-pendientes-report'
+import { useProduccionReport } from '@/hooks/use-produccion-report'
 import { useEvaluadores } from '@/hooks/use-evaluadores'
-import { BarChart3, CheckCircle, Clock, TrendingUp, Construction } from 'lucide-react'
+import { BarChart3, CheckCircle, Clock, TrendingUp, Construction, Factory } from 'lucide-react'
 
 interface ProcessModulesProps {
   selectedProcess: 'ccm' | 'prr'
@@ -20,6 +22,10 @@ export function ProcessModules({
   onModuleChange 
 }: ProcessModulesProps) {
   const { report: reportData, loading, error, groupBy, changeGrouping } = usePendientesReport({
+    process: selectedProcess
+  })
+
+  const { report: produccionReport, loading: produccionLoading, error: produccionError } = useProduccionReport({
     process: selectedProcess
   })
 
@@ -37,6 +43,14 @@ export function ProcessModules({
       description: 'Análisis de expedientes pendientes',
       status: 'active',
       color: 'text-blue-600'
+    },
+    {
+      id: 'produccion',
+      name: 'Producción',
+      icon: Factory,
+      description: 'Expedientes procesados (últimos 20 días)',
+      status: 'active',
+      color: 'text-green-600'
     },
     {
       id: 'resueltos',
@@ -88,6 +102,18 @@ export function ProcessModules({
             )}
           </div>
         )
+
+      case 'produccion':
+        return (
+          <div className="p-6">
+            <ProduccionReportTable
+              report={produccionReport}
+              loading={produccionLoading}
+              error={produccionError}
+              className="w-full"
+            />
+          </div>
+        )
       
       default:
         const module = modules.find(m => m.id === selectedModule)
@@ -126,7 +152,7 @@ export function ProcessModules({
             {modules.map((module) => {
               const IconComponent = module.icon
               const isActive = selectedModule === module.id
-              const isDisabled = module.status === 'coming-soon' && module.id !== 'pendientes'
+              const isDisabled = module.status === 'coming-soon'
               
               return (
                 <button
