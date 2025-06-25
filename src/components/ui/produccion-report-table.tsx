@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useCallback } from 'react'
 import { Card } from './card'
 import { ProduccionReportSummary, Evaluador } from '@/types/dashboard'
+import { ProduccionChart } from './produccion-chart'
 
 interface ProduccionReportTableProps {
   report: ProduccionReportSummary | null
@@ -126,6 +127,18 @@ export function ProduccionReportTable({
 
     return periodTotals;
   }, [report, filteredOperators]);
+
+  // Crear un reporte filtrado para el gráfico
+  const filteredReport = useMemo((): ProduccionReportSummary | null => {
+    if (!report) return null;
+    
+    return {
+      ...report,
+      data: filteredOperators,
+      totalByDate: filteredTotals as { [key: string]: number },
+      grandTotal: filteredTotals.total
+    };
+  }, [report, filteredOperators, filteredTotals]);
 
   // Función para formatear fecha
   const formatDate = useCallback((dateStr: string) => {
@@ -388,6 +401,15 @@ export function ProduccionReportTable({
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Gráfico de evolución diaria */}
+      <div className="border-t">
+        <ProduccionChart 
+          report={filteredReport}
+          loading={loading}
+          className="border-0"
+        />
       </div>
     </Card>
   )
