@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useDashboard } from '@/hooks/use-dashboard'
-import { clearAllCache } from '@/lib/frontend-cache'
+import { useDashboardUnified, useDashboardCache } from '@/hooks/use-dashboard-unified'
 import { DashboardHeader } from '@/components/dashboard/dashboard-header'
 import { ProcessModules } from '@/components/dashboard/process-modules'
 import { ErrorDisplay } from '@/components/ui/error-boundary'
@@ -12,7 +11,20 @@ export default function DashboardPage() {
   const [selectedProcess, setSelectedProcess] = useState<'ccm' | 'prr'>('ccm')
   const [activeModule, setActiveModule] = useState('pendientes')
 
-  const { isLoading, error } = useDashboard()
+  // Hook unificado enterprise - carga todos los datos de una vez
+  const proceso = selectedProcess.toUpperCase() as 'CCM' | 'PRR'
+  const { 
+    isLoading, 
+    error, 
+    invalidateAndRefresh, 
+    invalidateAll,
+    hasPartialErrors,
+    lastUpdated,
+    isDataAvailable 
+  } = useDashboardUnified(proceso)
+
+  // Hook para operaciones de cache
+  const { clearAllCache } = useDashboardCache()
 
   const handleProcessChange = (process: 'ccm' | 'prr') => {
     setSelectedProcess(process)
@@ -23,19 +35,19 @@ export default function DashboardPage() {
   }
 
   const handleFullRefresh = async () => {
-    console.log('🔄 Iniciando refresh completo del dashboard')
+    console.log('🔄 Iniciando refresh completo del dashboard con TanStack Query')
     
     try {
-      // 1. Limpiar cache frontend
+      // 1. Limpiar cache de TanStack Query
       clearAllCache()
       
-      // 2. Limpiar cache del servidor - limpieza completa
+      // 2. Limpiar cache del servidor
       const response = await fetch('/api/cache/clear', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({}) // Sin parámetros = limpieza completa
+        body: JSON.stringify({})
       })
       
       if (response.ok) {
@@ -45,13 +57,15 @@ export default function DashboardPage() {
         console.warn('⚠️ No se pudo limpiar cache del servidor')
       }
       
-      // 3. Recargar página para reinicializar todo
-      window.location.reload()
+      // 3. Invalidar y refrescar datos del proceso actual
+      await invalidateAll()
+      
+      console.log('✅ Dashboard refrescado completamente')
       
     } catch (error) {
       console.error('❌ Error durante refresh:', error)
-      // Si algo falla, aún así recargar la página
-      window.location.reload()
+      // Como fallback, intentar solo invalidar cache
+      await invalidateAll()
     }
   }
 
@@ -64,7 +78,10 @@ export default function DashboardPage() {
           loading={isLoading}
         />
         <div className="max-w-6xl mx-auto px-6 py-8">
-          <ErrorDisplay error={error} onRetry={handleFullRefresh} />
+          <ErrorDisplay 
+            error={(error as any)?.message || (error as any)?.details || 'Error desconocido'} 
+            onRetry={handleFullRefresh} 
+          />
         </div>
         
         {/* AI Chat Floating Button */}

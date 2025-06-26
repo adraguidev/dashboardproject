@@ -1,56 +1,43 @@
 import { NextResponse } from 'next/server'
+import postgresAPI from '@/lib/postgres-api'
+import { logInfo, logError } from '@/lib/logger'
 
 export async function GET() {
   try {
-    console.log('🔍 Verificando estado de la base de datos (modo simulación)...')
+    logInfo('🔍 Verificando estado de la base de datos PostgreSQL...')
     
-    // Verificar si tenemos las credenciales básicas
-    const projectId = process.env.NEXT_PUBLIC_STACK_PROJECT_ID
-    const apiKey = process.env.STACK_SECRET_SERVER_KEY
-    const dbUrl = process.env.DATABASE_URL
+    // Realizar health check completo
+    const healthCheck = await postgresAPI.healthCheck()
     
-    // Simular un delay de verificación
-    await new Promise(resolve => setTimeout(resolve, 500))
-    
-    if (projectId && apiKey && dbUrl) {
-      return NextResponse.json({
-        connected: true,
-        timestamp: new Date().toISOString(),
-        database: 'bdmigra (simulación)',
-        method: 'Simulación con credenciales configuradas',
-        mode: 'simulation',
-        credentials: {
-          projectId: projectId.substring(0, 8) + '...',
-          hasApiKey: !!apiKey,
-          hasDbUrl: !!dbUrl
-        }
-      })
-    } else {
-      return NextResponse.json({
-        connected: false,
-        timestamp: new Date().toISOString(),
-        database: 'mock-data',
-        method: 'Fallback a datos de ejemplo',
-        mode: 'fallback',
-        missing: {
-          projectId: !projectId,
-          apiKey: !apiKey,
-          dbUrl: !dbUrl
-        }
-      })
-    }
-    
-  } catch (error) {
-    console.error('❌ Error verificando BD:', error)
+    logInfo('✅ Health check completado:', healthCheck)
     
     return NextResponse.json({
-      connected: false,
-      timestamp: new Date().toISOString(),
-      database: 'mock-data',
-      method: 'Error fallback',
-      mode: 'error',
-      error: error instanceof Error ? error.message : 'Error desconocido'
+      status: healthCheck.status,
+      message: healthCheck.status === 'healthy' 
+        ? 'Base de datos PostgreSQL funcionando correctamente' 
+        : 'Problemas detectados en la base de datos',
+      details: {
+        database: healthCheck.database,
+        responseTime: `${healthCheck.responseTime}ms`,
+        timestamp: healthCheck.timestamp,
+        poolStats: healthCheck.poolStats,
+        tablesCounts: healthCheck.tablesCounts
+      },
+      timestamp: new Date().toISOString()
     })
+    
+  } catch (error) {
+    logError('❌ Error verificando estado de la base de datos:', error)
+    
+    return NextResponse.json(
+      {
+        status: 'error',
+        message: 'Error verificando la base de datos',
+        error: error instanceof Error ? error.message : 'Error desconocido',
+        timestamp: new Date().toISOString()
+      },
+      { status: 500 }
+    )
   }
 } 
  

@@ -5,6 +5,7 @@ import "./globals.css";
 import { StackProvider, StackTheme } from "@stackframe/stack";
 import { stackServerApp } from "../stack";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { QueryProvider } from "@/components/providers/query-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,11 +33,13 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <StackProvider app={stackServerApp}>
-          <StackTheme>
-            <ErrorBoundary>
-              {children}
-            </ErrorBoundary>
-          </StackTheme>
+          <QueryProvider>
+            <StackTheme>
+              <ErrorBoundary>
+                {children}
+              </ErrorBoundary>
+            </StackTheme>
+          </QueryProvider>
         </StackProvider>
       </body>
     </html>
