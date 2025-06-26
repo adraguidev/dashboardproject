@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { neonDB } from '@/lib/neon-api'
+import { createDirectDatabaseAPI } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,19 +23,22 @@ export async function GET(request: NextRequest) {
     let data: any[] = []
     let totalCount = 0
 
+    // Crear instancia de la API directa a PostgreSQL
+    const dbAPI = await createDirectDatabaseAPI();
+
     if (process === 'ccm') {
       console.log('📊 Obteniendo datos CCM de producción (últimos 20 días)...')
       const [ccmData, ccmCount] = await Promise.all([
-        neonDB.getCCMProduccion(limit, actualOffset),
-        neonDB.countCCMProduccion()
+        dbAPI.getCCMProduccion(limit, actualOffset),
+        dbAPI.countCCMProduccion()
       ])
       data = ccmData
       totalCount = ccmCount
     } else {
       console.log('📊 Obteniendo datos PRR de producción (últimos 20 días)...')
       const [prrData, prrCount] = await Promise.all([
-        neonDB.getPRRProduccion(limit, actualOffset),
-        neonDB.countPRRProduccion()
+        dbAPI.getPRRProduccion(limit, actualOffset),
+        dbAPI.countPRRProduccion()
       ])
       data = prrData
       totalCount = prrCount

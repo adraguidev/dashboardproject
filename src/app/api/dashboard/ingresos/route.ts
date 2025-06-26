@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { neonDB } from '@/lib/neon-api'
+import { createDirectDatabaseAPI } from '@/lib/db'
 import { cachedOperation } from '@/lib/server-cache'
 import type { IngresosReport, IngresosChartData, MonthlyIngresosData, WeeklyIngresosData, MonthlyIngresosEntry, WeeklyIngresosEntry } from '@/types/dashboard'
 import { parseDateSafe } from '@/lib/date-utils'
@@ -410,10 +410,13 @@ export async function GET(request: NextRequest) {
 
     // Obtener datos según el proceso con manejo robusto de errores
     try {
+      // Crear instancia de la API directa a PostgreSQL
+      const dbAPI = await createDirectDatabaseAPI();
+
       if (process === 'ccm') {
-        data = await neonDB.getCCMIngresos(days);
+        data = await dbAPI.getCCMIngresos(days);
       } else {
-        data = await neonDB.getPRRIngresos(days);
+        data = await dbAPI.getPRRIngresos(days);
       }
     } catch (error) {
       console.error(`❌ Error obteniendo datos de ${process?.toUpperCase()}:`, error);

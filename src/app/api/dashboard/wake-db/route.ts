@@ -1,38 +1,36 @@
 import { NextResponse } from 'next/server'
-import { NeonDataAPI } from '@/lib/neon-api'
+import { createDirectDatabaseAPI } from '@/lib/db'
 
 export async function POST() {
   try {
-    console.log('🌅 Iniciando verificación de conexión a Neon DB...')
+    console.log('🌅 Iniciando verificación de conexión directa a PostgreSQL...')
     
-    const neonDB = new NeonDataAPI()
+    const dbAPI = await createDirectDatabaseAPI()
     
-    // Intentar conexión con la API de Neon
-    const isConnected = await neonDB.testConnection()
+    // Intentar conexión directa a PostgreSQL
+    const isConnected = await dbAPI.testConnection()
     
     if (isConnected) {
-      console.log('✅ Conexión a Neon DB exitosa')
+      console.log('✅ Conexión directa a PostgreSQL exitosa')
       
       // Intentar una consulta simple para asegurar que la DB está activa
       try {
-        const [ccmSample, prrSample] = await Promise.all([
-          neonDB.getSampleCCM(1),
-          neonDB.getSamplePRR(1)
-        ])
+        const tables = await dbAPI.inspectTables()
         
         console.log('✅ Consultas de prueba exitosas:', {
-          ccmRecords: ccmSample.length,
-          prrRecords: prrSample.length
+          ccmRecords: tables.table_ccm.rowCount,
+          prrRecords: tables.table_prr.rowCount
         })
         
         return NextResponse.json({
           success: true,
-          message: 'Base de datos Neon está activa y respondiendo',
+          message: 'Base de datos PostgreSQL está activa y respondiendo',
           timestamp: new Date().toISOString(),
           testResults: {
             connection: true,
-            ccmQuery: ccmSample.length > 0,
-            prrQuery: prrSample.length > 0
+            ccmQuery: tables.table_ccm.rowCount > 0,
+            prrQuery: tables.table_prr.rowCount > 0,
+            tables: tables
           }
         })
         

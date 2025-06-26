@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { neonDB } from '@/lib/neon-api'
+import { createDirectDatabaseAPI } from '@/lib/db'
 import { cachedOperation } from '@/lib/server-cache'
 import { PendientesReportData, PendientesReportSummary, Evaluador, ColorLegend } from '@/types/dashboard'
 import { parseDateSafe } from '@/lib/date-utils'
@@ -229,19 +229,22 @@ export async function GET(request: NextRequest) {
         let data: any[] = []
         let evaluadores: Evaluador[] = []
 
+        // Crear instancia de la API directa a PostgreSQL
+        const dbAPI = await createDirectDatabaseAPI();
+
         if (process === 'ccm') {
           console.log('📊 Obteniendo TODOS los datos CCM pendientes y evaluadores...')
           const [ccmData, ccmEvaluadores] = await Promise.all([
-            neonDB.getAllCCMPendientes(),
-            neonDB.getEvaluadoresCCM()
+            dbAPI.getAllCCMPendientes(),
+            dbAPI.getEvaluadoresCCM()
           ])
           data = ccmData
           evaluadores = ccmEvaluadores
         } else {
           console.log('📊 Obteniendo TODOS los datos PRR pendientes y evaluadores...')
           const [prrData, prrEvaluadores] = await Promise.all([
-            neonDB.getAllPRRPendientes(),
-            neonDB.getEvaluadoresPRR()
+            dbAPI.getAllPRRPendientes(),
+            dbAPI.getEvaluadoresPRR()
           ])
           data = prrData
           evaluadores = prrEvaluadores

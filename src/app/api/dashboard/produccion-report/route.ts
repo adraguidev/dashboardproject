@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { neonDB } from '@/lib/neon-api'
+import { createDirectDatabaseAPI } from '@/lib/db'
 import { cachedOperation } from '@/lib/server-cache'
 import { ProduccionReportData, ProduccionReportSummary, Evaluador, ColorLegend } from '@/types/dashboard'
 import { parseDateSafe, isWorkday as isWorkdayUtil } from '@/lib/date-utils'
@@ -307,19 +307,22 @@ export async function GET(request: NextRequest) {
     // Usar un rango amplio para obtener datos (máximo 365 días hacia atrás para evitar sobrecarga)
     const maxDaysToFetch = Math.min(days + 30, 365); // Un poco más de margen
 
+    // Crear instancia de la API directa a PostgreSQL
+    const dbAPI = await createDirectDatabaseAPI();
+
     if (process === 'ccm') {
       console.log(`📊 Obteniendo TODOS los datos CCM de producción y evaluadores (últimos ${maxDaysToFetch} días)...`)
       const [ccmData, ccmEvaluadores] = await Promise.all([
-        neonDB.getAllCCMProduccion(maxDaysToFetch),
-        neonDB.getEvaluadoresCCM()
+        dbAPI.getAllCCMProduccion(maxDaysToFetch),
+        dbAPI.getEvaluadoresCCM()
       ])
       data = ccmData
       evaluadores = ccmEvaluadores
     } else {
       console.log(`📊 Obteniendo TODOS los datos PRR de producción y evaluadores (últimos ${maxDaysToFetch} días)...`)
       const [prrData, prrEvaluadores] = await Promise.all([
-        neonDB.getAllPRRProduccion(maxDaysToFetch),
-        neonDB.getEvaluadoresPRR()
+        dbAPI.getAllPRRProduccion(maxDaysToFetch),
+        dbAPI.getEvaluadoresPRR()
       ])
       data = prrData
       evaluadores = prrEvaluadores
