@@ -386,7 +386,7 @@ export function AdvancedPendientesReportTable({
                     </td>
                     <td className="px-4 py-2 text-sm text-center">
                       <div className="flex justify-center">
-                        {renderSubEquipoBadge(operadorData.subEquipo)}
+                        {renderSubEquipoBadge(operadorData.subEquipo || 'NO_ENCONTRADO')}
                       </div>
                     </td>
                     {visiblePeriods.map(period => {
