@@ -9,6 +9,7 @@ import { ErrorDisplay } from '@/components/ui/error-boundary'
 export default function DashboardPage() {
   const [selectedProcess, setSelectedProcess] = useState<'ccm' | 'prr'>('ccm')
   const [activeModule, setActiveModule] = useState('pendientes')
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Hook unificado enterprise - carga todos los datos de una vez
   const proceso = selectedProcess.toUpperCase() as 'CCM' | 'PRR'
@@ -34,39 +35,21 @@ export default function DashboardPage() {
   }
 
   const handleFullRefresh = async () => {
-    console.log('🔄 Iniciando refresh completo del dashboard con TanStack Query')
-    
+    setIsRefreshing(true);
     try {
-      // 1. Limpiar cache de TanStack Query
-      clearAllCache()
-      
-      // 2. Limpiar cache del servidor
-      const response = await fetch('/api/cache/clear', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({})
-      })
-      
-      if (response.ok) {
-        const result = await response.json()
-        console.log('✅ Cache del servidor limpiado:', result.message)
-      } else {
-        console.warn('⚠️ No se pudo limpiar cache del servidor')
+      const response = await fetch('/api/cache/clear', { method: 'POST' });
+      if (!response.ok) {
+        throw new Error('Error al limpiar la caché del servidor');
       }
-      
-      // 3. Invalidar y refrescar datos del proceso actual
-      await invalidateAll()
-      
-      console.log('✅ Dashboard refrescado completamente')
-      
-    } catch (error) {
-      console.error('❌ Error durante refresh:', error)
-      // Como fallback, intentar solo invalidar cache
-      await invalidateAll()
+      // Forzar la recarga de la página para obtener datos frescos
+      window.location.reload();
+    } catch (err) {
+      console.error("Error al refrescar los datos:", err);
+      // Aquí se podría usar un toast para notificar al usuario.
+      alert('No se pudo actualizar la información. Por favor, inténtelo de nuevo.');
+      setIsRefreshing(false);
     }
-  }
+  };
 
   if (error) {
     return (
@@ -74,7 +57,8 @@ export default function DashboardPage() {
         <DashboardHeader
           selectedProcess={selectedProcess}
           onProcessChange={handleProcessChange}
-          loading={isLoading}
+          onRefresh={handleFullRefresh}
+          loading={isLoading || isRefreshing}
         />
         <div className="max-w-6xl mx-auto px-6 py-8">
           <ErrorDisplay 
@@ -96,7 +80,7 @@ export default function DashboardPage() {
         selectedProcess={selectedProcess}
         onProcessChange={handleProcessChange}
         onRefresh={handleFullRefresh}
-        loading={isLoading}
+        loading={isLoading || isRefreshing}
       />
 
       {/* Main Content Container - Balanced width */}
