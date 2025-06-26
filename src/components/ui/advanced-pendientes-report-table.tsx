@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useCallback } from 'react'
 import { AdvancedDataTable, Column } from './advanced-data-table'
 import { PendientesReportSummary, Evaluador, PendientesReportData } from '@/types/dashboard'
+import { BarChart, Calendar, Clock, Tag, Users, FileStack, CheckCircle, AlertTriangle, Search } from 'lucide-react'
 
 interface AdvancedPendientesReportTableProps {
   reportData: PendientesReportSummary
@@ -112,9 +113,9 @@ export function AdvancedPendientesReportTable({
       accessor: (item) => item.operador,
       sortable: true,
       filterable: true,
-      className: 'sticky left-0 bg-white z-10 w-48',
+      className: 'sticky left-0 z-10 w-40 bg-inherit text-left',
       render: (value) => (
-        <div className="font-medium text-gray-900 whitespace-nowrap pl-4">
+        <div className="font-medium text-gray-900 whitespace-nowrap">
           {value}
         </div>
       ),
@@ -125,14 +126,25 @@ export function AdvancedPendientesReportTable({
       accessor: (item) => item.subEquipo,
       sortable: true,
       filterable: true,
-      className: 'w-24',
-      render: (value, item) => (
-        <div className="flex items-center">
-          <span className={`px-2 py-1 text-xs font-semibold rounded-full ${item.colorClass}`}>
-            {value.substring(0, 4)}
+      className: 'w-36 text-center',
+      headerClassName: 'text-center',
+      render: (value, item) => {
+        const subEquipo = item.subEquipo === 'NO_ENCONTRADO' ? 'N/A' : item.subEquipo;
+        const config: { [key: string]: { bgColor: string; textColor: string; borderColor: string; dotColor: string; } } = {
+          'EVALUACION': { bgColor: 'bg-blue-50', textColor: 'text-blue-800', borderColor: 'border-blue-200', dotColor: 'bg-blue-500' },
+          'REASIGNADOS': { bgColor: 'bg-orange-50', textColor: 'text-orange-800', borderColor: 'border-orange-200', dotColor: 'bg-orange-500' },
+          'SUSPENDIDA': { bgColor: 'bg-red-50', textColor: 'text-red-800', borderColor: 'border-red-200', dotColor: 'bg-red-500' },
+          'RESPONSABLE': { bgColor: 'bg-green-50', textColor: 'text-green-800', borderColor: 'border-green-200', dotColor: 'bg-green-500' },
+        };
+        const style = config[value as string] || { bgColor: 'bg-gray-50', textColor: 'text-gray-800', borderColor: 'border-gray-200', dotColor: 'bg-gray-500' };
+
+        return (
+          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium shadow-sm ${style.bgColor} ${style.textColor} border ${style.borderColor}`}>
+            <div className={`w-2 h-2 rounded-full mr-1.5 ${style.dotColor}`}></div>
+            {subEquipo}
           </span>
-        </div>
-      ),
+        );
+      },
     },
     ];
 
@@ -141,11 +153,12 @@ export function AdvancedPendientesReportTable({
       title: period,
       accessor: (item: PendientesReportData) => item.years[period] || 0,
       sortable: true,
-      className: 'min-w-[6rem] text-center',
+      className: 'w-24 text-center',
+      headerClassName: 'text-center',
       render: (value: number) => (
-        <div className={`text-center ${value > 0 ? 'font-semibold text-gray-800' : 'text-gray-400'}`}>
+        <span className={`${value > 0 ? 'font-semibold text-gray-800' : 'text-gray-400'}`}>
           {value}
-        </div>
+        </span>
       ),
     }));
 
@@ -154,11 +167,12 @@ export function AdvancedPendientesReportTable({
       title: 'TOTAL',
       accessor: (item) => item.total,
       sortable: true,
-      className: 'min-w-[6rem] font-bold text-right pr-4',
+      className: 'w-24 font-bold text-center',
+      headerClassName: 'text-center',
       render: (value) => (
-        <div className="font-bold text-right text-gray-900 pr-4">
-          {value}
-        </div>
+        <span className="font-bold text-gray-900">
+          {value.toLocaleString()}
+        </span>
       ),
     };
 
@@ -192,23 +206,28 @@ export function AdvancedPendientesReportTable({
   ]
 
   return (
-    <div className={`bg-white p-6 rounded-lg shadow-md ${className}`}>
-      <div className="flex justify-between items-center mb-4">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">Reporte de Pendientes</h3>
-          <p className="text-sm text-gray-500">Análisis detallado de expedientes por operador y período.</p>
+    <div className={`bg-gray-50 p-4 sm:p-6 rounded-lg ${className}`}>
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6">
+        <div className="flex items-center mb-4 lg:mb-0">
+            <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 mr-4">
+                <FileStack className="h-6 w-6 text-blue-600" />
+            </div>
+            <div>
+                <h3 className="text-xl font-bold text-gray-800">Reporte Avanzado de Pendientes</h3>
+                <p className="text-sm text-gray-500">Análisis detallado de expedientes por operador y período.</p>
+            </div>
         </div>
-        <div className="flex items-center space-x-2 bg-gray-100 p-1 rounded-lg">
+        <div className="flex items-center space-x-2 bg-white p-1.5 rounded-lg shadow-sm border border-gray-200">
           {['Anual', 'Trimestral', 'Mensual'].map((period) => {
             const periodKey = period.toLowerCase().startsWith('anual') ? 'year' : period.toLowerCase().startsWith('trimestral') ? 'quarter' : 'month'
             return (
               <button
                 key={periodKey}
                 onClick={() => onGroupingChange(periodKey as 'quarter' | 'month' | 'year')}
-                className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                   groupBy === periodKey
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-200'
+                    ? 'bg-blue-500 text-white shadow-lg'
+                    : 'text-gray-600 hover:bg-blue-50'
                 }`}
               >
                 {period}
@@ -243,29 +262,38 @@ export function AdvancedPendientesReportTable({
       </div>
 
       {/* Stats Summary */}
-      <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-blue-50 p-4 rounded-lg">
-          <div className="text-sm font-medium text-blue-900">Total Operadores</div>
-          <div className="text-2xl font-bold text-blue-600">
-            {filteredOperators.length}
+      <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex items-center">
+            <div className="bg-indigo-100 p-3 rounded-full mr-4">
+              <Users className="h-6 w-6 text-indigo-600" />
+            </div>
+            <div>
+              <span className="text-sm text-gray-500 block">Total Operadores</span>
+              <span className="text-2xl font-bold text-gray-900">{filteredOperators.length}</span>
+            </div>
           </div>
-        </div>
-        <div className="bg-green-50 p-4 rounded-lg">
-          <div className="text-sm font-medium text-green-900">Total Pendientes</div>
-          <div className="text-2xl font-bold text-green-600">
-            {totals.total.toLocaleString()}
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex items-center">
+            <div className="bg-green-100 p-3 rounded-full mr-4">
+              <BarChart className="h-6 w-6 text-green-600" />
+            </div>
+            <div>
+              <span className="text-sm text-gray-500 block">Total Pendientes</span>
+              <span className="font-bold text-2xl text-gray-900">{totals.total.toLocaleString()}</span>
+            </div>
           </div>
-        </div>
-        <div className="bg-yellow-50 p-4 rounded-lg">
-          <div className="text-sm font-medium text-yellow-900">Sin Asignar</div>
-          <div className="text-2xl font-bold text-yellow-600">
-            {sinAsignarCount.toLocaleString()}
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex items-center">
+            <div className="bg-yellow-100 p-3 rounded-full mr-4">
+              <AlertTriangle className="h-6 w-6 text-yellow-600" />
+            </div>
+            <div>
+              <span className="text-sm text-gray-500 block">Sin Asignar</span>
+              <span className="font-bold text-2xl text-gray-900">{sinAsignarCount.toLocaleString()}</span>
+            </div>
           </div>
-        </div>
       </div>
 
       {/* Advanced Table with horizontal scroll */}
-      <div className="overflow-x-auto w-full">
+      <div className="overflow-x-auto w-full bg-white rounded-lg shadow-md border border-gray-200">
         <AdvancedDataTable
           data={filteredOperators} // Use filtered data
           columns={columns}
@@ -274,19 +302,19 @@ export function AdvancedPendientesReportTable({
           exportable={true}
           selectable={false}
           pageSize={filteredOperators.length} // Show all data
-          className="shadow-lg min-w-full"
+          className="min-w-full"
           emptyMessage="No hay datos de pendientes disponibles para esta vista."
           getRowClassName={getRowClassName}
           footer={
-            <tr className="bg-gray-100 font-bold text-gray-900">
-              <td className="sticky left-0 bg-gray-100 z-10 px-4 py-3">TOTALES</td>
-              <td className="px-4 py-3"></td>
+            <tr className="bg-gray-200 font-bold text-gray-800 text-sm border-t-2 border-gray-300">
+              <td className="sticky left-0 bg-gray-200 z-10 px-4 py-4 text-left">TOTALES</td>
+              <td className="px-4 py-4 text-center">-</td>
               {visiblePeriods.map(period => (
-                <td key={`total-${period}`} className="px-4 py-3 text-center">
-                  {totals[period]}
+                <td key={`total-${period}`} className="px-4 py-4 text-center">
+                  {totals[period].toLocaleString()}
                 </td>
               ))}
-              <td className="px-4 py-3 text-right pr-4">{totals.total}</td>
+              <td className="px-4 py-4 text-center">{totals.total.toLocaleString()}</td>
             </tr>
           }
         />
