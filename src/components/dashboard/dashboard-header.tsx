@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useState, useRef, useEffect } from 'react'
-import { RefreshCcw, Settings, Bell, ChevronDown, Users } from 'lucide-react'
+import { RefreshCcw, Settings, Bell, ChevronDown, Users, Upload } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
+import { FileUploadModal } from '@/components/ui/file-upload-modal'
 
 interface DashboardHeaderProps {
   selectedProcess?: 'ccm' | 'prr'
@@ -18,6 +19,7 @@ export function DashboardHeader({
   loading = false
 }: DashboardHeaderProps) {
   const [showDropdown, setShowDropdown] = useState(false)
+  const [showUploadModal, setShowUploadModal] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   const processes = {
@@ -128,6 +130,14 @@ export function DashboardHeader({
               </button>
 
               <button
+                onClick={() => setShowUploadModal(true)}
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Subir Archivos de Datos"
+              >
+                <Upload className="w-4 h-4" />
+              </button>
+
+              <button
                 onClick={() => window.location.href = `/gestion-equipos?proceso=${selectedProcess}`}
                 className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                 title="Gestión de Equipos"
@@ -161,7 +171,14 @@ export function DashboardHeader({
                 </div>
       </div>
 
-
+      {/* File Upload Modal */}
+      <FileUploadModal
+        isOpen={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        onUploadComplete={() => {
+          onRefresh?.() // Refrescar datos después de subir archivos
+        }}
+      />
     </div>
   )
 } 
