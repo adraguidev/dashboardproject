@@ -351,7 +351,7 @@ export function AdvancedDataTable<T>({
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table ref={tableRef} className="w-full min-w-max table-auto">
+        <table ref={tableRef} className="w-full min-w-max table-fixed">
           <thead className="bg-gray-50">
             <tr>
               {selectable && (
@@ -411,7 +411,7 @@ export function AdvancedDataTable<T>({
                 return (
                 <tr 
                   key={index}
-                  className={`hover:bg-gray-50 ${selectedRows.has(index) ? 'bg-blue-50' : ''} ${rowClassName}`}
+                  className={`group hover:bg-gray-50 ${selectedRows.has(index) ? 'bg-blue-50' : ''} ${rowClassName}`}
                 >
                   {selectable && (
                     <td className="px-4 py-3">
@@ -426,7 +426,7 @@ export function AdvancedDataTable<T>({
                   {columns.map((column) => (
                     <td
                       key={column.key}
-                      className={`px-4 py-3 text-sm ${column.className || ''}`}
+                      className={`px-4 py-2 text-sm ${column.className || ''}`}
                       style={{ 
                         width: columnWidths[column.key] || column.width || 'auto',
                         minWidth: column.minWidth || 50,

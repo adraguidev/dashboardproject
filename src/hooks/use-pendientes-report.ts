@@ -36,7 +36,7 @@ export function usePendientesReport({
     if (!enabled && !isBackground) return
 
     if (!isBackground) {
-      setLoading(true)
+    setLoading(true)
     }
     setError(null)
 
@@ -49,35 +49,35 @@ export function usePendientesReport({
         return
       }
 
-      const response = await fetch(`/api/dashboard/pendientes-report?process=${process}&groupBy=${groupBy}`)
-      
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`)
-      }
+        const response = await fetch(`/api/dashboard/pendientes-report?process=${process}&groupBy=${groupBy}`)
+        
+        if (!response.ok) {
+          throw new Error(`Error ${response.status}: ${response.statusText}`)
+        }
 
-      const result: { 
-        success: boolean; 
-        report: PendientesReportSummary; 
-        meta: any; 
-        error?: string 
-      } = await response.json()
+        const result: { 
+          success: boolean; 
+          report: PendientesReportSummary; 
+          meta: any; 
+          error?: string 
+        } = await response.json()
 
-      if (!result.success) {
-        throw new Error(result.error || 'Error desconocido')
-      }
+        if (!result.success) {
+          throw new Error(result.error || 'Error desconocido')
+        }
 
-      setReport(result.report)
-      setCached(cacheKey, result.report)
+        setReport(result.report)
+        setCached(cacheKey, result.report)
 
       // Report loaded successfully
     } catch (err) {
       if (!isBackground) {
-        setError(err instanceof Error ? err.message : 'Error desconocido')
+      setError(err instanceof Error ? err.message : 'Error desconocido')
       }
       console.error(`❌ Error fetching pendientes report (${isBackground ? 'background' : 'foreground'}):`, err)
     } finally {
       if (!isBackground) {
-        setLoading(false)
+      setLoading(false)
       }
     }
   }, [process, groupBy, enabled])

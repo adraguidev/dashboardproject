@@ -11,7 +11,7 @@ export async function GET() {
     
     logInfo('✅ Health check completado:', healthCheck)
     
-    return NextResponse.json({
+      return NextResponse.json({
       status: healthCheck.status,
       message: healthCheck.status === 'healthy' 
         ? 'Base de datos PostgreSQL funcionando correctamente' 

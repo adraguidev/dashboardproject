@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
         searchedTable: tableName,
         sampleSize: sampleSize,
         availableTables: tables,
-        timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString()
       }
     };
 

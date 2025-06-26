@@ -36,7 +36,7 @@ export function useIngresos({
     if (!enabled && !isBackground) return
 
     if (!isBackground) {
-      setIsLoading(true)
+    setIsLoading(true)
     }
     setError(null)
 
@@ -67,13 +67,13 @@ export function useIngresos({
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
       if (!isBackground) {
-        setError(errorMessage)
+      setError(errorMessage)
       }
       console.error(`❌ Error fetching ingresos data (${isBackground ? 'background' : 'foreground'}):`, errorMessage)
       setReport(null)
     } finally {
       if (!isBackground) {
-        setIsLoading(false)
+      setIsLoading(false)
       }
     }
   }, [enabled, process, currentDays])

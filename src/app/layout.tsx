@@ -34,11 +34,11 @@ export default function RootLayout({
       >
         <StackProvider app={stackServerApp}>
           <QueryProvider>
-            <StackTheme>
-              <ErrorBoundary>
-                {children}
-              </ErrorBoundary>
-            </StackTheme>
+          <StackTheme>
+            <ErrorBoundary>
+              {children}
+            </ErrorBoundary>
+          </StackTheme>
           </QueryProvider>
         </StackProvider>
       </body>

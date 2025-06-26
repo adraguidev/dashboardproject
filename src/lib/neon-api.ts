@@ -581,21 +581,21 @@ export class NeonDataAPI {
     for (const strategy of strategies) {
       try {
         logInfo(`📊 Obteniendo datos PRR ingresos: últimos ${strategy.days} días (${strategy.description})`)
-        
-        const today = new Date()
-        const startDate = new Date(today)
+    
+    const today = new Date()
+    const startDate = new Date(today)
         startDate.setDate(today.getDate() - strategy.days)
         const fechaInicio = startDate.toISOString().split('T')[0]
 
-        const params: Record<string, string> = {
-          'fechaexpendiente': `gte.${fechaInicio}`,
-          'select': 'fechaexpendiente,numerotramite',
-          'order': 'fechaexpendiente.desc'
-        }
+    const params: Record<string, string> = {
+      'fechaexpendiente': `gte.${fechaInicio}`,
+      'select': 'fechaexpendiente,numerotramite',
+      'order': 'fechaexpendiente.desc'
+    }
 
-        const resultado = await this.get('/table_prr', params)
+    const resultado = await this.get('/table_prr', params)
         logInfo(`✅ PRR: Obtenidos ${resultado.length} registros para análisis de ingresos (${strategy.description})`)
-        
+
         // Si llegamos aquí, la consulta fue exitosa
         return resultado
 
@@ -628,7 +628,7 @@ export class NeonDataAPI {
 
       const resultado = await this.get('/table_prr', params)
       logInfo(`✅ PRR: Obtenidos ${resultado.length} registros (consulta mínima)`)
-      return resultado
+    return resultado
 
     } catch (finalError) {
       // Como último recurso, devolver datos vacíos pero válidos

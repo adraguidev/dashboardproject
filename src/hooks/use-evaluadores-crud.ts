@@ -40,13 +40,13 @@ interface UseEvaluadoresCRUDResult {
 async function fetchEvaluadoresAPI(process: 'ccm' | 'prr'): Promise<Evaluador[]> {
   logInfo(`🔍 Obteniendo evaluadores para proceso: ${process.toUpperCase()}`);
   
-  const response = await fetch(`/api/dashboard/evaluadores?process=${process}`)
-  
-  if (!response.ok) {
+      const response = await fetch(`/api/dashboard/evaluadores?process=${process}`)
+      
+      if (!response.ok) {
     const result = await response.json()
-    throw new Error(result.error || 'Error obteniendo evaluadores')
-  }
-  
+        throw new Error(result.error || 'Error obteniendo evaluadores')
+      }
+      
   const data = await response.json()
   return Array.isArray(data) ? data : []
 }
@@ -54,48 +54,48 @@ async function fetchEvaluadoresAPI(process: 'ccm' | 'prr'): Promise<Evaluador[]>
 async function createEvaluadorAPI(process: 'ccm' | 'prr', data: Omit<Evaluador, 'id'>): Promise<Evaluador> {
   logInfo(`➕ Creando evaluador para proceso: ${process.toUpperCase()}`);
   
-  const response = await fetch(`/api/dashboard/evaluadores?process=${process}`, {
-    method: 'POST',
+      const response = await fetch(`/api/dashboard/evaluadores?process=${process}`, {
+        method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  })
-  
+        body: JSON.stringify(data)
+      })
+      
   if (!response.ok) {
-    const result = await response.json()
-    throw new Error(result.error || 'Error creando evaluador')
-  }
-  
+      const result = await response.json()
+        throw new Error(result.error || 'Error creando evaluador')
+      }
+      
   return response.json()
 }
 
 async function updateEvaluadorAPI(process: 'ccm' | 'prr', data: Evaluador): Promise<Evaluador> {
   logInfo(`🔄 Actualizando evaluador ID ${data.id} para proceso: ${process.toUpperCase()}`);
   
-  const response = await fetch(`/api/dashboard/evaluadores?process=${process}&id=${data.id}`, {
-    method: 'PUT',
+      const response = await fetch(`/api/dashboard/evaluadores?process=${process}&id=${data.id}`, {
+        method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  })
-  
+        body: JSON.stringify(data)
+      })
+      
   if (!response.ok) {
-    const result = await response.json()
-    throw new Error(result.error || 'Error actualizando evaluador')
-  }
-  
+      const result = await response.json()
+        throw new Error(result.error || 'Error actualizando evaluador')
+      }
+      
   return response.json()
 }
 
 async function deleteEvaluadorAPI(process: 'ccm' | 'prr', id: number): Promise<void> {
   logInfo(`🗑️ Eliminando evaluador ID ${id} para proceso: ${process.toUpperCase()}`);
   
-  const response = await fetch(`/api/dashboard/evaluadores?process=${process}&id=${id}`, {
-    method: 'DELETE'
-  })
-  
+      const response = await fetch(`/api/dashboard/evaluadores?process=${process}&id=${id}`, {
+        method: 'DELETE'
+      })
+      
   if (!response.ok) {
-    const result = await response.json()
-    throw new Error(result.error || 'Error eliminando evaluador')
-  }
+      const result = await response.json()
+        throw new Error(result.error || 'Error eliminando evaluador')
+      }
 }
 
 export function useEvaluadoresCRUD(process: 'ccm' | 'prr' = 'ccm'): UseEvaluadoresCRUDResult {
@@ -163,7 +163,7 @@ export function useEvaluadoresCRUD(process: 'ccm' | 'prr' = 'ccm'): UseEvaluador
   const createEvaluador = async (process: 'ccm' | 'prr', data: Omit<Evaluador, 'id'>): Promise<boolean> => {
     try {
       await createMutation.mutateAsync({ process, data })
-      return true
+        return true
     } catch (error) {
       logError('❌ Error creando evaluador:', error)
       return false
@@ -174,11 +174,11 @@ export function useEvaluadoresCRUD(process: 'ccm' | 'prr' = 'ccm'): UseEvaluador
   const updateEvaluador = async (process: 'ccm' | 'prr', data: Evaluador): Promise<boolean> => {
     try {
       await updateMutation.mutateAsync({ process, data })
-      return true
+        return true
     } catch (error) {
       logError('❌ Error actualizando evaluador:', error)
       return false
-    }
+      }
   }
 
   // ✅ Función para eliminar evaluador
