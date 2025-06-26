@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import postgresAPI from '@/lib/postgres-api';
+import { createDirectDatabaseAPI } from '@/lib/db';
 import { logInfo, logError } from '@/lib/logger';
 import { cachedOperation, structureDataForAI, AIOptimizedDashboardData } from '@/lib/server-cache';
 
@@ -46,15 +46,22 @@ export async function GET(request: NextRequest) {
       fetcher: async (): Promise<AIOptimizedDashboardData> => {
         logInfo(`🔄 Generando datos frescos para IA: ${params.proceso}`);
         
+        const dbAPI = await createDirectDatabaseAPI();
+        const procesoLower = params.proceso!.toLowerCase() as 'ccm' | 'prr';
+
         const [ingresos, produccion, pendientes, evaluadores, kpis, processes] = await Promise.allSettled([
           params.incluir!.includes('ingresos') ? 
-            (params.proceso === 'CCM' ? postgresAPI.getCCMIngresos(params.periodo) : postgresAPI.getPRRIngresos(params.periodo)) : 
+            (procesoLower === 'ccm' ? dbAPI.getCCMIngresos(params.periodo) : dbAPI.getPRRIngresos(params.periodo)) : 
             Promise.resolve([]),
-          params.incluir!.includes('produccion') ? postgresAPI.getProduccionData(params.proceso!, params.periodo) : Promise.resolve([]),
-          params.incluir!.includes('pendientes') ? postgresAPI.getPendientes(params.proceso!) : Promise.resolve([]),
-          params.incluir!.includes('evaluadores') ? postgresAPI.getEvaluadores() : Promise.resolve([]),
-          params.incluir!.includes('kpis') ? postgresAPI.getKPIs() : Promise.resolve({}),
-          postgresAPI.getProcesos()
+          params.incluir!.includes('produccion') ? 
+            (procesoLower === 'ccm' ? dbAPI.getAllCCMProduccion(params.periodo) : dbAPI.getAllPRRProduccion(params.periodo)) : 
+            Promise.resolve([]),
+          params.incluir!.includes('pendientes') ? 
+            (procesoLower === 'ccm' ? dbAPI.getAllCCMPendientes() : dbAPI.getAllPRRPendientes()) : 
+            Promise.resolve([]),
+          params.incluir!.includes('evaluadores') ? dbAPI.getEvaluadoresGestion(procesoLower) : Promise.resolve([]),
+          params.incluir!.includes('kpis') ? dbAPI.getKPIs() : Promise.resolve({}),
+          dbAPI.getProcesos()
         ]);
 
         const rawData = {

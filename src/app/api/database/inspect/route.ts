@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import postgresAPI from '@/lib/postgres-api';
+import { createDirectDatabaseAPI } from '@/lib/db';
 import { logInfo, logError } from '@/lib/logger';
+
+interface TableInspectionData {
+  exists: boolean;
+  rowCount: number;
+  sampleData: any[];
+  description: string;
+}
+
+interface InspectionResults {
+  [key: string]: TableInspectionData;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -8,47 +19,59 @@ export async function GET(request: NextRequest) {
     const tableName = searchParams.get('table');
     const sampleSize = parseInt(searchParams.get('sample') || '5');
 
-    logInfo('🔍 Iniciando inspección de base de datos PostgreSQL...');
+    logInfo('🔍 Iniciando inspección de base de datos PostgreSQL con conexión directa...');
+    const startTime = Date.now();
+    const dbAPI = await createDirectDatabaseAPI();
 
-    // Inspeccionar estructura completa
-    const { tables, tableDetails } = await postgresAPI.inspectDatabase();
+    // Inspeccionar estructura completa y obtener datos
+    const inspectionResults: InspectionResults = await dbAPI.inspectTables();
+    const responseTime = Date.now() - startTime;
     
-    let sampleData = null;
-    if (tableName && tables.includes(tableName)) {
-      logInfo(`📋 Obteniendo muestra de datos de tabla: ${tableName}`);
-      sampleData = await postgresAPI.getSampleData(tableName, sampleSize);
-    }
+    const tableNames = Object.keys(inspectionResults);
+    
+    const tableDetails = Object.entries(inspectionResults).reduce((acc, [name, data]) => {
+      acc[name] = {
+        rowCount: data.rowCount,
+        description: data.description,
+        columns: data.sampleData.length > 0 ? Object.keys(data.sampleData[0]) : []
+      };
+      return acc;
+    }, {} as Record<string, any>);
 
-    // Health check del pool
-    const healthCheck = await postgresAPI.healthCheck();
+    let sampleDataResponse = null;
+    if (tableName && inspectionResults[tableName]) {
+      logInfo(`📋 Obteniendo muestra de datos de tabla: ${tableName}`);
+      const fullSample = inspectionResults[tableName].sampleData;
+      sampleDataResponse = {
+        table: tableName,
+        records: fullSample.length,
+        data: fullSample.slice(0, sampleSize)
+      };
+    }
 
     const response = {
       database: {
-        status: healthCheck.status,
-        name: process.env.PGDATABASE || 'bdmigra',
-        responseTime: healthCheck.responseTime,
-        poolStats: healthCheck.poolStats
+        status: 'healthy',
+        name: 'PostgreSQL (Neon)',
+        responseTime: `${responseTime}ms`,
+        poolStats: 'N/A (Conexión sin pool en serverless)'
       },
       structure: {
-        totalTables: tables.length,
-        tables: tables,
+        totalTables: tableNames.length,
+        tables: tableNames,
         tableDetails: tableDetails
       },
-      sampleData: sampleData ? {
-        table: tableName,
-        records: sampleData.length,
-        data: sampleData
-      } : null,
+      sampleData: sampleDataResponse,
       debug: {
         searchedTable: tableName,
         sampleSize: sampleSize,
-        availableTables: tables,
-      timestamp: new Date().toISOString()
+        availableTables: tableNames,
+        timestamp: new Date().toISOString()
       }
     };
 
     logInfo('✅ Inspección completada:', {
-      tables: tables.length,
+      tables: tableNames.length,
       hasTableDetails: Object.keys(tableDetails).length,
       requestedTable: tableName
     });
