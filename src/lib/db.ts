@@ -506,7 +506,7 @@ export class DirectDatabaseAPI {
     const conditions = [];
     for (const [field, value] of Object.entries(filters)) {
       if (value !== undefined && value !== null) {
-        // @ts-ignore - Drizzle column access
+        // @ts-expect-error Drizzle no infiere bien el tipo de retorno aquí
         conditions.push(eq(targetTable[field], value));
       }
     }

@@ -58,7 +58,6 @@ export async function GET(request: NextRequest) {
         };
 
         // Estructurar datos para análisis por IA
-        // @ts-ignore
         return structureDataForAI(rawData, proceso as 'CCM' | 'PRR');
       },
 
