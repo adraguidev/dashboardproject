@@ -278,6 +278,11 @@ export class PostgresAPI {
     try {
       logInfo(`👥 Obteniendo evaluadores de gestión para proceso: ${proceso.toUpperCase()}`);
       
+      // Validar proceso para seguridad
+      if (!['ccm', 'prr'].includes(proceso)) {
+        throw new Error('Proceso inválido');
+      }
+      
       const tableName = `evaluadores_${proceso}`;
       const query = `
         SELECT 
@@ -288,15 +293,12 @@ export class PostgresAPI {
           turno,
           modalidad,
           sub_equipo,
-          activo,
-          fecha_ingreso,
-          fecha_salida,
-          lider,
           creado_en
-        FROM ${tableName}
+        FROM "${tableName}"
         ORDER BY nombre_en_base ASC
       `;
 
+      logInfo(`🔍 Ejecutando consulta: ${query}`);
       const result = await postgres.queryWithTimeout(query, [], 15000);
       
       // Mapear datos para compatibilidad con frontend
@@ -304,16 +306,16 @@ export class PostgresAPI {
         id: row.id,
         operador: row.nombre_en_base ?? '-',
         nombre_en_base: row.nombre_en_base ?? '-',
-        nombres_apellidos: row.nombres_apellidos ?? row.nombre_real ?? row.nombre_en_base ?? '-',
-        nombre_real: row.nombres_apellidos ?? row.nombre_real ?? row.nombre_en_base ?? '-',
+        nombres_apellidos: row.nombres_apellidos ?? '-',
+        nombre_real: row.nombres_apellidos ?? '-',
         regimen: row.regimen ?? '-',
         turno: row.turno ?? '-',
         modalidad: row.modalidad ?? '-',
         sub_equipo: row.sub_equipo ?? '-',
-        activo: row.activo ?? null,
-        fecha_ingreso: row.fecha_ingreso ?? null,
-        fecha_salida: row.fecha_salida ?? null,
-        lider: row.lider ?? null,
+        activo: true, // Por defecto activo ya que no existe la columna
+        fecha_ingreso: null, // Columna no existe
+        fecha_salida: null, // Columna no existe
+        lider: false, // Por defecto no lider ya que no existe la columna
         creado_en: row.creado_en ?? null
       }));
 
@@ -348,7 +350,7 @@ export class PostgresAPI {
 
       const tableName = `evaluadores_${proceso}`;
       const query = `
-        INSERT INTO ${tableName}
+        INSERT INTO "${tableName}"
         (nombre_en_base, nombres_apellidos, regimen, turno, modalidad, sub_equipo)
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *
@@ -396,7 +398,7 @@ export class PostgresAPI {
       
       const tableName = `evaluadores_${proceso}`;
       const query = `
-        UPDATE ${tableName} 
+        UPDATE "${tableName}" 
         SET 
           nombre_en_base = COALESCE($1, nombre_en_base),
           nombres_apellidos = COALESCE($2, nombres_apellidos),
@@ -442,7 +444,7 @@ export class PostgresAPI {
       
       const tableName = `evaluadores_${proceso}`;
       const query = `
-        DELETE FROM ${tableName} 
+        DELETE FROM "${tableName}" 
         WHERE id = $1 
         RETURNING *
       `;
