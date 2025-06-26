@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@google/generative-ai':
-        specifier: ^0.24.1
-        version: 0.24.1
+        specifier: ^0.15.0
+        version: 0.15.0
       '@neondatabase/serverless':
         specifier: ^1.0.1
         version: 1.0.1
@@ -560,8 +560,8 @@ packages:
   '@floating-ui/utils@0.2.9':
     resolution: {integrity: sha512-MDWhGtE+eHw5JW7lq4qhc5yRLS11ERl1c7Z6Xd0a58DozHES6EnNNwUWbMiG4J9Cgj053Bhk8zvlhFYKVhULwg==}
 
-  '@google/generative-ai@0.24.1':
-    resolution: {integrity: sha512-MqO+MLfM6kjxcKoy0p1wRzG3b4ZZXtPI+z2IE26UogS2Cm/XHO+7gGRBh6gcJsOiIVoH93UwKvW4HdgiOZCy9Q==}
+  '@google/generative-ai@0.15.0':
+    resolution: {integrity: sha512-zs37judcTYFJf1U7tnuqnh7gdzF6dcWj9pNRxjA5JTONRoiQ0htrRdbefRFiewOIfXwhun5t9hbd2ray7812eQ==}
     engines: {node: '>=18.0.0'}
 
   '@hookform/resolvers@3.10.0':
@@ -4247,7 +4247,7 @@ snapshots:
 
   '@floating-ui/utils@0.2.9': {}
 
-  '@google/generative-ai@0.24.1': {}
+  '@google/generative-ai@0.15.0': {}
 
   '@hookform/resolvers@3.10.0(react-hook-form@7.58.1(react@19.1.0))':
     dependencies:
