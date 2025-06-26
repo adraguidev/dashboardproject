@@ -13,135 +13,22 @@ interface CacheOptions<T> {
 }
 
 /**
- * Estructura optimizada para análisis por IA
+ * Estructura optimizada para análisis por IA (tipos simplificados)
  */
 interface AIOptimizedDashboardData {
-  // Metadatos del dashboard para contexto de IA
   metadata: {
     proceso: 'CCM' | 'PRR';
-    generatedAt: string; // ISO timestamp
-    dataRanges: {
-      ingresos: { desde: string; hasta: string; totalDias: number };
-      produccion: { desde: string; hasta: string; totalDias: number };
-      pendientes: { fechaCorte: string };
-    };
-    summary: {
-      totalRegistros: number;
-      distribucion: { ingresos: number; produccion: number; pendientes: number };
-      estadisticas: {
-        ingresosPromedioDiario: number;
-        produccionPromedioDiaria: number;
-        tasaPendientes: number; // % de casos pendientes vs total
-      };
-    };
+    generatedAt: string;
+    dataRanges: any;
+    summary: any;
     errors: string[];
   };
-
-  // Datos de ingresos estructurados por fechas
-  ingresos: {
-    description: "Expedientes que ingresan al sistema por fecha";
-    unit: "expedientes por día";
-    structure: "fecha -> cantidad";
-    data: Array<{
-      fecha: string; // YYYY-MM-DD format
-      total_ingresos: number;
-      completados: number;
-      otros_estados: number;
-      dia_semana: string; // "Lunes", "Martes", etc.
-      es_laborable: boolean;
-    }>;
-    aggregated: {
-      total_periodo: number;
-      promedio_diario: number;
-      dias_con_datos: number;
-      mejor_dia: { fecha: string; cantidad: number };
-      peor_dia: { fecha: string; cantidad: number };
-    };
-  };
-
-  // Datos de producción estructurados por evaluador y fecha
-  produccion: {
-    description: "Casos procesados por evaluadores por fecha";
-    unit: "casos procesados";
-    structure: "evaluador -> fecha -> cantidad";
-    data: Array<{
-      fecha_produccion: string; // YYYY-MM-DD
-      evaluador: string;
-      casos_procesados: number;
-      dia_semana: string;
-      es_laborable: boolean;
-    }>;
-    aggregated: {
-      total_casos: number;
-      evaluadores_unicos: number;
-      promedio_por_evaluador: number;
-      mejor_evaluador: { nombre: string; casos: number };
-      distribucion_por_dia: Array<{ dia: string; casos: number }>;
-    };
-  };
-
-  // Datos de pendientes estructurados por criticidad
-  pendientes: {
-    description: "Expedientes pendientes de procesamiento";
-    unit: "expedientes pendientes";
-    structure: "pendientes ordenados por antigüedad";
-    data: Array<{
-      numerotramite: string;
-      fechaexpendiente: string; // YYYY-MM-DD
-      estadotramite: string;
-      ultimaetapa: string;
-      operador: string | null;
-      dias_pendiente: number; // calculado desde fechaexpendiente
-      criticidad: 'CRITICA' | 'ALTA' | 'MEDIA' | 'BAJA'; // basado en días pendiente
-    }>;
-    aggregated: {
-      total_pendientes: number;
-      antiguedad_promedio: number; // días
-      distribucion_criticidad: {
-        critica: number; // > 90 días
-        alta: number;    // 60-90 días
-        media: number;   // 30-60 días
-        baja: number;    // < 30 días
-      };
-      evaluadores_con_pendientes: Array<{ evaluador: string; cantidad: number }>;
-    };
-  };
-
-  // KPIs calculados para resumen ejecutivo
-  kpis: {
-    description: "Indicadores clave de desempeño";
-    data: {
-      totalCasosCCM: number;
-      totalCasosPRR: number;
-      pendientesCCM: number;
-      pendientesPRR: number;
-      evaluadoresActivos: number;
-      eficiencia: {
-        tasaAprobacion: number; // % casos aprobados vs total
-        velocidadPromedio: number; // días promedio de procesamiento
-        cargaPromedioPorEvaluador: number;
-      };
-    };
-  };
-
-  // Lista de evaluadores con sus estadísticas
-  evaluadores: {
-    description: "Evaluadores activos y sus métricas de desempeño";
-    data: Array<{
-      nombre: string;
-      casos_total: number;
-      casos_completados: number;
-      casos_pendientes: number;
-      tasa_eficiencia: number; // casos_completados / casos_total
-      ultima_actividad: string | null; // fecha de último caso procesado
-    }>;
-  };
-
-  // Información de procesos disponibles
-  processes: {
-    description: "Procesos de negocio disponibles en el sistema";
-    data: string[]; // ['CCM', 'PRR']
-  };
+  ingresos: any;
+  produccion: any;
+  pendientes: any;
+  kpis: any;
+  evaluadores: any;
+  processes: any;
 }
 
 /**
@@ -439,8 +326,8 @@ function calculateProduccionAggregates(data: any[]) {
     return acc;
   }, {} as Record<string, number>);
   
-  const mejorEvaluador = Object.entries(porEvaluador)
-    .sort(([,a], [,b]) => b - a)[0];
+  const mejorEvaluadorEntry = Object.entries(porEvaluador)
+    .sort(([,a], [,b]) => (b as number) - (a as number))[0];
     
   // Agrupar por día de semana
   const porDia = data.reduce((acc, item) => {
@@ -452,7 +339,7 @@ function calculateProduccionAggregates(data: any[]) {
     total_casos: totalCasos,
     evaluadores_unicos: evaluadores.size,
     promedio_por_evaluador: totalCasos / Math.max(1, evaluadores.size),
-    mejor_evaluador: mejorEvaluador ? { nombre: mejorEvaluador[0], casos: mejorEvaluador[1] } : null,
+    mejor_evaluador: mejorEvaluadorEntry ? { nombre: mejorEvaluadorEntry[0], casos: mejorEvaluadorEntry[1] } : null,
     distribucion_por_dia: Object.entries(porDia).map(([dia, casos]) => ({ dia, casos }))
   };
 }
@@ -478,7 +365,7 @@ function calculatePendientesAggregates(data: any[]) {
     antiguedad_promedio: antiguedadPromedio,
     distribucion_criticidad: distribucion,
     evaluadores_con_pendientes: Object.entries(evaluadores)
-      .map(([evaluador, cantidad]) => ({ evaluador, cantidad }))
+      .map(([evaluador, cantidad]) => ({ evaluador, cantidad: cantidad as number }))
       .sort((a, b) => b.cantidad - a.cantidad)
   };
 }
