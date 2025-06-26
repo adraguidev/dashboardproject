@@ -499,26 +499,42 @@ export class DirectDatabaseAPI {
     orderBy?: string
   ) {
     const targetTable = table === 'table_ccm' ? tableCCM : tablePRR;
-    
-    let query = this.db.select().from(targetTable);
-    
-    // Aplicar filtros dinámicamente
+
+    // Construir condiciones dinámicamente
     const conditions = [];
     for (const [field, value] of Object.entries(filters)) {
       if (value !== undefined && value !== null) {
         // @ts-expect-error Drizzle no infiere bien el tipo de retorno aquí
-        conditions.push(eq(targetTable[field], value));
+        if (targetTable[field]) {
+          // @ts-expect-error Drizzle no infiere bien el tipo de retorno aquí
+          conditions.push(eq(targetTable[field], value));
+        }
       }
     }
-    
+
+    // Construir la consulta de una vez
+    let query = this.db.select().from(targetTable);
+
     if (conditions.length > 0) {
+      // @ts-expect-error El tipo se pierde, pero es la forma de hacerlo dinámico
       query = query.where(and(...conditions));
     }
-    
-    // Aplicar ordenamiento y paginación
-    query = query.limit(limit).offset(offset);
-    
-    return await query;
+
+    if (orderBy) {
+      const [field, direction] = orderBy.split(':');
+      // @ts-expect-error El tipo se pierde, pero es la forma de hacerlo dinámico
+      if (targetTable[field]) {
+        const orderByClause = direction === 'desc' 
+          // @ts-expect-error El tipo se pierde, pero es la forma de hacerlo dinámico
+          ? desc(targetTable[field]) 
+          // @ts-expect-error El tipo se pierde, pero es la forma de hacerlo dinámico
+          : asc(targetTable[field]);
+        // @ts-expect-error El tipo se pierde, pero es la forma de hacerlo dinámico
+        query = query.orderBy(orderByClause);
+      }
+    }
+
+    return query.limit(limit).offset(offset);
   }
 }
 
