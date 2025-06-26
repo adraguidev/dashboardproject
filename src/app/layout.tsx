@@ -6,6 +6,7 @@ import { StackProvider, StackTheme } from "@stackframe/stack";
 import { stackServerApp } from "../stack";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { ToastContainer } from "@/components/ui/toast";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,6 +38,7 @@ export default function RootLayout({
           <StackTheme>
             <ErrorBoundary>
               {children}
+              <ToastContainer />
             </ErrorBoundary>
           </StackTheme>
           </QueryProvider>

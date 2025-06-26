@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react'
 import { RefreshCcw, Settings, Bell, ChevronDown, Users } from 'lucide-react'
+import { useToast } from '@/components/ui/toast'
 
 interface DashboardHeaderProps {
   selectedProcess?: 'ccm' | 'prr'
