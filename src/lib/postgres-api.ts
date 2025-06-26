@@ -82,49 +82,51 @@ export class PostgresAPI {
   }
 
   /**
-   * Obtener datos de ingresos PRR con estrategias de fallback
+   * Obtener datos PRR optimizados para ingresos
    */
   async getPRRIngresos(days: number = 30): Promise<any[]> {
-    const strategies = [
-      { days: days, name: `${days} días solicitados` },
-      { days: 30, name: '1 mes' },
-      { days: 15, name: '15 días' },
-      { days: 7, name: '1 semana' }
-    ];
+    try {
+      logInfo(`📊 Obteniendo datos PRR ingresos optimizados: últimos ${days} días`);
+      
+      const query = `
+        SELECT 
+          fechaexpendiente AS fecha_ingreso,
+          COUNT(*) as total_ingresos,
+          COUNT(CASE WHEN estadotramite = 'APROBADO' THEN 1 END) as completados,
+          COUNT(CASE WHEN estadotramite != 'APROBADO' THEN 1 END) as otros_estados,
+          EXTRACT(dow FROM fechaexpendiente) as dia_semana_num,
+          CASE 
+            WHEN EXTRACT(dow FROM fechaexpendiente) BETWEEN 1 AND 5 THEN true 
+            ELSE false 
+          END as es_laborable
+        FROM table_prr 
+        WHERE fechaexpendiente >= CURRENT_DATE - INTERVAL '${days} days'
+          AND fechaexpendiente IS NOT NULL
+        GROUP BY fechaexpendiente, EXTRACT(dow FROM fechaexpendiente)
+        ORDER BY fechaexpendiente DESC
+        LIMIT 1000
+      `;
 
-    for (const strategy of strategies) {
-      try {
-        logInfo(`📊 Obteniendo datos PRR ingresos: últimos ${strategy.days} días (${strategy.name})`);
-        
-        const query = `
-          SELECT 
-            fechaexpendiente AS fecha_ingreso,
-            COUNT(*) as total_ingresos,
-            COUNT(CASE WHEN estadotramite = 'APROBADO' THEN 1 END) as completados,
-            COUNT(CASE WHEN estadotramite != 'APROBADO' THEN 1 END) as otros_estados
-          FROM table_prr 
-          WHERE fechaexpendiente >= CURRENT_DATE - INTERVAL '${strategy.days} days'
-          GROUP BY fechaexpendiente 
-          ORDER BY fechaexpendiente DESC
-          LIMIT 1000
-        `;
-
-        const result = await postgres.queryWithTimeout(query, [], 15000);
-        
-        logInfo(`✅ Datos PRR obtenidos: ${result.rows.length} registros (${strategy.name})`);
-        return result.rows;
-        
-      } catch (error) {
-        logError(`⚠️ Falló estrategia PRR ${strategy.name}:`, error);
-        if (strategy === strategies[strategies.length - 1]) {
-          // Última estrategia, devolver datos vacíos
-          logError('❌ PRR: Todas las estrategias fallaron. Devolviendo datos vacíos.');
-          return [];
+      const result = await postgres.queryWithTimeout(query, [], 15000);
+      
+      // Procesar datos para añadir contexto semántico
+      const processedRows = result.rows.map((row: any) => ({
+        ...row,
+        fecha_ingreso: row.fecha_ingreso?.toISOString?.()?.split('T')[0] || row.fecha_ingreso,
+        dia_semana: getDayNameFromNumber(row.dia_semana_num),
+        contexto: {
+          eficiencia: row.total_ingresos > 0 ? (row.completados / row.total_ingresos * 100).toFixed(2) : '0',
+          categoria_volumen: row.total_ingresos > 30 ? 'alto' : row.total_ingresos > 15 ? 'medio' : 'bajo'
         }
-      }
+      }));
+
+      logInfo(`✅ Datos PRR optimizados obtenidos: ${processedRows.length} registros`);
+      return processedRows;
+      
+    } catch (error) {
+      logError('❌ Error obteniendo datos PRR ingresos optimizados:', error);
+      return [];
     }
-    
-    return [];
   }
 
   /**
@@ -132,27 +134,45 @@ export class PostgresAPI {
    */
   async getCCMIngresos(days: number = 30): Promise<any[]> {
     try {
-      logInfo(`📊 Obteniendo datos CCM ingresos: últimos ${days} días`);
+      logInfo(`📊 Obteniendo datos CCM ingresos optimizados: últimos ${days} días`);
       
       const query = `
         SELECT 
           fechaexpendiente AS fecha_ingreso,
           COUNT(*) as total_ingresos,
           COUNT(CASE WHEN estadotramite = 'APROBADO' THEN 1 END) as completados,
-          COUNT(CASE WHEN estadotramite != 'APROBADO' THEN 1 END) as otros_estados
+          COUNT(CASE WHEN estadotramite != 'APROBADO' THEN 1 END) as otros_estados,
+          EXTRACT(dow FROM fechaexpendiente) as dia_semana_num,
+          CASE 
+            WHEN EXTRACT(dow FROM fechaexpendiente) BETWEEN 1 AND 5 THEN true 
+            ELSE false 
+          END as es_laborable
         FROM table_ccm 
         WHERE fechaexpendiente >= CURRENT_DATE - INTERVAL '${days} days'
-        GROUP BY fechaexpendiente 
+          AND fechaexpendiente IS NOT NULL
+        GROUP BY fechaexpendiente, EXTRACT(dow FROM fechaexpendiente)
         ORDER BY fechaexpendiente DESC
         LIMIT 1000
       `;
 
       const result = await postgres.queryWithTimeout(query, [], 15000);
-      logInfo(`✅ Datos CCM obtenidos: ${result.rows.length} registros`);
-      return result.rows;
+      
+      // Procesar datos para añadir contexto semántico
+      const processedRows = result.rows.map((row: any) => ({
+        ...row,
+        fecha_ingreso: row.fecha_ingreso?.toISOString?.()?.split('T')[0] || row.fecha_ingreso,
+        dia_semana: getDayNameFromNumber(row.dia_semana_num),
+        contexto: {
+          eficiencia: row.total_ingresos > 0 ? (row.completados / row.total_ingresos * 100).toFixed(2) : '0',
+          categoria_volumen: row.total_ingresos > 50 ? 'alto' : row.total_ingresos > 20 ? 'medio' : 'bajo'
+        }
+      }));
+
+      logInfo(`✅ Datos CCM optimizados obtenidos: ${processedRows.length} registros`);
+      return processedRows;
       
     } catch (error) {
-      logError('❌ Error obteniendo datos CCM ingresos:', error);
+      logError('❌ Error obteniendo datos CCM ingresos optimizados:', error);
       return [];
     }
   }
@@ -162,28 +182,64 @@ export class PostgresAPI {
    */
   async getProduccionData(proceso: string, days: number = 30): Promise<any[]> {
     try {
-      logInfo(`🏭 Obteniendo datos de producción: ${proceso} (${days} días)`);
+      logInfo(`🏭 Obteniendo datos de producción optimizados: ${proceso} (${days} días)`);
       
       const tableName = proceso.toLowerCase() === 'prr' ? 'table_prr' : 'table_ccm';
       const query = `
+        WITH daily_stats AS (
+          SELECT 
+            fechapre AS fecha_produccion,
+            operadorpre AS evaluador,
+            COUNT(*) as casos_procesados,
+            EXTRACT(dow FROM fechapre) as dia_semana_num,
+            CASE 
+              WHEN EXTRACT(dow FROM fechapre) BETWEEN 1 AND 5 THEN true 
+              ELSE false 
+            END as es_laborable,
+            AVG(CASE 
+              WHEN fechaetapaaprobacionmasivafin IS NOT NULL 
+              THEN EXTRACT(EPOCH FROM (fechaetapaaprobacionmasivafin - fechaexpendiente))/86400 
+              ELSE NULL 
+            END) as tiempo_promedio_procesamiento
+          FROM ${tableName}
+          WHERE fechapre >= CURRENT_DATE - INTERVAL '${days} days'
+            AND operadorpre IS NOT NULL 
+            AND operadorpre != ''
+            AND fechapre IS NOT NULL
+          GROUP BY fechapre, operadorpre, EXTRACT(dow FROM fechapre)
+        )
         SELECT 
-          fechapre AS fecha_produccion,
-          operadorpre AS evaluador,
-          COUNT(*) as casos_procesados
-        FROM ${tableName}
-        WHERE fechapre >= CURRENT_DATE - INTERVAL '${days} days'
-        AND operadorpre IS NOT NULL AND operadorpre != ''
-        GROUP BY fecha_produccion, evaluador 
-        ORDER BY fecha_produccion DESC, evaluador
+          *,
+          CASE 
+            WHEN casos_procesados >= 20 THEN 'alta'
+            WHEN casos_procesados >= 10 THEN 'media'
+            ELSE 'baja'
+          END as categoria_productividad
+        FROM daily_stats
+        ORDER BY fecha_produccion DESC, casos_procesados DESC
         LIMIT 1000
       `;
 
-      const result = await postgres.queryWithTimeout(query, [], 15000);
-      logInfo(`✅ Datos de producción obtenidos: ${result.rows.length} registros`);
-      return result.rows;
+      const result = await postgres.queryWithTimeout(query, [], 20000);
+      
+      // Procesar datos para añadir contexto semántico
+      const processedRows = result.rows.map((row: any) => ({
+        ...row,
+        fecha_produccion: row.fecha_produccion?.toISOString?.()?.split('T')[0] || row.fecha_produccion,
+        dia_semana: getDayNameFromNumber(row.dia_semana_num),
+        tiempo_promedio_procesamiento: row.tiempo_promedio_procesamiento ? 
+          parseFloat(row.tiempo_promedio_procesamiento).toFixed(1) : null,
+        contexto: {
+          eficiencia_relativa: calculateRelativeEfficiency(row.casos_procesados, row.es_laborable),
+          categoria: row.categoria_productividad
+        }
+      }));
+
+      logInfo(`✅ Datos de producción optimizados obtenidos: ${processedRows.length} registros`);
+      return processedRows;
       
     } catch (error) {
-      logError(`❌ Error obteniendo datos de producción ${proceso}:`, error);
+      logError(`❌ Error obteniendo datos de producción optimizados ${proceso}:`, error);
       return [];
     }
   }
@@ -193,7 +249,7 @@ export class PostgresAPI {
    */
   async getPendientes(proceso: string): Promise<any[]> {
     try {
-      logInfo(`📋 Obteniendo pendientes: ${proceso}`);
+      logInfo(`📋 Obteniendo pendientes optimizados: ${proceso}`);
       
       const tableName = proceso.toLowerCase() === 'prr' ? 'table_prr' : 'table_ccm';
       let whereClause: string;
@@ -224,19 +280,46 @@ export class PostgresAPI {
           fechaexpendiente,
           estadotramite,
           ultimaetapa,
-          operador
+          operador,
+          CURRENT_DATE - fechaexpendiente as dias_pendiente,
+          CASE 
+            WHEN CURRENT_DATE - fechaexpendiente > 90 THEN 'CRITICA'
+            WHEN CURRENT_DATE - fechaexpendiente > 60 THEN 'ALTA'
+            WHEN CURRENT_DATE - fechaexpendiente > 30 THEN 'MEDIA'
+            ELSE 'BAJA'
+          END as criticidad,
+          EXTRACT(dow FROM fechaexpendiente) as dia_ingreso_num,
+          CASE 
+            WHEN EXTRACT(dow FROM fechaexpendiente) BETWEEN 1 AND 5 THEN true 
+            ELSE false 
+          END as ingreso_dia_laborable
         FROM ${tableName}
         WHERE ${whereClause}
-        ORDER BY fechaexpendiente ASC
+          AND fechaexpendiente IS NOT NULL
+        ORDER BY dias_pendiente DESC, fechaexpendiente ASC
         LIMIT 500
       `;
 
       const result = await postgres.queryWithTimeout(query, [], 15000);
-      logInfo(`✅ Pendientes obtenidos: ${result.rows.length} registros`);
-      return result.rows;
+      
+      // Procesar datos para añadir contexto semántico
+      const processedRows = result.rows.map((row: any) => ({
+        ...row,
+        fechaexpendiente: row.fechaexpendiente?.toISOString?.()?.split('T')[0] || row.fechaexpendiente,
+        dias_pendiente: parseInt(row.dias_pendiente) || 0,
+        dia_ingreso: getDayNameFromNumber(row.dia_ingreso_num),
+        contexto: {
+          urgencia: row.criticidad,
+          impacto_operacional: calculateOperationalImpact(row.dias_pendiente, row.ultimaetapa),
+          recomendacion: generateRecommendation(row.criticidad, row.dias_pendiente)
+        }
+      }));
+
+      logInfo(`✅ Pendientes optimizados obtenidos: ${processedRows.length} registros`);
+      return processedRows;
       
     } catch (error) {
-      logError(`❌ Error obteniendo pendientes ${proceso}:`, error);
+      logError(`❌ Error obteniendo pendientes optimizados ${proceso}:`, error);
       return [];
     }
   }
@@ -659,4 +742,33 @@ export class PostgresAPI {
 
 // Singleton instance
 export const postgresAPI = new PostgresAPI();
-export default postgresAPI; 
+export default postgresAPI;
+
+// Funciones auxiliares para el procesamiento semántico
+function getDayNameFromNumber(dayNum: number): string {
+  const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  return days[dayNum] || 'Desconocido';
+}
+
+function calculateRelativeEfficiency(casos: number, esLaborable: boolean): string {
+  const threshold = esLaborable ? 15 : 8; // Diferentes umbrales para días laborables vs no laborables
+  if (casos >= threshold * 1.5) return 'excelente';
+  if (casos >= threshold) return 'buena';
+  if (casos >= threshold * 0.7) return 'regular';
+  return 'baja';
+}
+
+function calculateOperationalImpact(dias: number, etapa: string): string {
+  if (dias > 120) return 'critico';
+  if (dias > 90) return 'alto';
+  if (dias > 60) return 'moderado';
+  if (etapa?.includes('EVALUACIÓN')) return 'medio';
+  return 'bajo';
+}
+
+function generateRecommendation(criticidad: string, dias: number): string {
+  if (criticidad === 'CRITICA') return 'Requiere atención inmediata - escalar a supervisor';
+  if (criticidad === 'ALTA') return 'Priorizar en próxima asignación';
+  if (criticidad === 'MEDIA') return 'Incluir en revisión semanal';
+  return 'Seguimiento rutinario';
+} 
