@@ -98,14 +98,14 @@ export class PostgresAPI {
         
         const query = `
           SELECT 
-            fecha_ingreso,
+            fechaexpendiente AS fecha_ingreso,
             COUNT(*) as total_ingresos,
-            COUNT(CASE WHEN estado = 'PENDIENTE' THEN 1 END) as pendientes,
-            COUNT(CASE WHEN estado = 'COMPLETADO' THEN 1 END) as completados
+            COUNT(CASE WHEN estadotramite = 'APROBADO' THEN 1 END) as completados,
+            COUNT(CASE WHEN estadotramite != 'APROBADO' THEN 1 END) as otros_estados
           FROM table_prr 
-          WHERE fecha_ingreso >= CURRENT_DATE - INTERVAL '${strategy.days} days'
-          GROUP BY fecha_ingreso 
-          ORDER BY fecha_ingreso DESC
+          WHERE fechaexpendiente >= CURRENT_DATE - INTERVAL '${strategy.days} days'
+          GROUP BY fechaexpendiente 
+          ORDER BY fechaexpendiente DESC
           LIMIT 1000
         `;
 
@@ -136,14 +136,14 @@ export class PostgresAPI {
       
       const query = `
         SELECT 
-          fecha_ingreso,
+          fechaexpendiente AS fecha_ingreso,
           COUNT(*) as total_ingresos,
-          COUNT(CASE WHEN estado = 'PENDIENTE' THEN 1 END) as pendientes,
-          COUNT(CASE WHEN estado = 'COMPLETADO' THEN 1 END) as completados
+          COUNT(CASE WHEN estadotramite = 'APROBADO' THEN 1 END) as completados,
+          COUNT(CASE WHEN estadotramite != 'APROBADO' THEN 1 END) as otros_estados
         FROM table_ccm 
-        WHERE fecha_ingreso >= CURRENT_DATE - INTERVAL '${days} days'
-        GROUP BY fecha_ingreso 
-        ORDER BY fecha_ingreso DESC
+        WHERE fechaexpendiente >= CURRENT_DATE - INTERVAL '${days} days'
+        GROUP BY fechaexpendiente 
+        ORDER BY fechaexpendiente DESC
         LIMIT 1000
       `;
 
@@ -167,13 +167,12 @@ export class PostgresAPI {
       const tableName = proceso.toLowerCase() === 'prr' ? 'table_prr' : 'table_ccm';
       const query = `
         SELECT 
-          fecha_produccion,
-          evaluador,
-          COUNT(*) as casos_procesados,
-          COUNT(CASE WHEN estado = 'COMPLETADO' THEN 1 END) as casos_completados,
-          ROUND(AVG(tiempo_procesamiento), 2) as tiempo_promedio
+          fechapre AS fecha_produccion,
+          operadorpre AS evaluador,
+          COUNT(*) as casos_procesados
         FROM ${tableName}
-        WHERE fecha_produccion >= CURRENT_DATE - INTERVAL '${days} days'
+        WHERE fechapre >= CURRENT_DATE - INTERVAL '${days} days'
+        AND operadorpre IS NOT NULL AND operadorpre != ''
         GROUP BY fecha_produccion, evaluador 
         ORDER BY fecha_produccion DESC, evaluador
         LIMIT 1000
@@ -197,24 +196,38 @@ export class PostgresAPI {
       logInfo(`📋 Obteniendo pendientes: ${proceso}`);
       
       const tableName = proceso.toLowerCase() === 'prr' ? 'table_prr' : 'table_ccm';
+      let whereClause: string;
+
+      if (proceso.toLowerCase() === 'ccm') {
+        whereClause = `
+          ultimaetapa = 'EVALUACIÓN - I' 
+          AND estadopre IS NULL 
+          AND estadotramite = 'PENDIENTE'
+        `;
+      } else { // PRR
+        const prrEtapas = [
+          'ACTUALIZAR DATOS BENEFICIARIO - F', 'ACTUALIZAR DATOS BENEFICIARIO - I', 
+          'ASOCIACION BENEFICIARIO - F', 'ASOCIACION BENEFICIARIO - I',
+          'CONFORMIDAD SUB-DIREC.INMGRA. - I', 'PAGOS, FECHA Y NRO RD. - F',
+          'PAGOS, FECHA Y NRO RD. - I', 'RECEPCIÓN DINM - F'
+        ];
+        whereClause = `
+          ultimaetapa IN (${prrEtapas.map(e => `'${e}'`).join(', ')})
+          AND estadopre IS NULL
+          AND estadotramite = 'PENDIENTE'
+        `;
+      }
+
       const query = `
         SELECT 
-          numero_caso,
-          fecha_ingreso,
-          estado,
-          evaluador,
-          prioridad,
-          tiempo_en_cola,
-          motivo_pendiente
+          numerotramite,
+          fechaexpendiente,
+          estadotramite,
+          ultimaetapa,
+          operador
         FROM ${tableName}
-        WHERE estado = 'PENDIENTE'
-        ORDER BY 
-          CASE 
-            WHEN prioridad = 'ALTA' THEN 1
-            WHEN prioridad = 'MEDIA' THEN 2
-            ELSE 3
-          END,
-          fecha_ingreso ASC
+        WHERE ${whereClause}
+        ORDER BY fechaexpendiente ASC
         LIMIT 500
       `;
 
@@ -237,19 +250,18 @@ export class PostgresAPI {
       
       const query = `
         SELECT DISTINCT
-          evaluador as nombre,
+          operador as nombre,
           COUNT(*) as casos_total,
-          COUNT(CASE WHEN estado = 'COMPLETADO' THEN 1 END) as casos_completados,
-          COUNT(CASE WHEN estado = 'PENDIENTE' THEN 1 END) as casos_pendientes,
-          ROUND(AVG(tiempo_procesamiento), 2) as tiempo_promedio
+          COUNT(CASE WHEN estadotramite = 'APROBADO' THEN 1 END) as casos_completados,
+          COUNT(CASE WHEN estadotramite != 'APROBADO' THEN 1 END) as casos_pendientes
         FROM (
-          SELECT evaluador, estado, tiempo_procesamiento FROM table_prr
+          SELECT operador, estadotramite FROM table_prr
           UNION ALL
-          SELECT evaluador, estado, tiempo_procesamiento FROM table_ccm
+          SELECT operador, estadotramite FROM table_ccm
         ) combined
-        WHERE evaluador IS NOT NULL 
-        AND evaluador != ''
-        GROUP BY evaluador
+        WHERE operador IS NOT NULL 
+        AND operador != ''
+        GROUP BY operador
         HAVING COUNT(*) > 0
         ORDER BY casos_completados DESC
         LIMIT 100
@@ -477,24 +489,34 @@ export class PostgresAPI {
     try {
       logInfo('📊 Obteniendo KPIs del dashboard');
       
+      const ccmPendientesWhere = `ultimaetapa = 'EVALUACIÓN - I' AND estadopre IS NULL AND estadotramite = 'PENDIENTE'`;
+      
+      const prrEtapas = [
+        'ACTUALIZAR DATOS BENEFICIARIO - F', 'ACTUALIZAR DATOS BENEFICIARIO - I', 
+        'ASOCIACION BENEFICIARIO - F', 'ASOCIACION BENEFICIARIO - I',
+        'CONFORMIDAD SUB-DIREC.INMGRA. - I', 'PAGOS, FECHA Y NRO RD. - F',
+        'PAGOS, FECHA Y NRO RD. - I', 'RECEPCIÓN DINM - F'
+      ];
+      const prrPendientesWhere = `ultimaetapa IN (${prrEtapas.map(e => `'${e}'`).join(', ')}) AND estadopre IS NULL AND estadotramite = 'PENDIENTE'`;
+
       const queries = await Promise.allSettled([
         // Total casos CCM
         postgres.queryWithTimeout('SELECT COUNT(*) as total FROM table_ccm', [], 10000),
         // Total casos PRR  
         postgres.queryWithTimeout('SELECT COUNT(*) as total FROM table_prr', [], 10000),
         // Pendientes CCM
-        postgres.queryWithTimeout("SELECT COUNT(*) as total FROM table_ccm WHERE estado = 'PENDIENTE'", [], 10000),
+        postgres.queryWithTimeout(`SELECT COUNT(*) as total FROM table_ccm WHERE ${ccmPendientesWhere}`, [], 10000),
         // Pendientes PRR
-        postgres.queryWithTimeout("SELECT COUNT(*) as total FROM table_prr WHERE estado = 'PENDIENTE'", [], 10000),
+        postgres.queryWithTimeout(`SELECT COUNT(*) as total FROM table_prr WHERE ${prrPendientesWhere}`, [], 10000),
         // Evaluadores activos (últimos 7 días)
         postgres.queryWithTimeout(`
-          SELECT COUNT(DISTINCT evaluador) as total 
+          SELECT COUNT(DISTINCT operadorpre) as total 
           FROM (
-            SELECT evaluador FROM table_ccm WHERE fecha_produccion >= CURRENT_DATE - INTERVAL '7 days'
+            SELECT operadorpre FROM table_ccm WHERE fechapre >= CURRENT_DATE - INTERVAL '7 days'
             UNION
-            SELECT evaluador FROM table_prr WHERE fecha_produccion >= CURRENT_DATE - INTERVAL '7 days'
+            SELECT operadorpre FROM table_prr WHERE fechapre >= CURRENT_DATE - INTERVAL '7 days'
           ) combined
-          WHERE evaluador IS NOT NULL AND evaluador != ''
+          WHERE operadorpre IS NOT NULL AND operadorpre != ''
         `, [], 10000)
       ]);
 
@@ -608,6 +630,32 @@ export class PostgresAPI {
         responseTime: Date.now() - startTime,
         poolStats: { error: 'No disponible' }
       };
+    }
+  }
+
+  async getIngresosData(proceso: string, days: number = 730): Promise<any[]> {
+    try {
+      logInfo(`💰 Obteniendo datos de ingresos: ${proceso} (${days} días)`);
+      
+      const tableName = proceso.toLowerCase() === 'prr' ? 'table_prr' : 'table_ccm';
+      const query = `
+        SELECT 
+          fechaexpendiente AS fecha_ingreso,
+          numerotramite
+        FROM ${tableName}
+        WHERE fechaexpendiente >= CURRENT_DATE - INTERVAL '${days} days'
+        ORDER BY fechaexpendiente DESC
+        LIMIT 20000
+      `;
+
+      const result = await postgres.queryWithTimeout(query, [], 20000); // 20 segundos de timeout
+      
+      logInfo(`✅ Datos de ingresos obtenidos: ${result.rows.length} registros`);
+      return result.rows;
+      
+    } catch (error) {
+      logError(`❌ Error obteniendo datos de ingresos ${proceso}:`, error);
+      return [];
     }
   }
 }
