@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { logInfo, logError } from '@/lib/logger'
 
@@ -100,14 +101,10 @@ async function deleteEvaluadorAPI(process: 'ccm' | 'prr', id: number): Promise<v
 export function useEvaluadoresCRUD(): UseEvaluadoresCRUDResult {
   const queryClient = useQueryClient()
   
-  // Query para obtener evaluadores (se activará manualmente)
-  const evaluadoresQuery = useQuery({
-    queryKey: ['evaluadores'],
-    queryFn: () => Promise.resolve([]), // Dummy inicial
-    enabled: false, // No ejecutar automáticamente
-    staleTime: 1000 * 60 * 5, // 5 minutos
-    gcTime: 1000 * 60 * 30, // 30 minutos
-  })
+  // Estado local para tracking del proceso actual y datos
+  const [currentProcess, setCurrentProcess] = useState<'ccm' | 'prr'>('ccm')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Mutación para crear evaluador
   const createMutation = useMutation({
@@ -151,6 +148,10 @@ export function useEvaluadoresCRUD(): UseEvaluadoresCRUDResult {
 
   // Función para cargar evaluadores manualmente
   const fetchEvaluadores = async (process: 'ccm' | 'prr') => {
+    setLoading(true)
+    setError(null)
+    setCurrentProcess(process)
+    
     try {
       logInfo(`🔄 Cargando evaluadores para: ${process.toUpperCase()}`)
       
@@ -161,9 +162,12 @@ export function useEvaluadoresCRUD(): UseEvaluadoresCRUDResult {
       })
       
       logInfo(`✅ Evaluadores cargados: ${data.length} registros`)
-    } catch (error) {
-      logError(`❌ Error cargando evaluadores para ${process}:`, error)
-      throw error
+    } catch (fetchError) {
+      const errorMessage = fetchError instanceof Error ? fetchError.message : 'Error desconocido'
+      setError(errorMessage)
+      logError(`❌ Error cargando evaluadores para ${process}:`, fetchError)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -206,9 +210,9 @@ export function useEvaluadoresCRUD(): UseEvaluadoresCRUDResult {
   }
 
   return {
-    evaluadores: getCurrentData('ccm'), // Valor por defecto, se actualizará con fetchEvaluadores
-    loading: evaluadoresQuery.isLoading || evaluadoresQuery.isFetching,
-    error: evaluadoresQuery.error ? (evaluadoresQuery.error as Error).message : null,
+    evaluadores: getCurrentData(currentProcess),
+    loading,
+    error,
     fetchEvaluadores,
     createEvaluador,
     updateEvaluador,
