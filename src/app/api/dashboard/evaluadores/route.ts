@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import postgresAPI from '@/lib/postgres-api'
+import { createDirectDatabaseAPI } from '@/lib/db';
 import { logInfo, logError } from '@/lib/logger'
 
 // Clase para acceder al caché en memoria (mismo que en server-cache.ts)
@@ -23,7 +23,7 @@ class MemoryCache {
 
 const memoryCache = MemoryCache.getInstance();
 
-// GET - Obtener evaluadores usando PostgreSQL directo
+// GET - Obtener evaluadores usando la nueva API directa
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -35,7 +35,8 @@ export async function GET(request: NextRequest) {
 
     logInfo(`🔍 Obteniendo evaluadores para proceso: ${process.toUpperCase()}`);
     
-    const evaluadores = await postgresAPI.getEvaluadoresGestion(process as 'ccm' | 'prr');
+    const dbAPI = await createDirectDatabaseAPI();
+    const evaluadores = await dbAPI.getEvaluadoresGestion(process as 'ccm' | 'prr');
     
     logInfo(`✅ Evaluadores obtenidos: ${evaluadores.length} registros`);
     return NextResponse.json(evaluadores);
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest) {
 // POST - Crear nuevo evaluador
 export async function POST(request: NextRequest) {
   try {
-    logInfo('➕ Creando nuevo evaluador con PostgreSQL directo');
+    logInfo('➕ Creando nuevo evaluador con conexión directa');
     
     const { searchParams } = new URL(request.url)
     const process = searchParams.get('process') || 'ccm'
@@ -63,20 +64,13 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await request.json()
-    const { nombre_en_base, nombres_apellidos, regimen, turno, modalidad, sub_equipo } = data
     
-    if (!nombre_en_base || !nombres_apellidos) {
+    if (!data.nombre_en_base || !data.nombres_apellidos) {
       return NextResponse.json({ error: 'Nombre en base y nombres y apellidos son requeridos' }, { status: 400 })
     }
 
-    const result = await postgresAPI.createEvaluador(process as 'ccm' | 'prr', {
-      nombre_en_base,
-      nombres_apellidos,
-      regimen,
-      turno,
-      modalidad,
-      sub_equipo
-    });
+    const dbAPI = await createDirectDatabaseAPI();
+    const result = await dbAPI.createEvaluador(process as 'ccm' | 'prr', data);
     
     // Invalidar caché
     const cacheKey = `evaluadores_general_${process}`
@@ -99,7 +93,7 @@ export async function POST(request: NextRequest) {
 // PUT - Actualizar evaluador
 export async function PUT(request: NextRequest) {
   try {
-    logInfo('🔄 Actualizando evaluador con PostgreSQL directo');
+    logInfo('🔄 Actualizando evaluador con conexión directa');
     
     const { searchParams } = new URL(request.url)
     const process = searchParams.get('process')
@@ -113,24 +107,11 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'ID del evaluador es requerido' }, { status: 400 })
     }
 
-    const data = await request.json()
-    const { 
-      nombres_apellidos, 
-      nombre_en_base, 
-      regimen, 
-      turno, 
-      modalidad, 
-      sub_equipo 
-    } = data
+    const data = await request.json();
+    delete data.id; // Nos aseguramos de no intentar actualizar el ID
 
-    const result = await postgresAPI.updateEvaluador(process as 'ccm' | 'prr', parseInt(id), {
-      nombre_en_base,
-      nombres_apellidos,
-      regimen,
-      turno,
-      modalidad,
-      sub_equipo
-    });
+    const dbAPI = await createDirectDatabaseAPI();
+    const result = await dbAPI.updateEvaluador(process as 'ccm' | 'prr', parseInt(id), data);
     
     // Invalidar caché
     const cacheKey = `evaluadores_general_${process}`
@@ -157,7 +138,7 @@ export async function PUT(request: NextRequest) {
 // DELETE - Eliminar evaluador
 export async function DELETE(request: NextRequest) {
   try {
-    logInfo('🗑️ Eliminando evaluador con PostgreSQL directo');
+    logInfo('🗑️ Eliminando evaluador con conexión directa');
     
     const { searchParams } = new URL(request.url)
     const process = searchParams.get('process')
@@ -171,7 +152,8 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'ID del evaluador es requerido' }, { status: 400 })
     }
 
-    const success = await postgresAPI.deleteEvaluador(process as 'ccm' | 'prr', parseInt(id));
+    const dbAPI = await createDirectDatabaseAPI();
+    const success = await dbAPI.deleteEvaluador(process as 'ccm' | 'prr', parseInt(id));
     
     // Invalidar caché
     const cacheKey = `evaluadores_general_${process}`

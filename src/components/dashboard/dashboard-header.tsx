@@ -6,17 +6,16 @@ import { RefreshCcw, Settings, Bell, ChevronDown, Users } from 'lucide-react'
 interface DashboardHeaderProps {
   selectedProcess?: 'ccm' | 'prr'
   onProcessChange?: (process: 'ccm' | 'prr') => void
-  onRefresh?: () => void
   loading?: boolean
 }
 
 export function DashboardHeader({ 
   selectedProcess = 'ccm', 
   onProcessChange, 
-  onRefresh, 
   loading = false
 }: DashboardHeaderProps) {
   const [showDropdown, setShowDropdown] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   const processes = {
@@ -43,6 +42,26 @@ export function DashboardHeader({
   const handleProcessSelect = (process: 'ccm' | 'prr') => {
     onProcessChange?.(process)
     setShowDropdown(false)
+  }
+
+  const handleRefreshClick = async () => {
+    setIsRefreshing(true);
+    try {
+      const response = await fetch('/api/cache/clear', { method: 'POST' });
+      
+      if (!response.ok) {
+        throw new Error('No se pudo limpiar la caché del servidor.');
+      }
+      
+      // Recargar la página después de limpiar la caché
+      window.location.reload();
+
+    } catch (error) {
+      console.error('Error al actualizar:', error);
+      // Opcional: mostrar un alert simple si falla
+      alert('No se pudo actualizar la información. Intenta de nuevo más tarde.');
+      setIsRefreshing(false);
+    }
   }
 
   return (
@@ -118,12 +137,12 @@ export function DashboardHeader({
             {/* Action Buttons */}
             <div className="flex items-center gap-1">
               <button
-                onClick={onRefresh}
-                disabled={loading}
+                onClick={handleRefreshClick}
+                disabled={isRefreshing || loading}
                 className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
                 title="Actualizar datos"
               >
-                <RefreshCcw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                <RefreshCcw className={`w-4 h-4 ${(isRefreshing || loading) ? 'animate-spin' : ''}`} />
               </button>
 
               <button

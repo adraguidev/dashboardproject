@@ -5,7 +5,6 @@ import { eq, and, isNull, isNotNull, desc, asc, count, gte, lte, inArray, like, 
 
 // Schema para table_ccm
 export const tableCCM = pgTable('table_ccm', {
-  id: serial('id').primaryKey(),
   numerotramite: text('numerotramite'),
   fechaexpendiente: text('fechaexpendiente'),
   operador: text('operador'),
@@ -21,7 +20,6 @@ export const tableCCM = pgTable('table_ccm', {
 
 // Schema para table_prr
 export const tablePRR = pgTable('table_prr', {
-  id: serial('id').primaryKey(),
   numerotramite: text('numerotramite'),
   fechaexpendiente: text('fechaexpendiente'),
   operador: text('operador'),
@@ -38,13 +36,21 @@ export const tablePRR = pgTable('table_prr', {
 // Schema para evaluadores
 export const evaluadoresCCM = pgTable('evaluadores_ccm', {
   id: serial('id').primaryKey(),
+  nombres_apellidos: text('nombres_apellidos'),
   nombre_en_base: text('nombre_en_base').notNull(),
+  regimen: text('regimen'),
+  turno: text('turno'),
+  modalidad: text('modalidad'),
   sub_equipo: text('sub_equipo').notNull(),
 });
 
 export const evaluadoresPRR = pgTable('evaluadores_prr', {
   id: serial('id').primaryKey(),
+  nombres_apellidos: text('nombres_apellidos'),
   nombre_en_base: text('nombre_en_base').notNull(),
+  regimen: text('regimen'),
+  turno: text('turno'),
+  modalidad: text('modalidad'),
   sub_equipo: text('sub_equipo').notNull(),
 });
 
@@ -59,13 +65,13 @@ export const schema = {
 export async function getDrizzleDB() {
   // Usar la URL directa de conexión
   const connectionString = process.env.DATABASE_DIRECT_URL || process.env.DATABASE_URL;
-  
+
   if (!connectionString) {
     throw new Error("No se encontró DATABASE_DIRECT_URL ni DATABASE_URL en variables de entorno");
   }
 
   const db = drizzle(neon(connectionString), { schema });
-  
+
   return {
     db,
     connectionString: connectionString.replace(/:[^:@]*@/, ':***@') // Ocultar password en logs
@@ -211,6 +217,32 @@ export class DirectDatabaseAPI {
 
   async getEvaluadoresPRR() {
     return await this.db.select().from(evaluadoresPRR);
+  }
+
+  // ============= MÉTODOS PARA EVALUADORES (CRUD) =============
+
+  async getEvaluadoresGestion(processo: 'ccm' | 'prr') {
+    const table = processo === 'ccm' ? evaluadoresCCM : evaluadoresPRR;
+    return this.db.select().from(table).orderBy(asc(table.nombre_en_base));
+  }
+
+  async createEvaluador(processo: 'ccm' | 'prr', data: any) {
+    const table = processo === 'ccm' ? evaluadoresCCM : evaluadoresPRR;
+    const result = await this.db.insert(table).values(data).returning();
+    return result[0];
+  }
+
+  async updateEvaluador(processo: 'ccm' | 'prr', id: number, data: any) {
+    const table = processo === 'ccm' ? evaluadoresCCM : evaluadoresPRR;
+    const result = await this.db.update(table).set(data).where(eq(table.id, id)).returning();
+    if (result.length === 0) throw new Error('Evaluador no encontrado');
+    return result[0];
+  }
+
+  async deleteEvaluador(processo: 'ccm' | 'prr', id: number): Promise<boolean> {
+    const table = processo === 'ccm' ? evaluadoresCCM : evaluadoresPRR;
+    const result = await this.db.delete(table).where(eq(table.id, id)).returning();
+    return result.length > 0;
   }
 
   // ============= MÉTODOS PARA INGRESOS =============
@@ -377,6 +409,53 @@ export class DirectDatabaseAPI {
 
   // ============= MÉTODOS ADICIONALES =============
   
+  async getKPIs() {
+    const [
+      totalCasosCCM,
+      totalCasosPRR,
+      pendientesCCM,
+      pendientesPRR,
+      evaluadoresActivos,
+    ] = await Promise.all([
+      this.db.select({ count: count() }).from(tableCCM),
+      this.db.select({ count: count() }).from(tablePRR),
+      this.countCCMPendientes(),
+      this.countPRRPendientes(),
+      this.db.select({ count: count() }).from(evaluadoresCCM), // Asumiendo que todos están activos
+    ]);
+
+    return {
+      totalCasosCCM: totalCasosCCM[0]?.count || 0,
+      totalCasosPRR: totalCasosPRR[0]?.count || 0,
+      pendientesCCM: pendientesCCM,
+      pendientesPRR: pendientesPRR,
+      evaluadoresActivos: evaluadoresActivos[0]?.count || 0,
+    };
+  }
+
+  async getProcesos() {
+    // Esta función puede necesitar una tabla 'processes' o devolver data estática
+    // Por ahora, devolveremos data estática como en el original
+    return [
+      {
+        id: 'ccm',
+        nombre: 'CCM',
+        descripcion: 'Control de Cambios Migratorios',
+        total_casos: (await this.db.select({ count: count() }).from(tableCCM))[0]?.count || 0,
+        casos_pendientes: await this.countCCMPendientes(),
+        ultimo_lote: new Date().toISOString(), // Simulado
+      },
+      {
+        id: 'prr',
+        nombre: 'PRR',
+        descripcion: 'Prórroga de Residencia',
+        total_casos: (await this.db.select({ count: count() }).from(tablePRR))[0]?.count || 0,
+        casos_pendientes: await this.countPRRPendientes(),
+        ultimo_lote: new Date().toISOString(), // Simulado
+      },
+    ];
+  }
+
   async testConnection(): Promise<boolean> {
     try {
       await this.db.select({ count: count() }).from(tableCCM).limit(1);
