@@ -1,6 +1,4 @@
 import { Suspense } from 'react'
-import { redirect } from 'next/navigation'
-import { stackServerApp } from '@/stack'
 import { GestionEquiposContent } from '@/components/ui/gestion-equipos-content'
 
 function LoadingFallback() {
@@ -11,13 +9,7 @@ function LoadingFallback() {
   )
 }
 
-export default async function GestionEquiposPage() {
-  const user = await stackServerApp.getUser()
-  if (!user) {
-    const redirectTo = encodeURIComponent('/gestion-equipos')
-    return redirect(`/handler/login?redirect_to=${redirectTo}`)
-  }
-
+export default function GestionEquiposPage() {
   return (
     <Suspense fallback={<LoadingFallback />}>
       <GestionEquiposContent />

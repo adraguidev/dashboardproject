@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDrizzleDB } from '@/lib/db'
-import { sql } from 'drizzle-orm'
+import postgresAPI from '@/lib/postgres-api'
 import { redisDel } from '@/lib/redis'
+import { logInfo, logError } from '@/lib/logger'
 
-// GET - Obtener evaluadores usando Drizzle ORM
+// GET - Obtener evaluadores usando PostgreSQL directo
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -13,47 +13,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Proceso inválido. Debe ser ccm o prr' }, { status: 400 })
     }
 
-    // Se elimina la capa de caché para esta API para asegurar datos siempre frescos.
+    logInfo(`🔍 Obteniendo evaluadores para proceso: ${process.toUpperCase()}`);
     
-    const { db, userEmail } = await getDrizzleDB()
-    console.log('✅ Usuario autenticado:', userEmail)
+    const evaluadores = await postgresAPI.getEvaluadoresGestion(process as 'ccm' | 'prr');
     
-    const tableName = `evaluadores_${process}`
-    console.log(`🔍 Consultando tabla: ${tableName}`)
-    
-    const result = await db.execute(
-      sql`SELECT * FROM ${sql.identifier(tableName)} ORDER BY nombre_en_base ASC`
-    )
-    console.log(`✅ Encontrados ${result.rows.length} evaluadores desde DB`)
-    
-    const evaluadores = result.rows.map((row: any) => ({
-      id: row.id,
-      operador: row.nombre_en_base ?? '-', // Añadimos 'operador' para consistencia
-      nombre_en_base: row.nombre_en_base ?? '-',
-      nombres_apellidos: row.nombres_apellidos ?? row.nombre_real ?? row.nombre_en_base ?? '-',
-      nombre_real: row.nombres_apellidos ?? row.nombre_real ?? row.nombre_en_base ?? '-',
-      regimen: row.regimen ?? '-',
-      turno: row.turno ?? '-',
-      modalidad: row.modalidad ?? '-',
-      sub_equipo: row.sub_equipo ?? '-',
-      activo: row.activo ?? null,
-      fecha_ingreso: row.fecha_ingreso ?? null,
-      fecha_salida: row.fecha_salida ?? null,
-      lider: row.lider ?? null,
-      creado_en: row.creado_en ?? null
-    }))
-    
-    return NextResponse.json(evaluadores)
+    logInfo(`✅ Evaluadores obtenidos: ${evaluadores.length} registros`);
+    return NextResponse.json(evaluadores);
     
   } catch (error) {
-    console.error('❌ Error obteniendo evaluadores:', error)
-    
-    if (error instanceof Error && error.message.includes('No userId')) {
-      return NextResponse.json(
-        { error: 'No autorizado. Debes iniciar sesión.' },
-        { status: 401 }
-      )
-    }
+    logError('❌ Error obteniendo evaluadores:', error);
     
     return NextResponse.json(
       { error: 'Error interno del servidor' },
@@ -65,10 +33,7 @@ export async function GET(request: NextRequest) {
 // POST - Crear nuevo evaluador
 export async function POST(request: NextRequest) {
   try {
-    console.log('\n➕ === CREANDO EVALUADOR CON DRIZZLE ===')
-    
-    const { db, userId, userEmail } = await getDrizzleDB()
-    console.log('✅ Usuario autenticado:', userEmail)
+    logInfo('➕ Creando nuevo evaluador con PostgreSQL directo');
     
     const { searchParams } = new URL(request.url)
     const process = searchParams.get('process') || 'ccm'
@@ -84,45 +49,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Nombre en base y nombres y apellidos son requeridos' }, { status: 400 })
     }
 
-    const tableName = `evaluadores_${process}`
-    
-    console.log(`➕ Insertando en tabla: ${tableName}`)
-    
-    const result = await db.execute(
-      sql`
-        INSERT INTO ${sql.identifier(tableName)}
-        (nombre_en_base, nombres_apellidos, regimen, turno, modalidad, sub_equipo)
-        VALUES (
-          ${nombre_en_base},
-          ${nombres_apellidos},
-          ${regimen ?? null},
-          ${turno ?? null},
-          ${modalidad ?? null},
-          ${sub_equipo ?? null}
-        )
-        RETURNING *
-      `
-    )
+    const result = await postgresAPI.createEvaluador(process as 'ccm' | 'prr', {
+      nombre_en_base,
+      nombres_apellidos,
+      regimen,
+      turno,
+      modalidad,
+      sub_equipo
+    });
     
     // Invalidar caché
     const cacheKey = `evaluadores_general_${process}`
     await redisDel(cacheKey)
-    console.log(`🧹 Cache invalidado para: ${cacheKey}`)
+    logInfo(`🧹 Cache invalidado para: ${cacheKey}`);
 
-    console.log('✅ Evaluador creado exitosamente')
-    console.log('➕ === FIN CREAR EVALUADOR ===\n')
-    
-    return NextResponse.json(result.rows[0], { status: 201 })
+    logInfo('✅ Evaluador creado exitosamente');
+    return NextResponse.json(result, { status: 201 });
     
   } catch (error) {
-    console.error('❌ Error creando evaluador:', error)
-    
-    if (error instanceof Error && error.message.includes('No userId')) {
-      return NextResponse.json(
-        { error: 'No autorizado. Debes iniciar sesión.' },
-        { status: 401 }
-      )
-    }
+    logError('❌ Error creando evaluador:', error);
     
     return NextResponse.json(
       { error: 'Error interno del servidor' },
@@ -134,10 +79,7 @@ export async function POST(request: NextRequest) {
 // PUT - Actualizar evaluador
 export async function PUT(request: NextRequest) {
   try {
-    console.log('\n🔄 === ACTUALIZANDO EVALUADOR CON DRIZZLE ===')
-    
-    const { db, userId, userEmail } = await getDrizzleDB()
-    console.log('✅ Usuario autenticado:', userEmail)
+    logInfo('🔄 Actualizando evaluador con PostgreSQL directo');
     
     const { searchParams } = new URL(request.url)
     const process = searchParams.get('process')
@@ -152,7 +94,6 @@ export async function PUT(request: NextRequest) {
     }
 
     const data = await request.json()
-    // Aseguramos que los datos coincidan con lo que envía el frontend
     const { 
       nombres_apellidos, 
       nombre_en_base, 
@@ -162,48 +103,28 @@ export async function PUT(request: NextRequest) {
       sub_equipo 
     } = data
 
-    const tableName = `evaluadores_${process}`
-    
-    console.log(`🔄 Actualizando en tabla: ${tableName}, ID: ${id}`)
-    
-    // Construcción dinámica de la query para evitar errores con campos nulos
-    const result = await db.execute(
-      sql`
-        UPDATE ${sql.identifier(tableName)} 
-        SET 
-          nombre_en_base = ${nombre_en_base ?? null},
-          nombres_apellidos = ${nombres_apellidos ?? null},
-          regimen = ${regimen ?? null},
-          turno = ${turno ?? null},
-          modalidad = ${modalidad ?? null},
-          sub_equipo = ${sub_equipo ?? null}
-        WHERE id = ${id} 
-        RETURNING *
-      `
-    )
+    const result = await postgresAPI.updateEvaluador(process as 'ccm' | 'prr', parseInt(id), {
+      nombre_en_base,
+      nombres_apellidos,
+      regimen,
+      turno,
+      modalidad,
+      sub_equipo
+    });
     
     // Invalidar caché
     const cacheKey = `evaluadores_general_${process}`
     await redisDel(cacheKey)
-    console.log(`🧹 Cache invalidado para: ${cacheKey}`)
+    logInfo(`🧹 Cache invalidado para: ${cacheKey}`);
 
-    if (result.rows.length === 0) {
-      return NextResponse.json({ error: 'Evaluador no encontrado' }, { status: 404 })
-    }
-    
-    console.log('✅ Evaluador actualizado exitosamente')
-    console.log('🔄 === FIN ACTUALIZAR EVALUADOR ===\n')
-    
-    return NextResponse.json(result.rows[0])
+    logInfo('✅ Evaluador actualizado exitosamente');
+    return NextResponse.json(result);
     
   } catch (error) {
-    console.error('❌ Error actualizando evaluador:', error)
+    logError('❌ Error actualizando evaluador:', error);
     
-    if (error instanceof Error && error.message.includes('No userId')) {
-      return NextResponse.json(
-        { error: 'No autorizado. Debes iniciar sesión.' },
-        { status: 401 }
-      )
+    if ((error as any)?.message?.includes('no encontrado')) {
+      return NextResponse.json({ error: 'Evaluador no encontrado' }, { status: 404 })
     }
     
     return NextResponse.json(
@@ -216,10 +137,7 @@ export async function PUT(request: NextRequest) {
 // DELETE - Eliminar evaluador
 export async function DELETE(request: NextRequest) {
   try {
-    console.log('\n🗑️ === ELIMINANDO EVALUADOR CON DRIZZLE ===')
-    
-    const { db, userId, userEmail } = await getDrizzleDB()
-    console.log('✅ Usuario autenticado:', userEmail)
+    logInfo('🗑️ Eliminando evaluador con PostgreSQL directo');
     
     const { searchParams } = new URL(request.url)
     const process = searchParams.get('process')
@@ -233,36 +151,25 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'ID del evaluador es requerido' }, { status: 400 })
     }
 
-    const tableName = `evaluadores_${process}`
-    
-    console.log(`🗑️ Eliminando de tabla: ${tableName}, ID: ${id}`)
-    
-    const result = await db.execute(
-      sql`DELETE FROM ${sql.identifier(tableName)} WHERE id = ${id} RETURNING *`
-    )
+    const success = await postgresAPI.deleteEvaluador(process as 'ccm' | 'prr', parseInt(id));
     
     // Invalidar caché
     const cacheKey = `evaluadores_general_${process}`
     await redisDel(cacheKey)
-    console.log(`🧹 Cache invalidado para: ${cacheKey}`)
+    logInfo(`🧹 Cache invalidado para: ${cacheKey}`);
 
-    if (result.rows.length === 0) {
+    if (!success) {
       return NextResponse.json({ error: 'Evaluador no encontrado' }, { status: 404 })
     }
     
-    console.log('✅ Evaluador eliminado exitosamente')
-    console.log('🗑️ === FIN ELIMINAR EVALUADOR ===\n')
-    
-    return NextResponse.json({ message: 'Evaluador eliminado exitosamente' })
+    logInfo('✅ Evaluador eliminado exitosamente');
+    return NextResponse.json({ message: 'Evaluador eliminado exitosamente' });
     
   } catch (error) {
-    console.error('❌ Error eliminando evaluador:', error)
+    logError('❌ Error eliminando evaluador:', error);
     
-    if (error instanceof Error && error.message.includes('No userId')) {
-      return NextResponse.json(
-        { error: 'No autorizado. Debes iniciar sesión.' },
-        { status: 401 }
-      )
+    if ((error as any)?.message?.includes('no encontrado')) {
+      return NextResponse.json({ error: 'Evaluador no encontrado' }, { status: 404 })
     }
     
     return NextResponse.json(

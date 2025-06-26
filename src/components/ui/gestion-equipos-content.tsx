@@ -77,7 +77,7 @@ export function GestionEquiposContent() {
 
   useEffect(() => {
     fetchEvaluadores(selectedProcess)
-  }, [selectedProcess, fetchEvaluadores])
+  }, [selectedProcess])
 
   const handleProcessChange = (process: 'ccm' | 'prr') => {
     router.push(`/gestion-equipos?proceso=${process}`)

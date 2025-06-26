@@ -266,6 +266,203 @@ export class PostgresAPI {
   }
 
   /**
+   * ==========================================
+   * GESTIÓN DE EQUIPOS - CRUD EVALUADORES
+   * ==========================================
+   */
+
+  /**
+   * Obtener evaluadores de gestión por proceso
+   */
+  async getEvaluadoresGestion(proceso: 'ccm' | 'prr'): Promise<any[]> {
+    try {
+      logInfo(`👥 Obteniendo evaluadores de gestión para proceso: ${proceso.toUpperCase()}`);
+      
+      const tableName = `evaluadores_${proceso}`;
+      const query = `
+        SELECT 
+          id,
+          nombre_en_base,
+          nombres_apellidos,
+          regimen,
+          turno,
+          modalidad,
+          sub_equipo,
+          activo,
+          fecha_ingreso,
+          fecha_salida,
+          lider,
+          creado_en
+        FROM ${tableName}
+        ORDER BY nombre_en_base ASC
+      `;
+
+      const result = await postgres.queryWithTimeout(query, [], 15000);
+      
+      // Mapear datos para compatibilidad con frontend
+      const evaluadores = result.rows.map((row: any) => ({
+        id: row.id,
+        operador: row.nombre_en_base ?? '-',
+        nombre_en_base: row.nombre_en_base ?? '-',
+        nombres_apellidos: row.nombres_apellidos ?? row.nombre_real ?? row.nombre_en_base ?? '-',
+        nombre_real: row.nombres_apellidos ?? row.nombre_real ?? row.nombre_en_base ?? '-',
+        regimen: row.regimen ?? '-',
+        turno: row.turno ?? '-',
+        modalidad: row.modalidad ?? '-',
+        sub_equipo: row.sub_equipo ?? '-',
+        activo: row.activo ?? null,
+        fecha_ingreso: row.fecha_ingreso ?? null,
+        fecha_salida: row.fecha_salida ?? null,
+        lider: row.lider ?? null,
+        creado_en: row.creado_en ?? null
+      }));
+
+      logInfo(`✅ Evaluadores de gestión obtenidos: ${evaluadores.length} registros`);
+      return evaluadores;
+      
+    } catch (error) {
+      logError(`❌ Error obteniendo evaluadores de gestión para ${proceso}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Crear nuevo evaluador
+   */
+  async createEvaluador(proceso: 'ccm' | 'prr', data: {
+    nombre_en_base: string;
+    nombres_apellidos: string;
+    regimen?: string;
+    turno?: string;
+    modalidad?: string;
+    sub_equipo?: string;
+  }): Promise<any> {
+    try {
+      logInfo(`➕ Creando evaluador para proceso: ${proceso.toUpperCase()}`);
+      
+      const { nombre_en_base, nombres_apellidos, regimen, turno, modalidad, sub_equipo } = data;
+      
+      if (!nombre_en_base || !nombres_apellidos) {
+        throw new Error('Nombre en base y nombres y apellidos son requeridos');
+      }
+
+      const tableName = `evaluadores_${proceso}`;
+      const query = `
+        INSERT INTO ${tableName}
+        (nombre_en_base, nombres_apellidos, regimen, turno, modalidad, sub_equipo)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *
+      `;
+      
+      const params = [
+        nombre_en_base,
+        nombres_apellidos,
+        regimen || null,
+        turno || null,
+        modalidad || null,
+        sub_equipo || null
+      ];
+
+      const result = await postgres.queryWithTimeout(query, params, 15000);
+      
+      if (result.rows.length === 0) {
+        throw new Error('No se pudo crear el evaluador');
+      }
+
+      logInfo(`✅ Evaluador creado exitosamente: ${nombre_en_base}`);
+      return result.rows[0];
+      
+    } catch (error) {
+      logError(`❌ Error creando evaluador para ${proceso}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Actualizar evaluador existente
+   */
+  async updateEvaluador(proceso: 'ccm' | 'prr', id: number, data: {
+    nombre_en_base?: string;
+    nombres_apellidos?: string;
+    regimen?: string;
+    turno?: string;
+    modalidad?: string;
+    sub_equipo?: string;
+  }): Promise<any> {
+    try {
+      logInfo(`🔄 Actualizando evaluador ID ${id} para proceso: ${proceso.toUpperCase()}`);
+      
+      const { nombre_en_base, nombres_apellidos, regimen, turno, modalidad, sub_equipo } = data;
+      
+      const tableName = `evaluadores_${proceso}`;
+      const query = `
+        UPDATE ${tableName} 
+        SET 
+          nombre_en_base = COALESCE($1, nombre_en_base),
+          nombres_apellidos = COALESCE($2, nombres_apellidos),
+          regimen = COALESCE($3, regimen),
+          turno = COALESCE($4, turno),
+          modalidad = COALESCE($5, modalidad),
+          sub_equipo = COALESCE($6, sub_equipo)
+        WHERE id = $7 
+        RETURNING *
+      `;
+      
+      const params = [
+        nombre_en_base || null,
+        nombres_apellidos || null,
+        regimen || null,
+        turno || null,
+        modalidad || null,
+        sub_equipo || null,
+        id
+      ];
+
+      const result = await postgres.queryWithTimeout(query, params, 15000);
+      
+      if (result.rows.length === 0) {
+        throw new Error('Evaluador no encontrado');
+      }
+
+      logInfo(`✅ Evaluador actualizado exitosamente: ID ${id}`);
+      return result.rows[0];
+      
+    } catch (error) {
+      logError(`❌ Error actualizando evaluador ID ${id} para ${proceso}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Eliminar evaluador
+   */
+  async deleteEvaluador(proceso: 'ccm' | 'prr', id: number): Promise<boolean> {
+    try {
+      logInfo(`🗑️ Eliminando evaluador ID ${id} para proceso: ${proceso.toUpperCase()}`);
+      
+      const tableName = `evaluadores_${proceso}`;
+      const query = `
+        DELETE FROM ${tableName} 
+        WHERE id = $1 
+        RETURNING *
+      `;
+
+      const result = await postgres.queryWithTimeout(query, [id], 15000);
+      
+      if (result.rows.length === 0) {
+        throw new Error('Evaluador no encontrado');
+      }
+
+      logInfo(`✅ Evaluador eliminado exitosamente: ID ${id}`);
+      return true;
+      
+    } catch (error) {
+      logError(`❌ Error eliminando evaluador ID ${id} para ${proceso}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Obtener KPIs
    */
   async getKPIs(): Promise<{

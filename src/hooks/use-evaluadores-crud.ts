@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { logInfo, logError } from '@/lib/logger'
 
 export interface Evaluador {
   id: number
@@ -34,178 +35,187 @@ interface UseEvaluadoresCRUDResult {
   deleting: boolean
 }
 
+// Funciones API
+async function fetchEvaluadoresAPI(process: 'ccm' | 'prr'): Promise<Evaluador[]> {
+  logInfo(`🔍 Obteniendo evaluadores para proceso: ${process.toUpperCase()}`);
+  
+  const response = await fetch(`/api/dashboard/evaluadores?process=${process}`)
+  
+  if (!response.ok) {
+    const result = await response.json()
+    throw new Error(result.error || 'Error obteniendo evaluadores')
+  }
+  
+  const data = await response.json()
+  return Array.isArray(data) ? data : []
+}
+
+async function createEvaluadorAPI(process: 'ccm' | 'prr', data: Omit<Evaluador, 'id'>): Promise<Evaluador> {
+  logInfo(`➕ Creando evaluador para proceso: ${process.toUpperCase()}`);
+  
+  const response = await fetch(`/api/dashboard/evaluadores?process=${process}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  
+  if (!response.ok) {
+    const result = await response.json()
+    throw new Error(result.error || 'Error creando evaluador')
+  }
+  
+  return response.json()
+}
+
+async function updateEvaluadorAPI(process: 'ccm' | 'prr', data: Evaluador): Promise<Evaluador> {
+  logInfo(`🔄 Actualizando evaluador ID ${data.id} para proceso: ${process.toUpperCase()}`);
+  
+  const response = await fetch(`/api/dashboard/evaluadores?process=${process}&id=${data.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  
+  if (!response.ok) {
+    const result = await response.json()
+    throw new Error(result.error || 'Error actualizando evaluador')
+  }
+  
+  return response.json()
+}
+
+async function deleteEvaluadorAPI(process: 'ccm' | 'prr', id: number): Promise<void> {
+  logInfo(`🗑️ Eliminando evaluador ID ${id} para proceso: ${process.toUpperCase()}`);
+  
+  const response = await fetch(`/api/dashboard/evaluadores?process=${process}&id=${id}`, {
+    method: 'DELETE'
+  })
+  
+  if (!response.ok) {
+    const result = await response.json()
+    throw new Error(result.error || 'Error eliminando evaluador')
+  }
+}
+
 export function useEvaluadoresCRUD(): UseEvaluadoresCRUDResult {
-  const [evaluadores, setEvaluadores] = useState<Evaluador[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [creating, setCreating] = useState(false)
-  const [updating, setUpdating] = useState(false)
-  const [deleting, setDeleting] = useState(false)
+  const queryClient = useQueryClient()
+  
+  // Query para obtener evaluadores (se activará manualmente)
+  const evaluadoresQuery = useQuery({
+    queryKey: ['evaluadores'],
+    queryFn: () => Promise.resolve([]), // Dummy inicial
+    enabled: false, // No ejecutar automáticamente
+    staleTime: 1000 * 60 * 5, // 5 minutos
+    gcTime: 1000 * 60 * 30, // 30 minutos
+  })
 
-  // GET - Obtener evaluadores
-  const fetchEvaluadores = useCallback(async (process: 'ccm' | 'prr') => {
-    setLoading(true)
-    setError(null)
-    
-    try {
-      const response = await fetch(`/api/dashboard/evaluadores?process=${process}`)
-      const result = await response.json()
-      
-      if (!response.ok) {
-        throw new Error(result.error || 'Error obteniendo evaluadores')
-      }
-      
-      // El nuevo endpoint devuelve directamente el array
-      if (Array.isArray(result)) {
-        setEvaluadores(result)
-      } else if (result.success) {
-        // Formato legacy por compatibilidad
-        setEvaluadores(result.data || [])
-      } else {
-        throw new Error(result.error || 'Respuesta inválida del servidor')
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
-      setError(errorMessage)
-      console.error('Error fetching evaluadores:', err)
-    } finally {
-      setLoading(false)
+  // Mutación para crear evaluador
+  const createMutation = useMutation({
+    mutationFn: ({ process, data }: { process: 'ccm' | 'prr', data: Omit<Evaluador, 'id'> }) => 
+      createEvaluadorAPI(process, data),
+    onSuccess: (_, variables) => {
+      // Invalidar cache para refrescar datos
+      queryClient.invalidateQueries({ queryKey: ['evaluadores', variables.process] })
+      logInfo('✅ Evaluador creado, cache invalidado')
+    },
+    onError: (error) => {
+      logError('❌ Error en mutación crear evaluador:', error)
     }
-  }, [])
+  })
 
-  // POST - Crear evaluador
-  const createEvaluador = useCallback(async (process: 'ccm' | 'prr', data: Omit<Evaluador, 'id'>): Promise<boolean> => {
-    setCreating(true)
-    setError(null)
-    
+  // Mutación para actualizar evaluador
+  const updateMutation = useMutation({
+    mutationFn: ({ process, data }: { process: 'ccm' | 'prr', data: Evaluador }) => 
+      updateEvaluadorAPI(process, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['evaluadores', variables.process] })
+      logInfo('✅ Evaluador actualizado, cache invalidado')
+    },
+    onError: (error) => {
+      logError('❌ Error en mutación actualizar evaluador:', error)
+    }
+  })
+
+  // Mutación para eliminar evaluador
+  const deleteMutation = useMutation({
+    mutationFn: ({ process, id }: { process: 'ccm' | 'prr', id: number }) => 
+      deleteEvaluadorAPI(process, id),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['evaluadores', variables.process] })
+      logInfo('✅ Evaluador eliminado, cache invalidado')
+    },
+    onError: (error) => {
+      logError('❌ Error en mutación eliminar evaluador:', error)
+    }
+  })
+
+  // Función para cargar evaluadores manualmente
+  const fetchEvaluadores = async (process: 'ccm' | 'prr') => {
     try {
-      const response = await fetch(`/api/dashboard/evaluadores?process=${process}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data)
+      logInfo(`🔄 Cargando evaluadores para: ${process.toUpperCase()}`)
+      
+      const data = await queryClient.fetchQuery({
+        queryKey: ['evaluadores', process],
+        queryFn: () => fetchEvaluadoresAPI(process),
+        staleTime: 1000 * 60 * 5,
       })
       
-      const result = await response.json()
-      
-      if (!response.ok) {
-        throw new Error(result.error || 'Error creando evaluador')
-      }
-      
-      // El nuevo endpoint devuelve directamente el objeto creado
-      if (result && result.id) {
-        // Refrescar la lista después de crear
-        await fetchEvaluadores(process)
-        return true
-      } else if (result.success) {
-        // Formato legacy por compatibilidad
-        await fetchEvaluadores(process)
-        return true
-      } else {
-        throw new Error(result.error || 'Error en la respuesta del servidor')
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
-      setError(errorMessage)
-      console.error('Error creating evaluador:', err)
-      return false
-    } finally {
-      setCreating(false)
+      logInfo(`✅ Evaluadores cargados: ${data.length} registros`)
+    } catch (error) {
+      logError(`❌ Error cargando evaluadores para ${process}:`, error)
+      throw error
     }
-  }, [fetchEvaluadores])
+  }
 
-  // PUT - Actualizar evaluador
-  const updateEvaluador = useCallback(async (process: 'ccm' | 'prr', data: Evaluador): Promise<boolean> => {
-    setUpdating(true)
-    setError(null)
-    
+  // Función para crear evaluador
+  const createEvaluador = async (process: 'ccm' | 'prr', data: Omit<Evaluador, 'id'>): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/dashboard/evaluadores?process=${process}&id=${data.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data)
-      })
-      
-      const result = await response.json()
-      
-      if (!response.ok) {
-        throw new Error(result.error || 'Error actualizando evaluador')
-      }
-      
-      // El nuevo endpoint devuelve directamente el objeto actualizado
-      if (result && result.id) {
-        // Refrescar la lista después de actualizar
-        await fetchEvaluadores(process)
-        return true
-      } else if (result.success) {
-        // Formato legacy por compatibilidad
-        await fetchEvaluadores(process)
-        return true
-      } else {
-        throw new Error(result.error || 'Error en la respuesta del servidor')
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
-      setError(errorMessage)
-      console.error('Error updating evaluador:', err)
+      await createMutation.mutateAsync({ process, data })
+      return true
+    } catch (error) {
+      logError('❌ Error creando evaluador:', error)
       return false
-    } finally {
-      setUpdating(false)
     }
-  }, [fetchEvaluadores])
+  }
 
-  // DELETE - Eliminar evaluador
-  const deleteEvaluador = useCallback(async (process: 'ccm' | 'prr', id: number): Promise<boolean> => {
-    setDeleting(true)
-    setError(null)
-    
+  // Función para actualizar evaluador
+  const updateEvaluador = async (process: 'ccm' | 'prr', data: Evaluador): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/dashboard/evaluadores?process=${process}&id=${id}`, {
-        method: 'DELETE'
-      })
-      
-      const result = await response.json()
-      
-      if (!response.ok) {
-        throw new Error(result.error || 'Error eliminando evaluador')
-      }
-      
-      // El nuevo endpoint devuelve un mensaje de confirmación
-      if (result && result.message) {
-        // Refrescar la lista después de eliminar
-        await fetchEvaluadores(process)
-        return true
-      } else if (result.success) {
-        // Formato legacy por compatibilidad
-        await fetchEvaluadores(process)
-        return true
-      } else {
-        throw new Error(result.error || 'Error en la respuesta del servidor')
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
-      setError(errorMessage)
-      console.error('Error deleting evaluador:', err)
+      await updateMutation.mutateAsync({ process, data })
+      return true
+    } catch (error) {
+      logError('❌ Error actualizando evaluador:', error)
       return false
-    } finally {
-      setDeleting(false)
     }
-  }, [fetchEvaluadores])
+  }
+
+  // Función para eliminar evaluador
+  const deleteEvaluador = async (process: 'ccm' | 'prr', id: number): Promise<boolean> => {
+    try {
+      await deleteMutation.mutateAsync({ process, id })
+      return true
+    } catch (error) {
+      logError('❌ Error eliminando evaluador:', error)
+      return false
+    }
+  }
+
+  // Obtener datos actuales del cache
+  const getCurrentData = (process: 'ccm' | 'prr'): Evaluador[] => {
+    return queryClient.getQueryData(['evaluadores', process]) || []
+  }
 
   return {
-    evaluadores,
-    loading,
-    error,
+    evaluadores: getCurrentData('ccm'), // Valor por defecto, se actualizará con fetchEvaluadores
+    loading: evaluadoresQuery.isLoading || evaluadoresQuery.isFetching,
+    error: evaluadoresQuery.error ? (evaluadoresQuery.error as Error).message : null,
     fetchEvaluadores,
     createEvaluador,
     updateEvaluador,
     deleteEvaluador,
-    creating,
-    updating,
-    deleting
+    creating: createMutation.isPending,
+    updating: updateMutation.isPending,
+    deleting: deleteMutation.isPending,
   }
 } 
 
