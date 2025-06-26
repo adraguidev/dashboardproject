@@ -7,12 +7,14 @@ import { useToast } from '@/components/ui/toast'
 interface DashboardHeaderProps {
   selectedProcess?: 'ccm' | 'prr'
   onProcessChange?: (process: 'ccm' | 'prr') => void
+  onRefresh?: () => void
   loading?: boolean
 }
 
 export function DashboardHeader({ 
   selectedProcess = 'ccm', 
   onProcessChange, 
+  onRefresh,
   loading = false
 }: DashboardHeaderProps) {
   const [showDropdown, setShowDropdown] = useState(false)
@@ -46,6 +48,11 @@ export function DashboardHeader({
   }
 
   const handleRefreshClick = async () => {
+    if (onRefresh) {
+      onRefresh();
+      return;
+    }
+
     setIsRefreshing(true);
     try {
       const response = await fetch('/api/cache/clear', { method: 'POST' });
