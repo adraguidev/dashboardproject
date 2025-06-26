@@ -84,7 +84,7 @@ export default function DashboardPage() {
         </div>
         
         {/* AI Chat Floating Button */}
-        <AiChatFloating key={selectedProcess} currentProcess={selectedProcess} />
+
       </div>
     )
   }
