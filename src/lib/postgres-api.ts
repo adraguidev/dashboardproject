@@ -9,6 +9,79 @@ import { parseDateSafe, formatDateSafe } from './date-utils';
 export class PostgresAPI {
   
   /**
+   * FUNCIÓN DE DEBUGGING: Inspeccionar estructura de la base de datos
+   */
+  async inspectDatabase(): Promise<{
+    tables: string[];
+    tableDetails: Record<string, any[]>;
+  }> {
+    try {
+      logInfo('🔍 Inspeccionando estructura de la base de datos...');
+      
+      // Obtener todas las tablas
+      const tablesQuery = `
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        ORDER BY table_name
+      `;
+      
+      const tablesResult = await postgres.queryWithTimeout(tablesQuery, [], 10000);
+      const tables = tablesResult.rows.map(row => row.table_name);
+      
+      logInfo(`📋 Tablas encontradas: ${tables.length}`, tables);
+      
+      // Obtener detalles de columnas para cada tabla
+      const tableDetails: Record<string, any[]> = {};
+      
+      for (const tableName of tables) {
+        try {
+          const columnsQuery = `
+            SELECT column_name, data_type, is_nullable
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' 
+            AND table_name = $1
+            ORDER BY ordinal_position
+          `;
+          
+          const columnsResult = await postgres.queryWithTimeout(columnsQuery, [tableName], 5000);
+          tableDetails[tableName] = columnsResult.rows;
+          
+          logInfo(`📊 Tabla ${tableName}: ${columnsResult.rows.length} columnas`);
+        } catch (error) {
+          logError(`❌ Error obteniendo columnas de ${tableName}:`, error);
+          tableDetails[tableName] = [];
+        }
+      }
+      
+      return { tables, tableDetails };
+      
+    } catch (error) {
+      logError('❌ Error inspeccionando base de datos:', error);
+      return { tables: [], tableDetails: {} };
+    }
+  }
+
+  /**
+   * FUNCIÓN DE DEBUGGING: Obtener muestra de datos de una tabla
+   */
+  async getSampleData(tableName: string, limit: number = 5): Promise<any[]> {
+    try {
+      logInfo(`🔬 Obteniendo muestra de datos de ${tableName} (${limit} registros)`);
+      
+      const query = `SELECT * FROM ${tableName} LIMIT $1`;
+      const result = await postgres.queryWithTimeout(query, [limit], 10000);
+      
+      logInfo(`✅ Muestra obtenida: ${result.rows.length} registros de ${tableName}`);
+      return result.rows;
+      
+    } catch (error) {
+      logError(`❌ Error obteniendo muestra de ${tableName}:`, error);
+      return [];
+    }
+  }
+
+  /**
    * Obtener datos de ingresos PRR con estrategias de fallback
    */
   async getPRRIngresos(days: number = 30): Promise<any[]> {
