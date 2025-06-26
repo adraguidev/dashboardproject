@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { neonDB } from '@/lib/neon-api'
-import { redisGet, redisSet } from '@/lib/redis'
+import { redisGet, redisSet, redisSetPersistent } from '@/lib/redis'
 import { PendientesReportData, PendientesReportSummary, Evaluador, ColorLegend } from '@/types/dashboard'
 import { parseDateSafe } from '@/lib/date-utils'
 
@@ -254,7 +254,7 @@ export async function GET(request: NextRequest) {
 
     const report = generatePendientesReport(data, evaluadores, process, groupBy);
 
-    await redisSet(cacheKey, report);
+    await redisSetPersistent(cacheKey, report);
 
     console.log(`📋 Reporte generado: ${report.data.length} operadores, ${report.years.length} periodos, ${report.grandTotal} total`)
 

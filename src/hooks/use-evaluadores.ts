@@ -29,7 +29,7 @@ export function useEvaluadores({
 
       const data: Evaluador[] = await response.json()
       setEvaluadores(data)
-      console.log(`✅ Evaluadores cargados: ${data.length}`)
+              // Evaluadores loaded successfully
 
     } catch (err) {
       console.error('❌ Error fetching evaluadores:', err)

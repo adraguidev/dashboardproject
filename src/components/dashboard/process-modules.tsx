@@ -25,18 +25,26 @@ export function ProcessModules({
 }: ProcessModulesProps) {
   const { report: reportData, loading, error, groupBy, changeGrouping } = usePendientesReport({
     process: selectedProcess,
-    enabled: selectedModule === 'pendientes'
+    groupBy: 'year',
+    enabled: selectedModule === 'pendientes',
+    backgroundFetch: true
   })
 
   const { report: produccionReport, otherProcessEvaluadores: produccionOtherEvaluadores, loading: produccionLoading, error: produccionError, refetch: refetchProduccion } = useProduccionReport({
     process: selectedProcess,
-    enabled: selectedModule === 'produccion'
+    enabled: selectedModule === 'produccion',
+    backgroundFetch: true
   })
 
-  const { report: ingresosReport, isLoading: ingresosLoading, error: ingresosError, refreshData: refreshIngresos, updatePeriod: updateIngresosPeriod } = useIngresos({
+  const { 
+    report: ingresosReport, 
+    isLoading: ingresosLoading, 
+    error: ingresosError, 
+    updatePeriod: updateIngresosPeriod 
+  } = useIngresos({
     process: selectedProcess,
-    days: 30,
-    enabled: selectedModule === 'ingresos'
+    enabled: selectedModule === 'ingresos',
+    backgroundFetch: true
   })
 
   // Obtener evaluadores del otro proceso para comparación
@@ -130,7 +138,6 @@ export function ProcessModules({
               error={ingresosError}
               className="w-full"
               onPeriodChange={(days) => {
-                console.log(`📅 Cambiando período de ingresos: ${days} días`)
                 updateIngresosPeriod(days)
               }}
             />

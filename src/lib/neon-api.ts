@@ -49,7 +49,7 @@ export class NeonDataAPI {
 
         if (response.ok) {
           const data = await response.json()
-          logInfo(`✅ Respuesta recibida (intento ${attempt}/${maxRetries}): ${Array.isArray(data) ? data.length : 'N/A'} elementos`)
+          // Response received successfully
           return Array.isArray(data) ? data : [data]
         }
 
@@ -314,7 +314,7 @@ export class NeonDataAPI {
       'order': 'fechaexpendiente.desc'
     }
 
-    logInfo('📦 Descargando CCM pendientes en lotes…')
+    // Fetching CCM pending data
     return this.fetchAllRows('/table_ccm', baseParams)
   }
 
@@ -342,7 +342,7 @@ export class NeonDataAPI {
       'order': 'fechaexpendiente.desc'
     }
 
-    logInfo('📦 Descargando PRR pendientes en lotes…')
+    // Fetching PRR pending data
     return this.fetchAllRows('/table_prr', baseParams)
   }
 
@@ -564,31 +564,80 @@ export class NeonDataAPI {
   /**
    * Obtener datos de ingresos de PRR para gráfico
    * Basado en fechaexpendiente
-   * Obtiene TODOS los datos para análisis completo de ingresos mensuales y semanales
+   * Implementa fallback progresivo para evitar timeouts
    */
   async getPRRIngresos(daysBack: number = 30) {
-    // Para el análisis mensual y semanal, obtenemos los últimos 2 años de datos.
-    // Esto evita timeouts al no traer la tabla completa, pero asegura que tenemos
-    // datos para el año actual y el anterior.
-    const maxDaysToFetch = 730; // ~2 años
-    
-    const today = new Date()
-    const startDate = new Date(today)
-    startDate.setDate(today.getDate() - maxDaysToFetch)
-    const fechaInicio = startDate.toISOString().split('T')[0] // formato YYYY-MM-DD
+    // Estrategia de fallback: intentar diferentes rangos si falla
+    const strategies = [
+      { days: 730, description: '2 años' },  // Intento completo
+      { days: 365, description: '1 año' },   // Fallback a 1 año
+      { days: 180, description: '6 meses' }, // Fallback a 6 meses
+      { days: 90, description: '3 meses' },  // Fallback a 3 meses
+      { days: 30, description: '1 mes' }     // Último recurso
+    ];
 
-    logInfo(`📊 Obteniendo datos PRR ingresos: últimos ${maxDaysToFetch} días desde ${fechaInicio}`)
+    let lastError: Error | null = null;
 
-    const params: Record<string, string> = {
-      'fechaexpendiente': `gte.${fechaInicio}`,
-      'select': 'fechaexpendiente,numerotramite',
-      'order': 'fechaexpendiente.desc'
+    for (const strategy of strategies) {
+      try {
+        logInfo(`📊 Obteniendo datos PRR ingresos: últimos ${strategy.days} días (${strategy.description})`)
+        
+        const today = new Date()
+        const startDate = new Date(today)
+        startDate.setDate(today.getDate() - strategy.days)
+        const fechaInicio = startDate.toISOString().split('T')[0]
+
+        const params: Record<string, string> = {
+          'fechaexpendiente': `gte.${fechaInicio}`,
+          'select': 'fechaexpendiente,numerotramite',
+          'order': 'fechaexpendiente.desc'
+        }
+
+        const resultado = await this.get('/table_prr', params)
+        logInfo(`✅ PRR: Obtenidos ${resultado.length} registros para análisis de ingresos (${strategy.description})`)
+        
+        // Si llegamos aquí, la consulta fue exitosa
+        return resultado
+
+      } catch (error) {
+        lastError = error as Error
+        logWarn(`⚠️ Falló estrategia PRR ${strategy.description}: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+        
+        // Si no es el último intento, continuar con la siguiente estrategia
+        if (strategy.days > 30) {
+          continue
+        }
+      }
     }
 
-    const resultado = await this.get('/table_prr', params)
-    logInfo(`✅ PRR: Obtenidos ${resultado.length} registros para análisis de ingresos`)
+    // Si todos los intentos fallaron, intentar con consulta mínima
+    try {
+      logWarn(`🔄 PRR: Intentando consulta mínima (solo últimos ${daysBack} días solicitados)`)
+      
+      const today = new Date()
+      const startDate = new Date(today)
+      startDate.setDate(today.getDate() - daysBack)
+      const fechaInicio = startDate.toISOString().split('T')[0]
 
-    return resultado
+      const params: Record<string, string> = {
+        'fechaexpendiente': `gte.${fechaInicio}`,
+        'select': 'fechaexpendiente,numerotramite',
+        'order': 'fechaexpendiente.desc',
+        'limit': '10000' // Limitar a 10k registros máximo
+      }
+
+      const resultado = await this.get('/table_prr', params)
+      logInfo(`✅ PRR: Obtenidos ${resultado.length} registros (consulta mínima)`)
+      return resultado
+
+    } catch (finalError) {
+      // Como último recurso, devolver datos vacíos pero válidos
+      logError(`❌ PRR: Todas las estrategias fallaron. Devolviendo datos vacíos.`)
+      logError(`Último error:`, finalError)
+      
+      // Retornar estructura mínima que no rompa el análisis
+      return []
+    }
   }
 
   /**

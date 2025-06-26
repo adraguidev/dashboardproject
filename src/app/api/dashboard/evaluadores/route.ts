@@ -1,37 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDrizzleDB } from '@/lib/db'
 import { sql } from 'drizzle-orm'
+import { redisGet, redisSet } from '@/lib/redis'
 
 // GET - Obtener evaluadores usando Drizzle ORM
 export async function GET(request: NextRequest) {
   try {
-    console.log('\n🔍 === OBTENIENDO EVALUADORES CON DRIZZLE ===')
-    
-    // Verificar autenticación y obtener conexión DB
-    const { db, userId, userEmail } = await getDrizzleDB()
-    console.log('✅ Usuario autenticado:', userEmail)
-    
     const { searchParams } = new URL(request.url)
     const process = searchParams.get('process') || 'ccm'
-    
+    const noCache = searchParams.get('noCache') === 'true'
+
     if (!['ccm', 'prr'].includes(process)) {
       return NextResponse.json({ error: 'Proceso inválido. Debe ser ccm o prr' }, { status: 400 })
     }
 
-    const tableName = `evaluadores_${process}`
+    const cacheKey = `evaluadores_general_${process}`
+
+    if (!noCache) {
+      const cachedData = await redisGet(cacheKey)
+      if (cachedData) {
+        console.log(`✅ Cache hit para evaluadores: ${cacheKey}`)
+        return NextResponse.json(cachedData)
+      }
+      console.log(`- Cache miss para evaluadores: ${cacheKey}`)
+    }
+
+    // Getting evaluadores with Drizzle
+    const { db, userEmail } = await getDrizzleDB()
+    console.log('✅ Usuario autenticado:', userEmail)
     
+    const tableName = `evaluadores_${process}`
     console.log(`🔍 Consultando tabla: ${tableName}`)
     
-    // Usar Drizzle con SQL raw para consultar nuestras tablas existentes
     const result = await db.execute(
       sql`SELECT * FROM ${sql.identifier(tableName)} ORDER BY nombre_en_base ASC`
     )
+    console.log(`✅ Encontrados ${result.rows.length} evaluadores desde DB`)
     
-    console.log(`✅ Encontrados ${result.rows.length} evaluadores`)
-    
-    // Convertir el resultado a formato esperado y mapear todos los campos legacy
     const evaluadores = result.rows.map((row: any) => ({
       id: row.id,
+      operador: row.nombre_en_base ?? '-', // Añadimos 'operador' para consistencia
       nombre_en_base: row.nombre_en_base ?? '-',
       nombres_apellidos: row.nombres_apellidos ?? row.nombre_real ?? row.nombre_en_base ?? '-',
       nombre_real: row.nombres_apellidos ?? row.nombre_real ?? row.nombre_en_base ?? '-',
@@ -45,8 +53,10 @@ export async function GET(request: NextRequest) {
       lider: row.lider ?? null,
       creado_en: row.creado_en ?? null
     }))
-    
-    console.log('🔍 === FIN OBTENER EVALUADORES ===\n')
+
+    // Guardar en cache por 1 hora
+    await redisSet(cacheKey, evaluadores, 3600)
+    console.log(`💾 Evaluadores guardados en cache: ${cacheKey}`)
     
     return NextResponse.json(evaluadores)
     

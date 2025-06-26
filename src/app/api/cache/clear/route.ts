@@ -1,13 +1,36 @@
-import { NextResponse } from 'next/server'
-import { getRedis } from '@/lib/redis'
+import { NextRequest, NextResponse } from 'next/server'
+import { redisFlushAll } from '@/lib/redis'
+import { logInfo, logError } from '@/lib/logger'
 
-export async function POST() {
+/**
+ * Endpoint para limpiar completamente el cache de Redis.
+ * Usado por el botón de refresh global en el dashboard.
+ */
+export async function POST(request: NextRequest) {
   try {
-    const client = await getRedis()
-    await client.flushAll()
-    return NextResponse.json({ success: true, message: 'Cache limpiado' })
-  } catch (e) {
-    return NextResponse.json({ success: false, error: 'Error limpiando cache', details: (e as Error).message }, { status: 500 })
+    logInfo('🧹 Iniciando limpieza completa de cache...')
+    
+    await redisFlushAll()
+    
+    logInfo('✅ Cache limpiado completamente')
+
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Cache limpiado exitosamente',
+      type: 'full'
+    })
+
+  } catch (error) {
+    logError('❌ Error limpiando cache:', error)
+    
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: 'Error interno del servidor al limpiar cache',
+        details: error instanceof Error ? error.message : 'Error desconocido'
+      },
+      { status: 500 }
+    )
   }
 }
 

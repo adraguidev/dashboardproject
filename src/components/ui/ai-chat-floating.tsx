@@ -10,12 +10,33 @@ interface Message {
   timestamp: Date
 }
 
-export function AiChatFloating() {
+interface AiChatFloatingProps {
+  currentProcess?: 'ccm' | 'prr'
+}
+
+export function AiChatFloating({ currentProcess = 'ccm' }: AiChatFloatingProps = {}) {
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      content: '¡Hola! Soy tu asistente IA del dashboard UFSM. Puedo ayudarte a analizar datos, responder preguntas sobre KPIs, tendencias de producción, ingresos y más. ¿En qué puedo ayudarte?',
+      content: `¡Hola! Soy tu asistente IA del dashboard UFSM. Tengo acceso completo a todos los datos del proceso ${currentProcess.toUpperCase()} incluyendo:
+
+📊 **Datos disponibles:**
+• Ingresos (últimos 30 días)
+• Producción (últimos 20 días) 
+• Pendientes (acumulado anual)
+• KPIs y métricas
+• Información del equipo
+• Análisis de tendencias
+
+💡 **Puedo ayudarte con:**
+• Análisis de rendimiento
+• Comparaciones temporales
+• Identificación de patrones
+• Recomendaciones estratégicas
+• Interpretación de métricas
+
+¿Qué te gustaría analizar?`,
       isUser: false,
       timestamp: new Date()
     }
@@ -59,7 +80,10 @@ export function AiChatFloating() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ question: userMessage.content }),
+        body: JSON.stringify({ 
+          question: userMessage.content, 
+          process: currentProcess 
+        }),
       })
 
       if (!response.ok) {
@@ -70,7 +94,7 @@ export function AiChatFloating() {
 
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: data.answer || 'Lo siento, no pude procesar tu pregunta en este momento.',
+        content: data.response || 'Lo siento, no pude procesar tu pregunta en este momento.',
         isUser: false,
         timestamp: new Date()
       }

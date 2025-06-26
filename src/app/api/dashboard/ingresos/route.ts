@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { neonDB } from '@/lib/neon-api'
-import { redisGet, redisSet } from '@/lib/redis'
+import { redisGet, redisSet, redisSetPersistent } from '@/lib/redis'
 import type { IngresosReport, IngresosChartData, MonthlyIngresosData, WeeklyIngresosData, MonthlyIngresosEntry, WeeklyIngresosEntry } from '@/types/dashboard'
 import { parseDateSafe } from '@/lib/date-utils'
 
@@ -52,10 +52,7 @@ function generateMonthlyData(data: any[]): MonthlyIngresosData {
   const hasCurrentYearData = yearsInData.has(currentYear);
   const hasPreviousYearData = yearsInData.has(previousYear);
   
-  console.log(`📊 Datos del año actual (${currentYear}): ${hasCurrentYearData ? 'SÍ' : 'NO'}`);
-  console.log(`📊 Datos del año anterior (${previousYear}): ${hasPreviousYearData ? 'SÍ' : 'NO'}`);
-  
-  const monthNames = [
+    const monthNames = [
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
   ];
@@ -99,14 +96,7 @@ function generateMonthlyData(data: any[]): MonthlyIngresosData {
     }
   });
   
-  // Debug: mostrar estadísticas detalladas
-  console.log(`📊 Registros encontrados:`);
-  console.log(`   - 2024: ${records2024} registros en meses: ${Array.from(months2024).sort().join(', ')}`);
-  console.log(`   - 2025: ${records2025} registros en meses: ${Array.from(months2025).sort().join(', ')}`);
-  console.log(`📊 Trámites únicos por mes-año:`);
-  Array.from(monthlyTramites.keys()).sort().forEach(key => {
-    console.log(`   - ${key}: ${monthlyTramites.get(key)?.size} trámites únicos`);
-  });
+  // Data processed successfully
   
   // Generar datos por mes
   const months: MonthlyIngresosEntry[] = monthNames.map((monthName, index) => {
@@ -143,10 +133,8 @@ function generateWeeklyData(data: any[]): WeeklyIngresosData {
     }
   });
   
-  const hasCurrentYearData = yearsInData.has(currentYear);
-  console.log(`📊 Datos semanales para el año actual del sistema: ${currentYear}`);
-  console.log(`📊 ¿Hay datos para ${currentYear}?: ${hasCurrentYearData ? 'SÍ' : 'NO'}`);
-  
+    const hasCurrentYearData = yearsInData.has(currentYear);
+
   // Agrupar trámites únicos por semana del año actual
   const weeklyTramites = new Map<number, Set<string>>(); // semana -> Set de numerotramite únicos
   
@@ -260,7 +248,45 @@ function generateIngresosReport(
   process: 'ccm' | 'prr', 
   daysBack: number
 ): IngresosReport {
-  console.log(`📊 Generando reporte de ingresos para ${process.toUpperCase()} con ${data.length} registros`);
+  // Si no hay datos, crear un reporte vacío pero válido
+  if (!data || data.length === 0) {
+    console.warn(`⚠️ No hay datos disponibles para ${process.toUpperCase()}`);
+    
+    const today = new Date();
+    const startDate = new Date(today);
+    startDate.setDate(today.getDate() - daysBack + 1);
+    
+    const fechaInicio = formatDate(startDate);
+    const fechaFin = formatDate(today);
+    
+    // Generar fechas vacías para el rango solicitado
+    const allDates = generateDateRange(startDate, today);
+    const chartData: IngresosChartData[] = allDates.map(fecha => ({
+      fecha,
+      numeroTramite: 0,
+      tendencia: 0
+    }));
+
+    return {
+      data: chartData,
+      totalTramites: 0,
+      fechaInicio,
+      fechaFin,
+      process,
+      periodo: `Últimos ${daysBack} días`,
+      promedioTramitesPorDia: 0,
+      diasConDatos: 0,
+      monthlyData: {
+        currentYear: new Date().getFullYear(),
+        previousYear: new Date().getFullYear() - 1,
+        months: []
+      },
+      weeklyData: {
+        year: new Date().getFullYear(),
+        weeks: []
+      }
+    };
+  }
 
   // Detectar el rango de fechas REAL de los datos
   const fechasReales = data
@@ -279,8 +305,6 @@ function generateIngresosReport(
   
   const fechaInicio = formatDate(startDate);
   const fechaFin = formatDate(fechaMasReciente);
-
-  console.log(`📅 Rango ajustado: ${fechaInicio} hasta ${fechaFin} (basado en datos reales)`);
 
   // Generar rango completo de fechas basado en datos reales
   const allDates = generateDateRange(startDate, fechaMasReciente);
@@ -357,8 +381,6 @@ function generateIngresosReport(
     weeklyData
   };
 
-  console.log(`✅ Reporte generado: ${totalTramites} trámites, ${diasConDatos} días con datos, promedio: ${promedioTramitesPorDia.toFixed(1)}`);
-  
   return report;
 }
 
@@ -379,8 +401,6 @@ export async function GET(request: NextRequest) {
       console.warn('Redis no disponible (ingresos)', e);
     }
 
-    console.log(`📈 Obteniendo datos de ingresos para ${process?.toUpperCase() || 'CCM'} (últimos ${days} días)`);
-
     if (!['ccm', 'prr'].includes(process || 'ccm')) {
       return NextResponse.json({ 
         error: 'Proceso inválido. Debe ser ccm o prr' 
@@ -394,34 +414,45 @@ export async function GET(request: NextRequest) {
     }
 
     let data: any[] = [];
+    let hasDataLimitations = false;
 
-    // Obtener datos según el proceso
-    if (process === 'ccm') {
-      console.log('📊 Obteniendo datos de ingresos CCM...');
-      data = await neonDB.getCCMIngresos(days);
-    } else {
-      console.log('📊 Obteniendo datos de ingresos PRR...');
-      data = await neonDB.getPRRIngresos(days);
+    // Obtener datos según el proceso con manejo robusto de errores
+    try {
+      if (process === 'ccm') {
+        data = await neonDB.getCCMIngresos(days);
+      } else {
+        data = await neonDB.getPRRIngresos(days);
+      }
+    } catch (error) {
+      console.error(`❌ Error obteniendo datos de ${process?.toUpperCase()}:`, error);
+      
+      // Para PRR, si falla, intentar con datos limitados
+      if (process === 'prr') {
+        console.warn('⚠️ PRR: Usando estrategia de recuperación con datos limitados');
+        hasDataLimitations = true;
+        data = []; // Datos vacíos que se manejarán en generateIngresosReport
+      } else {
+        // Para CCM, propagar el error ya que generalmente funciona
+        throw error;
+      }
     }
-
-    console.log(`✅ Datos obtenidos: ${data.length} registros`);
 
     // Generar reporte
     const report = generateIngresosReport(data, process as 'ccm' | 'prr', days);
 
-    // Guardar en Redis
-    await redisSet(cacheKey, report);
+    // Guardar en cache persistente (sin TTL) - solo se limpia manualmente
+    await redisSetPersistent(cacheKey, report);
 
     return NextResponse.json({
       success: true,
       report,
-              meta: {
-          processedRecords: data.length,
-          generatedAt: new Date().toISOString(),
-          filters: {
-            fechaexpendiente: `Últimos ${days} días - TODOS los registros`
-          }
+      meta: {
+        processedRecords: data.length,
+        generatedAt: new Date().toISOString(),
+        filters: {
+          fechaexpendiente: `Últimos ${days} días - TODOS los registros`
         }
+      }
     });
 
   } catch (error) {

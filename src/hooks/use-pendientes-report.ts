@@ -6,121 +6,122 @@ import { getCached, setCached } from '@/lib/frontend-cache'
 
 interface UsePendientesReportOptions {
   process: 'ccm' | 'prr'
-  autoRefresh?: boolean
-  refreshInterval?: number
-  enabled?: boolean
+  groupBy: 'year' | 'quarter' | 'month'
+  enabled: boolean
+  backgroundFetch?: boolean
+  backgroundFetchInterval?: number
+}
+
+interface UsePendientesReportReturn {
+  report: PendientesReportSummary | null
+  loading: boolean
+  error: string | null
+  changeGrouping: (newGroupBy: 'year' | 'quarter' | 'month') => void
+  groupBy: 'year' | 'quarter' | 'month'
 }
 
 export function usePendientesReport({
   process,
-  autoRefresh = false,
-  refreshInterval = 60000, // 1 minuto por defecto
-  enabled = true
-}: UsePendientesReportOptions) {
+  groupBy: initialGroupBy,
+  enabled,
+  backgroundFetch = false,
+  backgroundFetchInterval = 6 * 60 * 1000, // 6 minutos
+}: UsePendientesReportOptions): UsePendientesReportReturn {
   const [report, setReport] = useState<PendientesReportSummary | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [groupBy, setGroupBy] = useState<'quarter' | 'month' | 'year'>('year')
+  const [groupBy, setGroupBy] = useState<'year' | 'quarter' | 'month'>('year')
 
-  const fetchReport = useCallback(async () => {
-    if (!enabled) return
+  const fetchReport = useCallback(async ({ isBackground = false } = {}) => {
+    if (!enabled && !isBackground) return
 
-    setLoading(true)
+    if (!isBackground) {
+      setLoading(true)
+    }
     setError(null)
 
     try {
-      console.log(`🔍 Fetching pendientes report: ${process.toUpperCase()} grouped by ${groupBy}`)
-
       const cacheKey = `pendientes_${process}_${groupBy}`
       const cached = getCached<PendientesReportSummary>(cacheKey)
       if (cached) {
-        console.log('📦 Pendientes cache hit')
         setReport(cached)
-      } else {
-        const response = await fetch(`/api/dashboard/pendientes-report?process=${process}&groupBy=${groupBy}`)
-        
-        if (!response.ok) {
-          throw new Error(`Error ${response.status}: ${response.statusText}`)
-        }
-
-        const result: { 
-          success: boolean; 
-          report: PendientesReportSummary; 
-          meta: any; 
-          error?: string 
-        } = await response.json()
-
-        if (!result.success) {
-          throw new Error(result.error || 'Error desconocido')
-        }
-
-        setReport(result.report)
-        setCached(cacheKey, result.report)
-
-        console.log(`✅ Reporte cargado: ${result.report.data.length} operadores, ${result.report.grandTotal} total pendientes`)
+        if (!isBackground) setLoading(false)
+        return
       }
 
-    } catch (err) {
-      console.error('❌ Error fetching pendientes report:', err)
-      setError(err instanceof Error ? err.message : 'Error desconocido')
-      setReport(null)
-    } finally {
-      setLoading(false)
-    }
-  }, [enabled, process, groupBy])
+      const response = await fetch(`/api/dashboard/pendientes-report?process=${process}&groupBy=${groupBy}`)
+      
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`)
+      }
 
-  const changeGrouping = (newGroupBy: 'quarter' | 'month' | 'year') => {
+      const result: { 
+        success: boolean; 
+        report: PendientesReportSummary; 
+        meta: any; 
+        error?: string 
+      } = await response.json()
+
+      if (!result.success) {
+        throw new Error(result.error || 'Error desconocido')
+      }
+
+      setReport(result.report)
+      setCached(cacheKey, result.report)
+
+      // Report loaded successfully
+    } catch (err) {
+      if (!isBackground) {
+        setError(err instanceof Error ? err.message : 'Error desconocido')
+      }
+      console.error(`❌ Error fetching pendientes report (${isBackground ? 'background' : 'foreground'}):`, err)
+    } finally {
+      if (!isBackground) {
+        setLoading(false)
+      }
+    }
+  }, [process, groupBy, enabled])
+
+  const changeGrouping = (newGroupBy: 'year' | 'quarter' | 'month') => {
     setGroupBy(newGroupBy)
   }
 
-  // Cargar datos iniciales y recargar cuando cambia el proceso o el agrupamiento
+  // Efecto para carga en PRIMER PLANO
   useEffect(() => {
     if (enabled) {
-      fetchReport()
+      fetchReport({ isBackground: false })
     }
   }, [enabled, fetchReport])
 
-  // Auto-refresh si está habilitado
+  // Efecto para carga en SEGUNDO PLANO
   useEffect(() => {
-    if (!autoRefresh || !enabled) return
+    if (enabled || !backgroundFetch) return
 
-    const interval = setInterval(() => {
-      console.log(`🔄 Auto-refresh pendientes report ${process.toUpperCase()} with grouping ${groupBy}`)
-      fetchReport()
-    }, refreshInterval)
+    let intervalId: NodeJS.Timeout
+    const initialDelay = Math.random() * 9000 // 0-9 segundos
 
-    return () => clearInterval(interval)
-  }, [autoRefresh, refreshInterval, fetchReport, process, groupBy, enabled])
+    const timeoutId = setTimeout(() => {
+      console.log(`[Background] Pre-cargando datos para: Pendientes ${process.toUpperCase()}`)
+      fetchReport({ isBackground: true })
+
+      intervalId = setInterval(() => {
+        console.log(`[Background] Refrescando datos para: Pendientes ${process.toUpperCase()}`)
+        fetchReport({ isBackground: true })
+      }, backgroundFetchInterval)
+    }, initialDelay)
+
+    return () => {
+      clearTimeout(timeoutId)
+      if (intervalId) clearInterval(intervalId)
+    }
+  }, [enabled, backgroundFetch, process, backgroundFetchInterval, fetchReport])
 
   return {
-    // Data
     report,
-    groupBy,
-    
-    // State
     loading,
     error,
-    
-    // Actions
-    refresh: fetchReport,
     changeGrouping,
-    
-    // Stats
-    stats: report ? {
-      totalOperators: report.data.length,
-      totalPendientes: report.grandTotal,
-      yearsSpan: report.years,
-      topOperator: report.data[0]?.operador || null,
-      topOperatorCount: report.data[0]?.total || 0,
-      hasData: report.data.length > 0
-    } : {
-      totalOperators: 0,
-      totalPendientes: 0,
-      yearsSpan: [],
-      topOperator: null,
-      topOperatorCount: 0,
-      hasData: false
-    }
+    groupBy
   }
 } 
  

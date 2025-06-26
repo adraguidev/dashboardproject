@@ -22,10 +22,37 @@ export default function DashboardPage() {
     setActiveModule(moduleId)
   }
 
-  const handleFullRefresh = () => {
-    clearAllCache()
-    // recarga para simplificar; garantiza que los hooks vuelvan a disparar
-    window.location.reload()
+  const handleFullRefresh = async () => {
+    console.log('🔄 Iniciando refresh completo del dashboard')
+    
+    try {
+      // 1. Limpiar cache frontend
+      clearAllCache()
+      
+      // 2. Limpiar cache del servidor - limpieza completa
+      const response = await fetch('/api/cache/clear', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}) // Sin parámetros = limpieza completa
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        console.log('✅ Cache del servidor limpiado:', result.message)
+      } else {
+        console.warn('⚠️ No se pudo limpiar cache del servidor')
+      }
+      
+      // 3. Recargar página para reinicializar todo
+      window.location.reload()
+      
+    } catch (error) {
+      console.error('❌ Error durante refresh:', error)
+      // Si algo falla, aún así recargar la página
+      window.location.reload()
+    }
   }
 
   if (error) {
@@ -41,7 +68,7 @@ export default function DashboardPage() {
         </div>
         
         {/* AI Chat Floating Button */}
-        <AiChatFloating />
+        <AiChatFloating key={selectedProcess} currentProcess={selectedProcess} />
       </div>
     )
   }
@@ -69,7 +96,7 @@ export default function DashboardPage() {
       </div>
 
       {/* AI Chat Floating Button */}
-      <AiChatFloating />
+      <AiChatFloating key={selectedProcess} currentProcess={selectedProcess} />
     </div>
   )
 } 

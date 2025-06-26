@@ -3,13 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev --turbo",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "heroku-postbuild": "next build"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
+    "@google/generative-ai": "^0.15.0",
     "@neondatabase/serverless": "^1.0.1",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-dropdown-menu": "^2.1.15",
@@ -17,6 +18,7 @@
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-tabs": "^1.1.12",
     "@stackframe/stack": "^2.8.12",
+    "@upstash/redis": "^1.35.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
@@ -29,7 +31,6 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "recharts": "^3.0.0",
-    "redis": "^5.5.6",
     "tailwind-merge": "^3.3.1",
     "zod": "^3.25.67"
   },

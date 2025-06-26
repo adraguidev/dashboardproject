@@ -226,8 +226,8 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
           
           {isDatabaseError && (
             <div className="text-xs text-gray-500 mt-4 max-w-md">
-              💡 <strong>Consejo:</strong> Las bases de datos en la nube a veces se "duermen" por inactividad para ahorrar recursos. 
-              El botón "Despertar Base de Datos" ayuda a reactivarla.
+              💡 <strong>Consejo:</strong> Las bases de datos en la nube a veces se &ldquo;duermen&rdquo; por inactividad para ahorrar recursos. 
+              El botón &ldquo;Despertar Base de Datos&rdquo; ayuda a reactivarla.
             </div>
           )}
         </div>

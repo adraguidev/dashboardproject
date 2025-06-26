@@ -7,9 +7,9 @@ import { getCached, setCached } from '@/lib/frontend-cache'
 interface UseIngresosOptions {
   process: 'ccm' | 'prr'
   days?: number
-  autoRefresh?: boolean
-  refreshInterval?: number
   enabled?: boolean
+  backgroundFetch?: boolean
+  backgroundFetchInterval?: number
 }
 
 interface UseIngresosReturn {
@@ -23,29 +23,29 @@ interface UseIngresosReturn {
 export function useIngresos({
   process,
   days = 30,
-  autoRefresh = false,
-  refreshInterval = 30000, // 30 segundos
-  enabled = true
+  enabled = true,
+  backgroundFetch = false,
+  backgroundFetchInterval = 5 * 60 * 1000, // 5 minutos por defecto
 }: UseIngresosOptions): UseIngresosReturn {
   const [report, setReport] = useState<IngresosReport | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [currentDays, setCurrentDays] = useState(days)
 
-  const fetchData = useCallback(async () => {
-    if (!enabled) return
+  const fetchData = useCallback(async ({ isBackground = false } = {}) => {
+    if (!enabled && !isBackground) return
 
-    setIsLoading(true)
+    if (!isBackground) {
+      setIsLoading(true)
+    }
     setError(null)
 
     try {
-      console.log(`🔍 Fetching ingresos data for ${process.toUpperCase()} (${currentDays} days)`)
-      
       const cacheKey = `ingresos_${process}_${currentDays}`
       const cached = getCached<IngresosReport>(cacheKey)
       if (cached) {
-        console.log('📦 Ingresos cache hit')
         setReport(cached)
+        if (!isBackground) setIsLoading(false)
         return
       }
 
@@ -61,50 +61,68 @@ export function useIngresos({
         throw new Error(result.error || 'Error desconocido del servidor')
       }
 
-      console.log(`✅ Ingresos data fetched: ${result.report.totalTramites} trámites`)
       setReport(result.report)
       setCached(cacheKey, result.report)
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
-      console.error('❌ Error fetching ingresos data:', errorMessage)
-      setError(errorMessage)
+      if (!isBackground) {
+        setError(errorMessage)
+      }
+      console.error(`❌ Error fetching ingresos data (${isBackground ? 'background' : 'foreground'}):`, errorMessage)
       setReport(null)
     } finally {
-      setIsLoading(false)
+      if (!isBackground) {
+        setIsLoading(false)
+      }
     }
   }, [enabled, process, currentDays])
 
-  // Función para actualizar el período
   const updatePeriod = useCallback((newDays: number) => {
-    console.log(`📅 Updating period to ${newDays} days`)
     setCurrentDays(newDays)
   }, [])
 
-  // Función para refrescar datos manualmente
   const refreshData = useCallback(async () => {
-    console.log('🔄 Manual refresh triggered')
-    await fetchData()
+    await fetchData({ isBackground: false })
   }, [fetchData])
 
-  // Efecto para cargar datos iniciales y cuando cambian las dependencias
+  // Efecto para carga en PRIMER PLANO (cuando el módulo está activo)
   useEffect(() => {
     if (enabled) {
-      fetchData()
+      fetchData({ isBackground: false })
     }
   }, [enabled, fetchData])
 
-  // Efecto para auto-refresh
+  // Efecto para carga en SEGUNDO PLANO (cuando el módulo está inactivo)
   useEffect(() => {
-    if (!autoRefresh || !enabled) return
+    if (enabled || !backgroundFetch) {
+      return // Salir si el módulo está activo o la función está deshabilitada
+    }
 
-    const interval = setInterval(() => {
-      console.log(`🔄 Auto-refresh triggered (every ${refreshInterval}ms)`)
-      fetchData()
-    }, refreshInterval)
+    let intervalId: NodeJS.Timeout
 
-    return () => clearInterval(interval)
-  }, [autoRefresh, refreshInterval, fetchData])
+    // Demora inicial aleatoria para evitar que todos los hooks se disparen a la vez
+    const initialDelay = Math.random() * 5000 // 0-5 segundos
+
+    const timeoutId = setTimeout(() => {
+      console.log(`[Background] Pre-cargando datos para: Ingresos ${process.toUpperCase()}`)
+      fetchData({ isBackground: true })
+
+      // Después de la carga inicial, establecer el intervalo periódico
+      intervalId = setInterval(() => {
+        console.log(`[Background] Refrescando datos para: Ingresos ${process.toUpperCase()}`)
+        fetchData({ isBackground: true })
+      }, backgroundFetchInterval)
+    }, initialDelay)
+
+    // Función de limpieza para desmontar
+    return () => {
+      clearTimeout(timeoutId)
+      if (intervalId) {
+        clearInterval(intervalId)
+      }
+    }
+  }, [enabled, backgroundFetch, process, backgroundFetchInterval, fetchData])
 
   return {
     report,
