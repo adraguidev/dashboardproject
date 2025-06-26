@@ -128,7 +128,7 @@ export function PendientesReportTable({
             {report.data.map((operadorData, index) => (
               <tr 
                 key={operadorData.operador}
-                className={`transition-colors ${operadorData.colorClass || ''}`}
+                className={`transition-colors ${operadorData.colorClass || 'bg-white'}`}
               >
                 <td className={`px-4 py-3 text-sm font-medium text-gray-900 sticky left-0 z-10 border-r ${operadorData.colorClass || 'bg-white'}`}>
                   <div className="max-w-[200px] truncate" title={operadorData.operador}>
@@ -187,7 +187,7 @@ export function PendientesReportTable({
             ))}
             
             {/* Fila de totales */}
-            <tr className="bg-gradient-to-r from-green-50 to-green-100 border-t-2 border-green-200">
+            <tr className="border-t-2 border-green-200">
               <td className="px-4 py-3.5 text-sm font-bold text-green-900 sticky left-0 bg-gradient-to-r from-green-50 to-green-100 z-10">
                 <div className="flex items-center">
                   <BarChart className="h-4 w-4 mr-1.5 text-green-700" />

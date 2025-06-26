@@ -375,19 +375,17 @@ export function AdvancedPendientesReportTable({
                 </tr>
               ) : (
                 filteredOperators.map((operadorData, index) => (
-                                    <tr 
+                  <tr 
                     key={operadorData.operador}
-                    className={`group transition-colors ${operadorData.colorClass ?? ''} hover:bg-gray-50`}
+                    className={`group transition-colors ${operadorData.colorClass || ''} hover:bg-gray-100`}
                   >
-                    <td className={`sticky left-0 z-10 px-3 py-2 text-sm font-medium text-gray-900 border-r border-gray-200 transition-colors ${operadorData.colorClass ?? 'bg-white'} group-hover:bg-gray-50`}>
+                    <td className={`sticky left-0 z-10 px-3 py-2 text-sm font-medium text-gray-900 border-r border-gray-200 transition-colors ${operadorData.colorClass || 'bg-white'} group-hover:bg-gray-100`}>
                       <div className="max-w-[200px] whitespace-normal leading-tight text-sm" title={operadorData.operador}>
                         {operadorData.operador}
                       </div>
                     </td>
-                    <td className="px-4 py-2 text-sm text-center">
-                      <div className="flex justify-center">
-                        {renderSubEquipoBadge(operadorData.subEquipo || 'NO_ENCONTRADO')}
-                      </div>
+                    <td className="px-4 py-3 text-sm text-center">
+                      {renderSubEquipoBadge(operadorData.subEquipo || 'NO_ENCONTRADO')}
                     </td>
                     {visiblePeriods.map(period => {
                       const count = operadorData.years[period] || 0;
