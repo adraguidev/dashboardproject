@@ -1,7 +1,7 @@
 import { neon } from "@neondatabase/serverless";
 import { drizzle, NeonHttpDatabase } from "drizzle-orm/neon-http";
 import { pgTable, text, integer, timestamp, serial, date } from "drizzle-orm/pg-core";
-import { eq, and, isNull, desc, asc, count, gte, lte, inArray, like, or } from "drizzle-orm";
+import { eq, and, isNull, isNotNull, desc, asc, count, gte, lte, inArray, like, or } from "drizzle-orm";
 
 // Schema para table_ccm
 export const tableCCM = pgTable('table_ccm', {
@@ -275,7 +275,7 @@ export class DirectDatabaseAPI {
       .where(
         and(
           gte(tableCCM.fechapre, fechaInicio),
-          isNull(tableCCM.operadorpre).not()
+          isNotNull(tableCCM.operadorpre)
         )
       )
       .orderBy(desc(tableCCM.fechapre));
@@ -293,7 +293,7 @@ export class DirectDatabaseAPI {
       .where(
         and(
           gte(tablePRR.fechapre, fechaInicio),
-          isNull(tablePRR.operadorpre).not()
+          isNotNull(tablePRR.operadorpre)
         )
       )
       .orderBy(desc(tablePRR.fechapre));
@@ -311,7 +311,7 @@ export class DirectDatabaseAPI {
       .where(
         and(
           gte(tableCCM.fechapre, fechaInicio),
-          isNull(tableCCM.operadorpre).not()
+          isNotNull(tableCCM.operadorpre)
         )
       )
       .orderBy(desc(tableCCM.fechapre), asc(tableCCM.numerotramite))
@@ -331,7 +331,7 @@ export class DirectDatabaseAPI {
       .where(
         and(
           gte(tablePRR.fechapre, fechaInicio),
-          isNull(tablePRR.operadorpre).not()
+          isNotNull(tablePRR.operadorpre)
         )
       )
       .orderBy(desc(tablePRR.fechapre), asc(tablePRR.numerotramite))
@@ -351,7 +351,7 @@ export class DirectDatabaseAPI {
       .where(
         and(
           gte(tableCCM.fechapre, fechaInicio),
-          isNull(tableCCM.operadorpre).not()
+          isNotNull(tableCCM.operadorpre)
         )
       );
     return result[0]?.count || 0;
@@ -369,7 +369,7 @@ export class DirectDatabaseAPI {
       .where(
         and(
           gte(tablePRR.fechapre, fechaInicio),
-          isNull(tablePRR.operadorpre).not()
+          isNotNull(tablePRR.operadorpre)
         )
       );
     return result[0]?.count || 0;
