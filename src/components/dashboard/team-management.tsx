@@ -27,7 +27,6 @@ export function TeamManagement({ isOpen, onClose, selectedProcess }: TeamManagem
     evaluadores,
     loading,
     error,
-    fetchEvaluadores,
     createEvaluador,
     updateEvaluador,
     deleteEvaluador,
@@ -46,13 +45,6 @@ export function TeamManagement({ isOpen, onClose, selectedProcess }: TeamManagem
     nombre_en_base: '',
     sub_equipo: 'EVALUACION'
   })
-
-  // Cargar datos cuando se abre el modal o cambia el proceso
-  useEffect(() => {
-    if (isOpen) {
-      fetchEvaluadores(selectedProcess)
-    }
-  }, [isOpen, selectedProcess, fetchEvaluadores])
 
   const handleAdd = async () => {
     if (!formData.nombre_en_base.trim()) {
