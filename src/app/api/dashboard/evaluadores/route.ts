@@ -1,31 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDrizzleDB } from '@/lib/db'
 import { sql } from 'drizzle-orm'
-import { redisGet, redisSet } from '@/lib/redis'
+import { redisDel } from '@/lib/redis'
 
 // GET - Obtener evaluadores usando Drizzle ORM
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const process = searchParams.get('process') || 'ccm'
-    const noCache = searchParams.get('noCache') === 'true'
-
+    
     if (!['ccm', 'prr'].includes(process)) {
       return NextResponse.json({ error: 'Proceso inválido. Debe ser ccm o prr' }, { status: 400 })
     }
 
-    const cacheKey = `evaluadores_general_${process}`
-
-    if (!noCache) {
-      const cachedData = await redisGet(cacheKey)
-      if (cachedData) {
-        console.log(`✅ Cache hit para evaluadores: ${cacheKey}`)
-        return NextResponse.json(cachedData)
-      }
-      console.log(`- Cache miss para evaluadores: ${cacheKey}`)
-    }
-
-    // Getting evaluadores with Drizzle
+    // Se elimina la capa de caché para esta API para asegurar datos siempre frescos.
+    
     const { db, userEmail } = await getDrizzleDB()
     console.log('✅ Usuario autenticado:', userEmail)
     
@@ -53,10 +42,6 @@ export async function GET(request: NextRequest) {
       lider: row.lider ?? null,
       creado_en: row.creado_en ?? null
     }))
-
-    // Guardar en cache por 1 hora
-    await redisSet(cacheKey, evaluadores, 3600)
-    console.log(`💾 Evaluadores guardados en cache: ${cacheKey}`)
     
     return NextResponse.json(evaluadores)
     
@@ -119,6 +104,11 @@ export async function POST(request: NextRequest) {
       `
     )
     
+    // Invalidar caché
+    const cacheKey = `evaluadores_general_${process}`
+    await redisDel(cacheKey)
+    console.log(`🧹 Cache invalidado para: ${cacheKey}`)
+
     console.log('✅ Evaluador creado exitosamente')
     console.log('➕ === FIN CREAR EVALUADOR ===\n')
     
@@ -192,6 +182,11 @@ export async function PUT(request: NextRequest) {
       `
     )
     
+    // Invalidar caché
+    const cacheKey = `evaluadores_general_${process}`
+    await redisDel(cacheKey)
+    console.log(`🧹 Cache invalidado para: ${cacheKey}`)
+
     if (result.rows.length === 0) {
       return NextResponse.json({ error: 'Evaluador no encontrado' }, { status: 404 })
     }
@@ -246,6 +241,11 @@ export async function DELETE(request: NextRequest) {
       sql`DELETE FROM ${sql.identifier(tableName)} WHERE id = ${id} RETURNING *`
     )
     
+    // Invalidar caché
+    const cacheKey = `evaluadores_general_${process}`
+    await redisDel(cacheKey)
+    console.log(`🧹 Cache invalidado para: ${cacheKey}`)
+
     if (result.rows.length === 0) {
       return NextResponse.json({ error: 'Evaluador no encontrado' }, { status: 404 })
     }
