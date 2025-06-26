@@ -201,7 +201,7 @@ function generateAIRecommendations(data: AIOptimizedDashboardData): string[] {
   
   // Recomendaciones de redistribución
   const evaluadoresDesbalanceados = data.pendientes.aggregated.evaluadores_con_pendientes
-    .filter(e => e.cantidad > data.pendientes.aggregated.total_pendientes * 0.3);
+    .filter((e: any) => e.cantidad > data.pendientes.aggregated.total_pendientes * 0.3);
   
   if (evaluadoresDesbalanceados.length > 0) {
     recommendations.push(`Redistribuir carga de ${evaluadoresDesbalanceados[0].evaluador} (${evaluadoresDesbalanceados[0].cantidad} pendientes)`);
