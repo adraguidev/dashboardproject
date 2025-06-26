@@ -1,18 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { redisFlushAll } from '@/lib/redis'
 import { logInfo, logError } from '@/lib/logger'
 
+// Clase para acceder al caché en memoria (mismo que en server-cache.ts)
+class MemoryCache {
+  private static instance: MemoryCache;
+  private cache: Map<string, any> = new Map();
+  
+  private constructor() {}
+  
+  public static getInstance(): MemoryCache {
+    if (!MemoryCache.instance) {
+      MemoryCache.instance = new MemoryCache();
+    }
+    return MemoryCache.instance;
+  }
+  
+  async flushAll(): Promise<void> {
+    this.cache.clear();
+  }
+}
+
+const memoryCache = MemoryCache.getInstance();
+
 /**
- * Endpoint para limpiar completamente el cache de Redis.
+ * Endpoint para limpiar completamente el caché en memoria.
  * Usado por el botón de refresh global en el dashboard.
  */
 export async function POST(request: NextRequest) {
   try {
-    logInfo('🧹 Iniciando limpieza completa de cache...')
+    logInfo('🧹 Iniciando limpieza completa de caché en memoria...')
     
-    await redisFlushAll()
+    await memoryCache.flushAll()
     
-    logInfo('✅ Cache limpiado completamente')
+    logInfo('✅ Caché en memoria limpiado completamente')
 
     return NextResponse.json({ 
       success: true, 

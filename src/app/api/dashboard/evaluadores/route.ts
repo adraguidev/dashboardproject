@@ -1,7 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import postgresAPI from '@/lib/postgres-api'
-import { redisDel } from '@/lib/redis'
 import { logInfo, logError } from '@/lib/logger'
+
+// Clase para acceder al caché en memoria (mismo que en server-cache.ts)
+class MemoryCache {
+  private static instance: MemoryCache;
+  private cache: Map<string, any> = new Map();
+  
+  private constructor() {}
+  
+  public static getInstance(): MemoryCache {
+    if (!MemoryCache.instance) {
+      MemoryCache.instance = new MemoryCache();
+    }
+    return MemoryCache.instance;
+  }
+  
+  async del(key: string): Promise<void> {
+    this.cache.delete(key);
+  }
+}
+
+const memoryCache = MemoryCache.getInstance();
 
 // GET - Obtener evaluadores usando PostgreSQL directo
 export async function GET(request: NextRequest) {
@@ -60,8 +80,8 @@ export async function POST(request: NextRequest) {
     
     // Invalidar caché
     const cacheKey = `evaluadores_general_${process}`
-    await redisDel(cacheKey)
-    logInfo(`🧹 Cache invalidado para: ${cacheKey}`);
+    await memoryCache.del(cacheKey)
+    logInfo(`🧹 Caché en memoria invalidado para: ${cacheKey}`);
 
     logInfo('✅ Evaluador creado exitosamente');
     return NextResponse.json(result, { status: 201 });
@@ -114,8 +134,8 @@ export async function PUT(request: NextRequest) {
     
     // Invalidar caché
     const cacheKey = `evaluadores_general_${process}`
-    await redisDel(cacheKey)
-    logInfo(`🧹 Cache invalidado para: ${cacheKey}`);
+    await memoryCache.del(cacheKey)
+    logInfo(`🧹 Caché en memoria invalidado para: ${cacheKey}`);
 
     logInfo('✅ Evaluador actualizado exitosamente');
     return NextResponse.json(result);
@@ -155,8 +175,8 @@ export async function DELETE(request: NextRequest) {
     
     // Invalidar caché
     const cacheKey = `evaluadores_general_${process}`
-    await redisDel(cacheKey)
-    logInfo(`🧹 Cache invalidado para: ${cacheKey}`);
+    await memoryCache.del(cacheKey)
+    logInfo(`🧹 Caché en memoria invalidado para: ${cacheKey}`);
 
     if (!success) {
       return NextResponse.json({ error: 'Evaluador no encontrado' }, { status: 404 })

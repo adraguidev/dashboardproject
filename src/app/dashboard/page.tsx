@@ -5,7 +5,6 @@ import { useDashboardUnified, useDashboardCache } from '@/hooks/use-dashboard-un
 import { DashboardHeader } from '@/components/dashboard/dashboard-header'
 import { ProcessModules } from '@/components/dashboard/process-modules'
 import { ErrorDisplay } from '@/components/ui/error-boundary'
-import { AiChatFloating } from '@/components/ui/ai-chat-floating'
 
 export default function DashboardPage() {
   const [selectedProcess, setSelectedProcess] = useState<'ccm' | 'prr'>('ccm')
@@ -112,8 +111,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* AI Chat Floating Button */}
-      <AiChatFloating key={selectedProcess} currentProcess={selectedProcess} />
+      {/* AI Chat Floating Button removido */}
     </div>
   )
 } 

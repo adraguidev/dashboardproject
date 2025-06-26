@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { neonDB } from '@/lib/neon-api'
-import { redisGet, redisSet, redisSetPersistent } from '@/lib/redis'
+import { cachedOperation } from '@/lib/server-cache'
 import { PendientesReportData, PendientesReportSummary, Evaluador, ColorLegend } from '@/types/dashboard'
 import { parseDateSafe } from '@/lib/date-utils'
 
@@ -211,14 +211,6 @@ export async function GET(request: NextRequest) {
     const groupBy = (searchParams.get('groupBy') || 'quarter') as 'year' | 'quarter' | 'month';
 
     const cacheKey = `pendientes_${process}_${groupBy}`;
-    try {
-      const cached = await redisGet(cacheKey);
-      if (cached) {
-        return NextResponse.json({ success: true, report: cached, cached: true });
-      }
-    } catch (e) {
-      console.warn('Redis off (pendientes)', e);
-    }
 
     console.log(`🔍 Generando reporte de pendientes para proceso: ${process}, agrupado por: ${groupBy}`);
 
@@ -228,43 +220,46 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       )
     }
+    
+    // Usar cachedOperation para manejar el caché
+    const report = await cachedOperation({
+      key: cacheKey,
+      ttlSeconds: 24 * 60 * 60, // 24 horas de caché para datos persistentes
+      fetcher: async () => {
+        let data: any[] = []
+        let evaluadores: Evaluador[] = []
 
-    let data: any[] = []
-    let evaluadores: Evaluador[] = []
+        if (process === 'ccm') {
+          console.log('📊 Obteniendo TODOS los datos CCM pendientes y evaluadores...')
+          const [ccmData, ccmEvaluadores] = await Promise.all([
+            neonDB.getAllCCMPendientes(),
+            neonDB.getEvaluadoresCCM()
+          ])
+          data = ccmData
+          evaluadores = ccmEvaluadores
+        } else {
+          console.log('📊 Obteniendo TODOS los datos PRR pendientes y evaluadores...')
+          const [prrData, prrEvaluadores] = await Promise.all([
+            neonDB.getAllPRRPendientes(),
+            neonDB.getEvaluadoresPRR()
+          ])
+          data = prrData
+          evaluadores = prrEvaluadores
+        }
 
-    if (process === 'ccm') {
-      console.log('📊 Obteniendo TODOS los datos CCM pendientes y evaluadores...')
-      const [ccmData, ccmEvaluadores] = await Promise.all([
-        neonDB.getAllCCMPendientes(),
-        neonDB.getEvaluadoresCCM()
-      ])
-      data = ccmData
-      evaluadores = ccmEvaluadores
-    } else {
-      console.log('📊 Obteniendo TODOS los datos PRR pendientes y evaluadores...')
-      const [prrData, prrEvaluadores] = await Promise.all([
-        neonDB.getAllPRRPendientes(),
-        neonDB.getEvaluadoresPRR()
-      ])
-      data = prrData
-      evaluadores = prrEvaluadores
-    }
+        console.log(`✅ Datos obtenidos: ${data.length} registros pendientes, ${evaluadores.length} evaluadores`)
 
-    console.log(`✅ Datos obtenidos: ${data.length} registros pendientes, ${evaluadores.length} evaluadores`)
-
-    const report = generatePendientesReport(data, evaluadores, process, groupBy);
-
-    await redisSetPersistent(cacheKey, report);
-
-    console.log(`📋 Reporte generado: ${report.data.length} operadores, ${report.years.length} periodos, ${report.grandTotal} total`)
+        const generatedReport = generatePendientesReport(data, evaluadores, process, groupBy);
+        console.log(`📋 Reporte generado: ${generatedReport.data.length} operadores, ${generatedReport.years.length} periodos, ${generatedReport.grandTotal} total`);
+        return generatedReport;
+      }
+    });
 
     return NextResponse.json({
       success: true,
       report,
       meta: {
-        processedRecords: data.length,
         uniqueOperators: report.data.length,
-        evaluadoresCount: evaluadores.length,
         yearsSpan: report.years,
         generatedAt: new Date().toISOString(),
         filters: process === 'ccm' ? {

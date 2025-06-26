@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { neonDB } from '@/lib/neon-api'
-import { redisGet, redisSet, redisSetPersistent } from '@/lib/redis'
+import { cachedOperation } from '@/lib/server-cache'
 import { ProduccionReportData, ProduccionReportSummary, Evaluador, ColorLegend } from '@/types/dashboard'
 import { parseDateSafe, isWorkday as isWorkdayUtil } from '@/lib/date-utils'
 
@@ -328,18 +328,13 @@ export async function GET(request: NextRequest) {
     console.log(`✅ Datos obtenidos: ${data.length} registros de producción, ${evaluadores.length} evaluadores`)
 
     const cacheKey = `produccion_${process}_${days}_${dayType}`;
-    try {
-      const cached = await redisGet(cacheKey);
-      if (cached) {
-        return NextResponse.json({ success: true, report: cached, cached: true });
-      }
-    } catch (e) {
-      console.warn('Redis off (produccion)', e);
-    }
-
-    const report = generateProduccionReport(data, evaluadores, process, days, dayType);
-
-    await redisSetPersistent(cacheKey, report);
+    
+    // Usar cachedOperation para gestionar el caché y generar datos cuando sea necesario
+    const report = await cachedOperation({
+      key: cacheKey,
+      ttlSeconds: 24 * 60 * 60, // 24 horas de caché para datos persistentes
+      fetcher: async () => generateProduccionReport(data, evaluadores, process, days, dayType)
+    });
 
     console.log(`📋 Reporte generado: ${report.data.length} operadores, ${report.fechas.length} días, ${report.grandTotal} total`)
 

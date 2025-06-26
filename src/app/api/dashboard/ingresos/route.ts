@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { neonDB } from '@/lib/neon-api'
-import { redisGet, redisSet, redisSetPersistent } from '@/lib/redis'
+import { cachedOperation } from '@/lib/server-cache'
 import type { IngresosReport, IngresosChartData, MonthlyIngresosData, WeeklyIngresosData, MonthlyIngresosEntry, WeeklyIngresosEntry } from '@/types/dashboard'
 import { parseDateSafe } from '@/lib/date-utils'
 
@@ -385,21 +385,13 @@ function generateIngresosReport(
 }
 
 export async function GET(request: NextRequest) {
-  // Caching con Redis
+  // Caching con memoria local
   try {
     const { searchParams } = new URL(request.url);
     const process = searchParams.get('process') as 'ccm' | 'prr' | null;
     const days = parseInt(searchParams.get('days') || '30');
 
     const cacheKey = `ingresos_${process}_${days}`;
-    try {
-      const cached = await redisGet<IngresosReport>(cacheKey);
-      if (cached) {
-        return NextResponse.json({ success: true, report: cached, cached: true });
-      }
-    } catch (e) {
-      console.warn('Redis no disponible (ingresos)', e);
-    }
 
     if (!['ccm', 'prr'].includes(process || 'ccm')) {
       return NextResponse.json({ 
@@ -437,11 +429,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Generar reporte
-    const report = generateIngresosReport(data, process as 'ccm' | 'prr', days);
-
-    // Guardar en cache persistente (sin TTL) - solo se limpia manualmente
-    await redisSetPersistent(cacheKey, report);
+    // Usar cachedOperation para gestionar el caché y generar datos cuando sea necesario
+    const report = await cachedOperation({
+      key: cacheKey,
+      ttlSeconds: 24 * 60 * 60, // 24 horas de caché para datos persistentes
+      fetcher: async () => generateIngresosReport(data, process as 'ccm' | 'prr', days)
+    });
 
     return NextResponse.json({
       success: true,
