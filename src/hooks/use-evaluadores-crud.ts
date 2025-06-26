@@ -25,7 +25,7 @@ interface UseEvaluadoresCRUDResult {
   error: string | null
   
   // Operaciones CRUD
-  fetchEvaluadores: (process: 'ccm' | 'prr') => Promise<void>
+  refetch: () => void
   createEvaluador: (process: 'ccm' | 'prr', data: Omit<Evaluador, 'id'>) => Promise<boolean>
   updateEvaluador: (process: 'ccm' | 'prr', data: Evaluador) => Promise<boolean>
   deleteEvaluador: (process: 'ccm' | 'prr', id: number) => Promise<boolean>
@@ -98,80 +98,68 @@ async function deleteEvaluadorAPI(process: 'ccm' | 'prr', id: number): Promise<v
   }
 }
 
-export function useEvaluadoresCRUD(): UseEvaluadoresCRUDResult {
+export function useEvaluadoresCRUD(process: 'ccm' | 'prr' = 'ccm'): UseEvaluadoresCRUDResult {
   const queryClient = useQueryClient()
-  
-  // Estado local para tracking del proceso actual y datos
-  const [currentProcess, setCurrentProcess] = useState<'ccm' | 'prr'>('ccm')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  // Mutación para crear evaluador
+  // ✅ UseQuery nativo para obtener evaluadores
+  const {
+    data: evaluadores = [],
+    isLoading: loading,
+    error: queryError,
+    refetch
+  } = useQuery({
+    queryKey: ['evaluadores', process],
+    queryFn: () => fetchEvaluadoresAPI(process),
+    staleTime: 1000 * 60 * 2, // 2 minutos
+    gcTime: 1000 * 60 * 10, // 10 minutos
+    refetchOnWindowFocus: false,
+    retry: 2
+  })
+
+  // Error handling
+  const error = queryError instanceof Error ? queryError.message : null
+
+  // ✅ Mutación para crear evaluador con invalidación optimizada
   const createMutation = useMutation({
     mutationFn: ({ process, data }: { process: 'ccm' | 'prr', data: Omit<Evaluador, 'id'> }) => 
       createEvaluadorAPI(process, data),
     onSuccess: (_, variables) => {
-      // Invalidar cache para refrescar datos
-      queryClient.invalidateQueries({ queryKey: ['evaluadores', variables.process] })
-      logInfo('✅ Evaluador creado, cache invalidado')
+      // Invalidar ambos procesos para asegurar sincronización
+      queryClient.invalidateQueries({ queryKey: ['evaluadores'] })
+      logInfo('✅ Evaluador creado, cache invalidado completamente')
     },
     onError: (error) => {
       logError('❌ Error en mutación crear evaluador:', error)
     }
   })
 
-  // Mutación para actualizar evaluador
+  // ✅ Mutación para actualizar evaluador con invalidación optimizada
   const updateMutation = useMutation({
     mutationFn: ({ process, data }: { process: 'ccm' | 'prr', data: Evaluador }) => 
       updateEvaluadorAPI(process, data),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['evaluadores', variables.process] })
-      logInfo('✅ Evaluador actualizado, cache invalidado')
+      queryClient.invalidateQueries({ queryKey: ['evaluadores'] })
+      logInfo('✅ Evaluador actualizado, cache invalidado completamente')
     },
     onError: (error) => {
       logError('❌ Error en mutación actualizar evaluador:', error)
     }
   })
 
-  // Mutación para eliminar evaluador
+  // ✅ Mutación para eliminar evaluador con invalidación optimizada
   const deleteMutation = useMutation({
     mutationFn: ({ process, id }: { process: 'ccm' | 'prr', id: number }) => 
       deleteEvaluadorAPI(process, id),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['evaluadores', variables.process] })
-      logInfo('✅ Evaluador eliminado, cache invalidado')
+      queryClient.invalidateQueries({ queryKey: ['evaluadores'] })
+      logInfo('✅ Evaluador eliminado, cache invalidado completamente')
     },
     onError: (error) => {
       logError('❌ Error en mutación eliminar evaluador:', error)
     }
   })
 
-  // Función para cargar evaluadores manualmente
-  const fetchEvaluadores = async (process: 'ccm' | 'prr') => {
-    setLoading(true)
-    setError(null)
-    setCurrentProcess(process)
-    
-    try {
-      logInfo(`🔄 Cargando evaluadores para: ${process.toUpperCase()}`)
-      
-      const data = await queryClient.fetchQuery({
-        queryKey: ['evaluadores', process],
-        queryFn: () => fetchEvaluadoresAPI(process),
-        staleTime: 1000 * 60 * 5,
-      })
-      
-      logInfo(`✅ Evaluadores cargados: ${data.length} registros`)
-    } catch (fetchError) {
-      const errorMessage = fetchError instanceof Error ? fetchError.message : 'Error desconocido'
-      setError(errorMessage)
-      logError(`❌ Error cargando evaluadores para ${process}:`, fetchError)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Función para crear evaluador
+  // ✅ Función para crear evaluador
   const createEvaluador = async (process: 'ccm' | 'prr', data: Omit<Evaluador, 'id'>): Promise<boolean> => {
     try {
       await createMutation.mutateAsync({ process, data })
@@ -182,7 +170,7 @@ export function useEvaluadoresCRUD(): UseEvaluadoresCRUDResult {
     }
   }
 
-  // Función para actualizar evaluador
+  // ✅ Función para actualizar evaluador
   const updateEvaluador = async (process: 'ccm' | 'prr', data: Evaluador): Promise<boolean> => {
     try {
       await updateMutation.mutateAsync({ process, data })
@@ -193,7 +181,7 @@ export function useEvaluadoresCRUD(): UseEvaluadoresCRUDResult {
     }
   }
 
-  // Función para eliminar evaluador
+  // ✅ Función para eliminar evaluador
   const deleteEvaluador = async (process: 'ccm' | 'prr', id: number): Promise<boolean> => {
     try {
       await deleteMutation.mutateAsync({ process, id })
@@ -204,16 +192,11 @@ export function useEvaluadoresCRUD(): UseEvaluadoresCRUDResult {
     }
   }
 
-  // Obtener datos actuales del cache
-  const getCurrentData = (process: 'ccm' | 'prr'): Evaluador[] => {
-    return queryClient.getQueryData(['evaluadores', process]) || []
-  }
-
   return {
-    evaluadores: getCurrentData(currentProcess),
+    evaluadores,
     loading,
     error,
-    fetchEvaluadores,
+    refetch,
     createEvaluador,
     updateEvaluador,
     deleteEvaluador,

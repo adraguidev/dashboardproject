@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import postgresAPI from '@/lib/postgres-api';
-import { redisGet, redisSetPersistent } from '@/lib/redis';
 import { logInfo, logError } from '@/lib/logger';
+import { cachedOperation } from '@/lib/server-cache';
 
 // Funciones auxiliares para consolidar datos con PostgreSQL directo
 async function getIngresosData(proceso: string) {
@@ -36,85 +36,82 @@ async function getProcessesData() {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const proceso = searchParams.get('proceso') || 'CCM';
-    
-    // Intentar obtener desde cache primero
-    const cacheKey = `dashboard:unified:${proceso}`;
-    const cached = await redisGet(cacheKey);
-    
-    if (cached) {
-      logInfo('Datos del dashboard obtenidos desde cache', { proceso });
-      return NextResponse.json(cached);
+    const proceso = searchParams.get('proceso')?.toUpperCase() || 'CCM';
+
+    // 1. VALIDACIÓN DE ENTRADA ESTRICTA
+    if (proceso !== 'CCM' && proceso !== 'PRR') {
+      logError(`Intento de acceso con proceso no válido: ${proceso}`);
+      return NextResponse.json({ error: `Proceso no válido: ${proceso}` }, { status: 400 });
     }
 
-    logInfo('Obteniendo datos frescos del dashboard', { proceso });
+    // 2. Usar el gestor de cache para toda la operación
+    const dashboardData = await cachedOperation({
+      key: `dashboard:unified:${proceso}`,
+      ttlSeconds: 3 * 60 * 60, // 3 horas
 
-    // Ejecutar todas las consultas EN PARALELO - patrón enterprise
-    const [
-      ingresosData, 
-      produccionData, 
-      pendientesData, 
-      evaluadoresData, 
-      kpisData,
-      processesData
-    ] = await Promise.allSettled([
-      getIngresosData(proceso),
-      getProduccionData(proceso),
-      getPendientesData(proceso),
-      getEvaluadoresData(),
-      getKPIsData(),
-      getProcessesData()
-    ]);
+      // Función que obtiene todos los datos si no están en cache
+      fetcher: async () => {
+        logInfo(`Ejecutando fetcher para dashboard unificado: ${proceso}`);
+        const [
+          ingresosResult, 
+          produccionResult, 
+          pendientesResult, 
+          evaluadoresResult, 
+          kpisResult,
+          processesResult
+        ] = await Promise.allSettled([
+          getIngresosData(proceso),
+          getProduccionData(proceso),
+          getPendientesData(proceso),
+          getEvaluadoresData(),
+          getKPIsData(),
+          getProcessesData()
+        ]);
 
-    // Procesar resultados y manejar errores individuales
-    const dashboardData = {
-      // Datos principales
-      ingresos: ingresosData.status === 'fulfilled' ? ingresosData.value : { data: [], error: 'Error cargando ingresos' },
-      produccion: produccionData.status === 'fulfilled' ? produccionData.value : { data: [], error: 'Error cargando producción' },
-      pendientes: pendientesData.status === 'fulfilled' ? pendientesData.value : { data: [], error: 'Error cargando pendientes' },
-      evaluadores: evaluadoresData.status === 'fulfilled' ? evaluadoresData.value : { data: [], error: 'Error cargando evaluadores' },
-      kpis: kpisData.status === 'fulfilled' ? kpisData.value : { data: [], error: 'Error cargando KPIs' },
-      processes: processesData.status === 'fulfilled' ? processesData.value : { data: [], error: 'Error cargando procesos' },
-      
-      // Metadata
-      metadata: {
-        proceso,
-        timestamp: Date.now(),
-        cacheHit: false,
-        errors: [
-          ingresosData.status === 'rejected' ? `ingresos: ${ingresosData.reason}` : null,
-          produccionData.status === 'rejected' ? `produccion: ${produccionData.reason}` : null,
-          pendientesData.status === 'rejected' ? `pendientes: ${pendientesData.reason}` : null,
-          evaluadoresData.status === 'rejected' ? `evaluadores: ${evaluadoresData.reason}` : null,
-          kpisData.status === 'rejected' ? `kpis: ${kpisData.reason}` : null,
-          processesData.status === 'rejected' ? `processes: ${processesData.reason}` : null,
-        ].filter(Boolean)
+        const errors = [
+          ingresosResult.status === 'rejected' ? `ingresos: ${ingresosResult.reason}` : null,
+          produccionResult.status === 'rejected' ? `produccion: ${produccionResult.reason}` : null,
+          pendientesResult.status === 'rejected' ? `pendientes: ${pendientesResult.reason}` : null,
+          evaluadoresResult.status === 'rejected' ? `evaluadores: ${evaluadoresResult.reason}` : null,
+          kpisResult.status === 'rejected' ? `kpis: ${kpisResult.reason}` : null,
+          processesResult.status === 'rejected' ? `processes: ${processesResult.reason}` : null,
+        ].filter(Boolean);
+
+        return {
+          ingresos: ingresosResult.status === 'fulfilled' ? ingresosResult.value : [],
+          produccion: produccionResult.status === 'fulfilled' ? produccionResult.value : [],
+          pendientes: pendientesResult.status === 'fulfilled' ? pendientesResult.value : [],
+          evaluadores: evaluadoresResult.status === 'fulfilled' ? evaluadoresResult.value : [],
+          kpis: kpisResult.status === 'fulfilled' ? kpisResult.value : {},
+          processes: processesResult.status === 'fulfilled' ? processesResult.value : [],
+          metadata: {
+            proceso,
+            timestamp: Date.now(),
+            cacheHit: false, // Será cache hit en la próxima, no en esta
+            errors
+          }
+        };
+      },
+
+      // Validador personalizado para los datos del dashboard
+      validator: (data) => {
+        if (!data) return false;
+        const hasErrors = data.metadata.errors.length > 0;
+        const hasData = 
+          data.ingresos.length > 0 || 
+          data.produccion.length > 0 ||
+          data.pendientes.length > 0;
+        
+        return !hasErrors && hasData;
       }
-    };
-
-    // Cache persistente por proceso - estrategia enterprise
-    await redisSetPersistent(cacheKey, dashboardData);
-    
-    logInfo('Dashboard data cached successfully', { 
-      proceso, 
-      errors: dashboardData.metadata.errors.length 
     });
-
+    
     return NextResponse.json(dashboardData);
 
   } catch (error) {
-    logError('Error fatal en dashboard unificado', error);
-    
+    logError('Error fatal en GET /api/dashboard/unified', error);
     return NextResponse.json(
-      { 
-        error: 'Error interno del servidor',
-        details: error instanceof Error ? error.message : 'Error desconocido',
-        metadata: {
-          timestamp: Date.now(),
-          cacheHit: false,
-          errors: ['Error fatal del sistema']
-        }
-      },
+      { error: 'Error interno del servidor' },
       { status: 500 }
     );
   }

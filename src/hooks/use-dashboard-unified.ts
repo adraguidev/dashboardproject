@@ -83,7 +83,7 @@ export function useDashboardUnified(proceso: string) {
   // Prefetching inteligente de otros procesos en background
   useEffect(() => {
     if (dashboardQuery.isSuccess && !dashboardQuery.isFetching) {
-      const otherProcesos = ['CCM', 'PRR', 'MDF'].filter(p => p !== proceso);
+      const otherProcesos = ['CCM', 'PRR'].filter(p => p !== proceso);
       
       otherProcesos.forEach(otherProceso => {
         // Solo prefetch si no está ya en cache o está stale

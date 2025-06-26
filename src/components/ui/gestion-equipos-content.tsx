@@ -47,14 +47,14 @@ export function GestionEquiposContent() {
     evaluadores,
     loading,
     error,
-    fetchEvaluadores,
+    refetch,
     createEvaluador,
     updateEvaluador,
     deleteEvaluador,
     creating,
     updating,
     deleting
-  } = useEvaluadoresCRUD()
+  } = useEvaluadoresCRUD(selectedProcess)
 
   const [editingId, setEditingId] = useState<number | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -75,9 +75,8 @@ export function GestionEquiposContent() {
     sub_equipo: 'EVALUACION'
   })
 
-  useEffect(() => {
-    fetchEvaluadores(selectedProcess)
-  }, [selectedProcess])
+  // El hook useQuery ya maneja automáticamente el cambio de proceso
+  // No necesitamos useEffect manual
 
   const handleProcessChange = (process: 'ccm' | 'prr') => {
     router.push(`/gestion-equipos?proceso=${process}`)
@@ -184,7 +183,7 @@ export function GestionEquiposContent() {
         <DashboardHeader
           selectedProcess={selectedProcess}
           onProcessChange={handleProcessChange}
-          onRefresh={() => fetchEvaluadores(selectedProcess)}
+          onRefresh={() => refetch()}
           loading={loading}
         />
         <div className="mt-4 mb-8 flex justify-between items-center">

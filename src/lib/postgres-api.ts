@@ -550,16 +550,13 @@ export class PostgresAPI {
     try {
       logInfo('🔄 Obteniendo procesos disponibles');
       
-      // Por ahora retornamos los procesos conocidos
-      // En el futuro podríamos obtenerlos dinámicamente de la BD
-      const procesos = ['CCM', 'PRR', 'MDF'];
-      
-      logInfo('✅ Procesos obtenidos:', procesos);
-      return procesos;
-      
+      // Por ahora, devolvemos una lista estática.
+      // Podríamos hacer una consulta a la base de datos si fuera necesario.
+      logInfo('✅ Procesos obtenidos');
+      return ['CCM', 'PRR'];
     } catch (error) {
-      logError('❌ Error obteniendo procesos:', error);
-      return ['CCM', 'PRR', 'MDF'];
+      logError('❌ Error obteniendo la lista de procesos:', error);
+      return [];
     }
   }
 
