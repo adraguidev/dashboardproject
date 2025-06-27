@@ -122,7 +122,7 @@ export default function DashboardPage() {
       />
 
       {/* Main Content Container - Balanced width */}
-      <div className="max-w-6xl mx-auto px-6 py-6">
+      <div className="max-w-7xl mx-auto px-6 py-6">
         {/* Main Content */}
         <div className="bg-white border border-gray-200/60 rounded-xl shadow-sm overflow-hidden">
           <ProcessModules
