@@ -1,0 +1,24 @@
+# Directorio de dependencias. Heroku instala las suyas.
+/node_modules/
+
+# Caché de compilación local. Heroku genera el suyo.
+/.next/
+
+# Archivos de documentación y configuración local.
+README.md
+README-*.md
+OPTIMIZACIONES_PARTE_*.md
+LINTER_ISSUES.md
+.env
+.env*.local
+
+# Metadatos de Git, innecesarios para Heroku.
+.git/
+.gitignore
+
+# Archivos de log y de configuración de editores.
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.vscode/
+.idea/ 
