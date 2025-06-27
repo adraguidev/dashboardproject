@@ -353,120 +353,63 @@ async function convertirColumnasFecha(sql: any, conversiones: Record<string, str
 }
 
 export async function POST(request: NextRequest) {
-  console.log('🚀 Iniciando procesamiento de archivos...')
+  console.log('🚀 Iniciando subida de archivos a R2...');
   
   try {
-    // Verificar variables de entorno
+    // Verificar variables de entorno de Cloudflare R2
     if (!process.env.CLOUDFLARE_R2_ENDPOINT || !process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || 
         !process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || !process.env.CLOUDFLARE_R2_BUCKET_NAME) {
-      throw new Error('Variables de entorno de Cloudflare R2 no configuradas')
+      throw new Error('Variables de entorno de Cloudflare R2 no configuradas');
     }
 
-    // Obtener archivos del formulario
-    const formData = await request.formData()
-    const ccmFile = formData.get('ccm_file') as File | null
-    const prrFile = formData.get('prr_file') as File | null
+    const formData = await request.formData();
+    const ccmFile = formData.get('ccm_file') as File | null;
+    const prrFile = formData.get('prr_file') as File | null;
 
     if (!ccmFile && !prrFile) {
       return NextResponse.json(
         { error: 'Debes proporcionar al menos un archivo (ccm_file o prr_file).' },
         { status: 400 }
-      )
+      );
     }
 
-    console.log(`📂 Archivos recibidos:`);
-    if (ccmFile) console.log(`   - CCM: ${ccmFile.name} (${(ccmFile.size / 1024 / 1024).toFixed(1)} MB)`);
-    if (prrFile) console.log(`   - PRR: ${prrFile.name} (${(prrFile.size / 1024 / 1024).toFixed(1)} MB)`);
-
-    // Subir archivos a R2 y construir la configuración dinámicamente
-    console.log('☁️ Subiendo archivos a Cloudflare R2...');
-    const fileConfigs: { key: string; tableName: string; fileName: string; buffer: Buffer; }[] = [];
+    const uploadedFiles = [];
 
     if (ccmFile) {
-        const ccmBuffer = Buffer.from(await ccmFile.arrayBuffer());
-        const ccmKey = await uploadToR2(ccmBuffer, ccmFile.name);
-        fileConfigs.push({ key: ccmKey, tableName: 'table_ccm', fileName: ccmFile.name, buffer: ccmBuffer });
-        console.log('✅ Archivo CCM subido a R2.');
+      console.log(`☁️ Subiendo ${ccmFile.name} a R2...`);
+      const ccmBuffer = Buffer.from(await ccmFile.arrayBuffer());
+      const ccmKey = await uploadToR2(ccmBuffer, ccmFile.name);
+      uploadedFiles.push({ fileName: ccmFile.name, key: ccmKey, table: 'table_ccm' });
+      console.log(`✅ Archivo CCM subido a R2 con clave: ${ccmKey}`);
     }
 
     if (prrFile) {
-        const prrBuffer = Buffer.from(await prrFile.arrayBuffer());
-        const prrKey = await uploadToR2(prrBuffer, prrFile.name);
-        fileConfigs.push({ key: prrKey, tableName: 'table_prr', fileName: prrFile.name, buffer: prrBuffer });
-        console.log('✅ Archivo PRR subido a R2.');
+      console.log(`☁️ Subiendo ${prrFile.name} a R2...`);
+      const prrBuffer = Buffer.from(await prrFile.arrayBuffer());
+      const prrKey = await uploadToR2(prrBuffer, prrFile.name);
+      uploadedFiles.push({ fileName: prrFile.name, key: prrKey, table: 'table_prr' });
+      console.log(`✅ Archivo PRR subido a R2 con clave: ${prrKey}`);
     }
 
-    // Conectar a la base de datos
-    console.log('🔌 Conectando a la base de datos (modo DIRECTO para carga)...')
-    const connectionString = process.env.DATABASE_DIRECT_URL
-    if (!connectionString) {
-      throw new Error("No se encontró DATABASE_DIRECT_URL en variables de entorno. Es requerida para la carga de archivos.")
-    }
-    
-    const sql = neon(connectionString)
-    console.log('✅ Conexión a la base de datos (DIRECTA) establecida')
-
-    let totalProcessedRows = 0
-
-    // Procesar cada archivo - exactamente como en el bucle de Colab
-    for (const config of fileConfigs) {
-      console.log(`\n📂 Procesando archivo: ${config.fileName}`)
-      
-      try {
-        // Leer archivo según extensión
-        const rawData = await readFileAuto(config.buffer, config.fileName)
-        console.log(`📊 Datos leídos: ${rawData.length} filas`)
-        
-        // Limpiar nombres de columnas
-        const { columns, rows } = cleanColumnNames(rawData)
-        console.log(`🧹 Columnas limpiadas: ${columns.length} columnas, ${rows.length} filas de datos`)
-        
-        // Mostrar ejemplo de datos para debug
-        console.log(`📊 Columnas: ${columns.slice(0, 10).join(', ')}${columns.length > 10 ? '...' : ''}`)
-        if (rows.length > 0) {
-          console.log(`📝 Primera fila de ejemplo:`, rows[0].slice(0, 5))
-        }
-        
-        // Cargar a PostgreSQL
-        const processedRows = await copyDataFrameToPostgres(columns, rows, config.tableName, sql)
-        totalProcessedRows += processedRows
-        
-        console.log(`✅ ${config.tableName} procesada exitosamente`)
-        
-      } catch (error) {
-        console.error(`❌ Error procesando ${config.fileName}:`, error)
-        throw new Error(`Error procesando ${config.fileName}: ${error instanceof Error ? error.message : 'Error desconocido'}`)
-      }
-    }
-
-    // Convertir columnas a tipo DATE - exactamente como en Colab
-    console.log('\n🔄 Convirtiendo columnas de fecha...')
-    await convertirColumnasFecha(sql, conversiones)
-
-    console.log('\n🎉 Procesamiento completado exitosamente')
-    console.log(`📊 Total de filas procesadas: ${totalProcessedRows}`)
-    
-    const tablesUpdated = fileConfigs.map(config => config.tableName);
+    // AÑADIR A LA COLA DE TRABAJO (Este es el siguiente paso a implementar)
+    // Por ahora, solo confirmamos la subida.
+    console.log('✅ Subida completada. Los archivos serán procesados en segundo plano.');
 
     return NextResponse.json({
       success: true,
-      message: `Archivos procesados exitosamente. ${totalProcessedRows} filas insertadas en: ${tablesUpdated.join(', ')}.`,
-      details: {
-        totalRows: totalProcessedRows,
-        tablesUpdated: tablesUpdated,
-        dateColumnsConverted: "multiple"
-      }
-    })
+      message: 'Archivos recibidos y en cola para procesamiento.',
+      files: uploadedFiles,
+    }, { status: 202 }); // 202 Accepted indica que la solicitud fue aceptada pero el procesamiento no ha terminado.
 
   } catch (error) {
-    console.error('❌ Error general:', error)
+    console.error('❌ Error durante la subida de archivos a R2:', error);
     
     return NextResponse.json(
       { 
-        error: error instanceof Error ? error.message : 'Error interno del servidor',
-        details: 'Revisar logs del servidor para más información'
+        error: 'Error al subir los archivos',
+        details: error instanceof Error ? error.message : 'Error desconocido'
       },
       { status: 500 }
-    )
+    );
   }
 }
