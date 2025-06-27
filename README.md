@@ -1,48 +1,62 @@
-# UFSM Dashboard
+# UFSM Dashboard - Plataforma de Análisis de Datos
 
-Dashboard avanzado para análisis de KPIs, métricas y procesos de negocio construido con Next.js, React, TypeScript y PostgreSQL.
+Dashboard avanzado de alto rendimiento para el análisis de KPIs, métricas y procesos de negocio. Construido con un stack tecnológico moderno y enfocado en la performance y la experiencia de usuario.
 
-## 🚀 Características
+![Dashboard Screenshot](https://i.imgur.com/your-screenshot.png) <!-- Reemplazar con una screenshot real -->
 
-- **📊 KPIs Avanzados**: Visualización de métricas clave con tendencias y comparativas
-- **📈 Gráficos Interactivos**: Múltiples tipos de gráficos usando Recharts
-- **🔄 Gestión de Procesos**: Organización por procesos de negocio
-- **🎨 Personalización**: Dashboard completamente personalizable
-- **📱 Responsive**: Diseño adaptable a todos los dispositivos
-- **⚡ Filtrado Avanzado**: Filtros dinámicos para análisis detallado
-- **🗄️ Base de Datos**: Integración con PostgreSQL via Prisma
-- **🔒 TypeScript**: Totalmente tipado para mejor desarrollo
+## 🚀 Características Principales
+
+- **📊 KPIs Dinámicos**: Visualización de métricas clave con tendencias y comparativas en tiempo real.
+- **📈 Gráficos Interactivos**: Múltiples tipos de gráficos (líneas, barras) usando Recharts, con carga optimizada.
+- **🔄 Gestión de Procesos**: Análisis modular y separado para procesos de negocio (CCM y PRR).
+- **⚡ Arquitectura de Alto Rendimiento**:
+  - **Caché Multinivel**: Sistema de caché en memoria (server-side) y en cliente para una respuesta casi instantánea.
+  - **Carga de Datos Unificada**: Hook `useDashboardUnified` que obtiene todos los datos necesarios en una sola petición.
+  - **Prefetching Inteligente**: Precarga de datos de otros procesos en segundo plano para una navegación fluida.
+- **📂 Carga de Archivos Optimizada**: Subida y procesamiento de archivos Excel (.xlsx, .xls) y CSV directamente a la base de datos a través de Cloudflare R2.
+- **🔒 TypeScript End-to-End**: Totalmente tipado para robustez y mantenibilidad del código.
+- **📱 Interfaz Moderna y Responsiva**: Construido con Tailwind CSS y Radix UI para una UI/UX de alta calidad en todos los dispositivos.
+- **🔑 Gestión de Autenticación**: Sistema de autenticación integrado con Stackframe.
 
 ## 🛠️ Stack Tecnológico
 
-- **Frontend**: Next.js 15, React 19, TypeScript
-- **Styling**: Tailwind CSS 4, Radix UI
-- **Charts**: Recharts
-- **Database**: PostgreSQL (Neon)
-- **ORM**: Prisma
-- **Forms**: React Hook Form + Zod
-- **State**: React Query (TanStack Query)
+- **Framework**: Next.js 15.3 (con App Router y React 19)
+- **Lenguaje**: TypeScript
+- **Styling**: Tailwind CSS, Radix UI
+- **Visualización de Datos**: Recharts
+- **Gestión de Estado del Servidor**: TanStack Query (React Query) v5
+- **ORM**: Drizzle ORM
+- **Base de Datos**: PostgreSQL (optimizado para Neon Serverless)
+- **Almacenamiento de Archivos**: Cloudflare R2
+- **Autenticación**: Stackframe
 
 ## 📁 Estructura del Proyecto
 
+La arquitectura está diseñada para ser escalable y mantenible.
+
 ```
-ufsm-dashboard/
+dashboardproject/
 ├── src/
-│   ├── app/                    # App Router (Next.js 13+)
+│   ├── app/                    # Rutas de la aplicación (App Router)
 │   │   ├── dashboard/          # Página principal del dashboard
-│   │   ├── api/                # API Routes
-│   │   ├── layout.tsx          # Layout principal
-│   │   └── globals.css         # Estilos globales
-│   ├── components/             # Componentes React
-│   │   ├── ui/                 # Componentes base de UI
-│   │   ├── dashboard/          # Componentes del dashboard
-│   │   └── charts/             # Componentes de gráficos
-│   ├── lib/                    # Utilidades y configuración
-│   ├── hooks/                  # Custom hooks
-│   ├── types/                  # Tipos TypeScript
-│   └── data/                   # Datos de ejemplo
-├── prisma/                     # Esquema de base de datos
+│   │   └── api/                # API Routes para backend
+│   │       ├── dashboard/
+│   │       │   ├── unified/    # Endpoint unificado de datos
+│   │       │   └── upload-files/ # Endpoint para subida de archivos
+│   │       └── ...
+│   ├── components/             # Componentes React reutilizables
+│   │   ├── ui/                 # Componentes de UI (botones, cards, etc.)
+│   │   └── dashboard/          # Componentes específicos del dashboard
+│   ├── hooks/                  # Custom Hooks de React
+│   │   ├── use-dashboard-unified.ts # Hook principal para carga de datos
+│   │   └── ...
+│   ├── lib/                    # Librerías auxiliares y utilidades
+│   │   ├── db.ts               # Lógica de conexión y queries con Drizzle
+│   │   ├── server-cache.ts     # Sistema de caché del lado del servidor
+│   │   └── ...
+│   └── types/                  # Definiciones de tipos de TypeScript
 ├── public/                     # Archivos estáticos
+├── scripts/                    # Scripts SQL para configuración
 └── ...
 ```
 
@@ -50,168 +64,69 @@ ufsm-dashboard/
 
 ### Prerrequisitos
 
-- Node.js 18+ 
+- Node.js v18+
 - pnpm (recomendado)
-- PostgreSQL database (Neon recomendado)
+- Una base de datos PostgreSQL (se recomienda [Neon](https://neon.tech/))
+- Credenciales de Cloudflare R2 para la subida de archivos.
 
 ### Instalación
 
-1. **Clonar el repositorio**
-```bash
-git clone <repo-url>
-cd ufsm-dashboard
-```
+1.  **Clonar el repositorio**
+    ```bash
+    git clone git@github.com:adraguidev/dashboardproject.git
+    cd dashboardproject
+    ```
 
-2. **Instalar dependencias**
-```bash
-pnpm install
-```
+2.  **Instalar dependencias**
+    ```bash
+    pnpm install
+    ```
 
-3. **Configurar variables de entorno**
-Copiar `.env.example` a `.env` y configurar:
-```bash
-cp .env.example .env
-```
+3.  **Configurar variables de entorno**
+    Crea un archivo `.env.local` en la raíz del proyecto basándote en `.env.example` (si existe) o usando las siguientes variables:
 
-Editar `.env`:
-```env
-# Neon PostgreSQL Database
-DATABASE_URL="postgresql://username:password@host.region.neon.tech/dbname?sslmode=require"
+    ```env
+    # Base de Datos PostgreSQL (Neon)
+    # URL para la aplicación (pooler)
+    DATABASE_URL="postgresql://user:password@host.region.neon.tech/dbname?sslmode=require"
+    # URL para cargas masivas y migraciones (directa)
+    DATABASE_DIRECT_URL="postgresql://user:password@host.region.neon.tech/dbname?sslmode=require"
 
-# Next.js Configuration  
-NEXTAUTH_SECRET="your-secret-key-here"
-NEXTAUTH_URL="http://localhost:3000"
+    # Cloudflare R2 (para subida de archivos)
+    CLOUDFLARE_R2_ENDPOINT="https://<ACCOUNT_ID>.r2.cloudflarestorage.com"
+    CLOUDFLARE_R2_ACCESS_KEY_ID="..."
+    CLOUDFLARE_R2_SECRET_ACCESS_KEY="..."
+    CLOUDFLARE_R2_BUCKET_NAME="..."
+    
+    # Stackframe (Autenticación)
+    NEXT_PUBLIC_STACK_API_URL="http://localhost:8000"
+    NEXT_PUBLIC_STACK_PUBLISHABLE_KEY="..."
+    ```
 
-# Dashboard Configuration
-NODE_ENV="development"
-```
+4.  **Ejecutar la aplicación en modo de desarrollo**
+    ```bash
+    pnpm dev
+    ```
 
-4. **Configurar base de datos**
-```bash
-# Generar cliente Prisma
-npx prisma generate
+El dashboard estará disponible en `http://localhost:3000/dashboard`.
 
-# Ejecutar migraciones
-npx prisma migrate dev
+## ⚙️ Scripts Disponibles
 
-# (Opcional) Seed con datos de ejemplo
-npx prisma db seed
-```
+-   `pnpm dev`: Inicia el servidor de desarrollo.
+-   `pnpm build`: Compila la aplicación para producción.
+-   `pnpm start`: Inicia un servidor de producción.
+-   `pnpm lint`: Ejecuta el linter para revisar la calidad del código.
 
-5. **Ejecutar en desarrollo**
-```bash
-pnpm dev
-```
+## 🗄️ Arquitectura de Datos
 
-El dashboard estará disponible en `http://localhost:3000/dashboard`
+La aplicación utiliza un enfoque optimizado para la gestión de datos:
 
-## 📊 Componentes Principales
+1.  **Drizzle ORM**: Se conecta directamente a la base de datos PostgreSQL para ejecutar queries de alta performance. Es un ORM ligero que no requiere un paso de "generación" como otros.
+2.  **API Unificada**: El endpoint `/api/dashboard/unified` actúa como un Backend-For-Frontend (BFF), consolidando múltiples consultas a la base de datos en una sola petición HTTP desde el cliente.
+3.  **Caché del Servidor**: Antes de consultar la base de datos, el endpoint de la API revisa un caché en memoria. Si los datos están presentes y no han expirado, se devuelven instantáneamente, evitando accesos innecesarios a la base de datos.
+4.  **TanStack Query**: En el frontend, gestiona el estado del servidor, el `stale-while-revalidate`, el `prefetching` y las invalidaciones de caché del cliente.
 
-### KPI Card
-Muestra métricas clave con:
-- Valor actual y meta
-- Tendencia (subida/bajada/estable)
-- Porcentaje de cambio
-- Categorización
-
-### Process Selector
-Selector de procesos de negocio con:
-- Estado del proceso (activo/inactivo/mantenimiento)
-- Información del propietario
-- Cantidad de métricas asociadas
-
-### Chart Wrapper
-Componente unificado para gráficos:
-- Line charts (tendencias)
-- Bar charts (comparativas)
-- Pie charts (distribuciones)
-- Area charts (crecimiento)
-
-## 🗄️ Base de Datos
-
-### Modelos Principales
-
-- **User**: Usuarios del sistema
-- **Process**: Procesos de negocio
-- **Metric**: Métricas y KPIs
-- **Report**: Reportes generados
-- **DashboardConfig**: Configuraciones personalizadas
-
-### Esquema
-Ver `prisma/schema.prisma` para el esquema completo.
-
-## 🎨 Personalización
-
-El dashboard soporta:
-- Temas claro/oscuro
-- Layouts personalizables
-- Widgets configurables
-- Filtros dinámicos
-- Configuraciones por usuario
-
-## 📈 Desarrollo
-
-### Comandos Útiles
-
-```bash
-# Desarrollo
-pnpm dev
-
-# Build
-pnpm build
-pnpm start
-
-# Linting
-pnpm lint
-
-# Base de datos
-npx prisma studio           # Interfaz visual
-npx prisma migrate dev      # Nuevas migraciones
-npx prisma generate         # Regenerar cliente
-```
-
-### Agregar Nuevos KPIs
-
-1. Definir en `src/types/dashboard.ts`
-2. Crear componente en `src/components/dashboard/`
-3. Agregar datos en `src/data/sample-data.ts`
-4. Integrar en `src/app/dashboard/page.tsx`
-
-### Agregar Nuevos Gráficos
-
-1. Extender `ChartWrapper` con nuevo tipo
-2. Implementar lógica de renderizado
-3. Agregar datos de ejemplo
-4. Documentar uso
-
-## 🚀 Próximas Funcionalidades
-
-- [ ] Autenticación de usuarios
-- [ ] API REST completa
-- [ ] Exportación de reportes (PDF/Excel)
-- [ ] Alertas y notificaciones
-- [ ] Dashboard en tiempo real
-- [ ] Análisis predictivo
-- [ ] Integración con APIs externas
-- [ ] Cálculos avanzados personalizados
-
-## 🤝 Contribución
-
-1. Fork del proyecto
-2. Crear rama feature (`git checkout -b feature/AmazingFeature`)
-3. Commit cambios (`git commit -m 'Add AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abrir Pull Request
-
-## 📝 Licencia
-
-Este proyecto está bajo la Licencia MIT. Ver `LICENSE` para más detalles.
-
-## 📞 Soporte
-
-Para preguntas o soporte:
-- Crear issue en GitHub
-- Contactar al equipo de desarrollo
+Este flujo asegura que la UI sea extremadamente rápida, mostrando datos cacheados mientras obtiene actualizaciones frescas en segundo plano.
 
 ---
-**Construido con ❤️ para análisis de datos avanzado**
+**Construido con un enfoque en la performance y la escalabilidad.**
