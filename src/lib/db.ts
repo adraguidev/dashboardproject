@@ -108,7 +108,7 @@ export class DirectDatabaseAPI {
       .where(
         and(
           eq(tableCCM.ultimaetapa, 'EVALUACIÓN - I'),
-          isNull(tableCCM.estadopre),
+          or(isNull(tableCCM.estadopre), eq(tableCCM.estadopre, '')),
           eq(tableCCM.estadotramite, 'PENDIENTE')
         )
       )
@@ -124,7 +124,7 @@ export class DirectDatabaseAPI {
       .where(
         and(
           eq(tableCCM.ultimaetapa, 'EVALUACIÓN - I'),
-          isNull(tableCCM.estadopre),
+          or(isNull(tableCCM.estadopre), eq(tableCCM.estadopre, '')),
           eq(tableCCM.estadotramite, 'PENDIENTE')
         )
       );
@@ -138,7 +138,7 @@ export class DirectDatabaseAPI {
       .where(
         and(
           eq(tableCCM.ultimaetapa, 'EVALUACIÓN - I'),
-          isNull(tableCCM.estadopre),
+          or(isNull(tableCCM.estadopre), eq(tableCCM.estadopre, '')),
           eq(tableCCM.estadotramite, 'PENDIENTE')
         )
       )
@@ -163,7 +163,7 @@ export class DirectDatabaseAPI {
       .where(
         and(
           inArray(tablePRR.ultimaetapa, etapas),
-          eq(tablePRR.estadopre, ''),
+          or(isNull(tablePRR.estadopre), eq(tablePRR.estadopre, '')),
           eq(tablePRR.estadotramite, 'PENDIENTE')
         )
       )
@@ -190,7 +190,7 @@ export class DirectDatabaseAPI {
       .where(
         and(
           inArray(tablePRR.ultimaetapa, etapas),
-          eq(tablePRR.estadopre, ''),
+          or(isNull(tablePRR.estadopre), eq(tablePRR.estadopre, '')),
           eq(tablePRR.estadotramite, 'PENDIENTE')
         )
       );
@@ -215,7 +215,7 @@ export class DirectDatabaseAPI {
       .where(
         and(
           inArray(tablePRR.ultimaetapa, etapas),
-          eq(tablePRR.estadopre, ''),
+          or(isNull(tablePRR.estadopre), eq(tablePRR.estadopre, '')),
           eq(tablePRR.estadotramite, 'PENDIENTE')
         )
       )
@@ -629,8 +629,21 @@ export class DirectDatabaseAPI {
       if (value !== undefined && value !== null) {
         // @ts-expect-error Drizzle no infiere bien el tipo de retorno aquí
         if (targetTable[field]) {
-          // @ts-expect-error Drizzle no infiere bien el tipo de retorno aquí
-          conditions.push(eq(targetTable[field], value));
+          // Si el valor del filtro es una cadena vacía, buscamos tanto '' como NULL.
+          if (value === '') {
+            conditions.push(
+              or(
+                // @ts-expect-error El tipo se pierde, pero es la forma de hacerlo dinámico
+                isNull(targetTable[field]), 
+                // @ts-expect-error El tipo se pierde, pero es la forma de hacerlo dinámico
+                eq(targetTable[field], '')
+              )
+            );
+          } else {
+            // Para cualquier otro valor, usamos la comparación de igualdad estándar.
+            // @ts-expect-error Drizzle no infiere bien el tipo de retorno aquí
+            conditions.push(eq(targetTable[field], value));
+          }
         }
       }
     }

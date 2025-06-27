@@ -43,10 +43,7 @@ export default function DashboardPage() {
       console.log('🔄 Iniciando limpieza completa de caché...');
       
       // 1. Limpiar caché del servidor
-      const serverResponse = await fetch('/api/cache/clear', { method: 'POST' });
-      if (!serverResponse.ok) {
-        throw new Error('Error al limpiar la caché del servidor');
-      }
+      await fetch('/api/cache/clear', { method: 'POST' });
       console.log('✅ Caché del servidor limpiado');
       
       // 2. Limpiar caché de TanStack Query
@@ -55,7 +52,6 @@ export default function DashboardPage() {
       
       // 3. Limpiar caché del frontend (localStorage)
       if (typeof window !== 'undefined') {
-        // Limpiar TODOS los cachés del frontend
         const keysToRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
@@ -67,23 +63,22 @@ export default function DashboardPage() {
         console.log(`✅ Frontend cache limpiado: ${keysToRemove.length} elementos`);
       }
       
-      // 4. Invalidar y refrescar datos sin recargar página
-      await invalidateAll();
-      console.log('✅ Datos invalidados y refrescados');
+      // 4. Invalidar y refrescar datos del hook unificado
+      await invalidateAndRefresh();
+      console.log('✅ Datos unificados invalidados y refrescados');
       
-      // 5. Refrescar módulo activo específico para mostrar datos inmediatamente
+      // 5. Refrescar el módulo activo en pantalla (¡La clave para Pendientes!)
       if (moduleRefreshRef.current) {
-        console.log('🔄 Refrescando módulo activo...');
+        console.log('🔄 Refrescando módulo activo específico...');
         await moduleRefreshRef.current();
         console.log('✅ Módulo activo refrescado');
       }
       
-      // 6. Mostrar feedback al usuario
       console.log('🎉 Actualización completa exitosa');
       
     } catch (err) {
       console.error("❌ Error al refrescar los datos:", err);
-      alert('No se pudo actualizar la información. Por favor, inténtelo de nuevo.');
+      // alert('No se pudo actualizar la información. Por favor, inténtelo de nuevo.');
     } finally {
       setIsRefreshing(false);
     }
@@ -104,9 +99,6 @@ export default function DashboardPage() {
             onRetry={handleFullRefresh} 
           />
         </div>
-        
-        {/* AI Chat Floating Button */}
-
       </div>
     )
   }
@@ -137,8 +129,6 @@ export default function DashboardPage() {
           />
         </div>
       </div>
-
-      {/* AI Chat Floating Button removido */}
     </div>
   )
 } 

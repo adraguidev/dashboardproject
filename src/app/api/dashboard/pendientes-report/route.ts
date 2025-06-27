@@ -133,12 +133,7 @@ function generatePendientesReport(
   
   data.forEach(record => {
     const operadorName = record.operador || 'Sin Operador';
-    const period = extractPeriodFromDate(record.fechaexpendiente, groupBy);
-    
-    if (!period) {
-      console.warn('Fecha inválida o no procesable:', record.fechaexpendiente);
-      return;
-    }
+    const period = extractPeriodFromDate(record.fechaexpendiente, groupBy) || 'Sin Fecha';
     
     allPeriods.add(period);
     
