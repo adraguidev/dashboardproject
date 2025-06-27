@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useDashboardUnified, useDashboardCache } from '@/hooks/use-dashboard-unified'
 import { DashboardHeader } from '@/components/dashboard/dashboard-header'
 import { ProcessModules } from '@/components/dashboard/process-modules'
@@ -10,6 +10,9 @@ export default function DashboardPage() {
   const [selectedProcess, setSelectedProcess] = useState<'ccm' | 'prr'>('ccm')
   const [activeModule, setActiveModule] = useState('pendientes')
   const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Referencia para función de refresh del módulo activo
+  const moduleRefreshRef = React.useRef<(() => Promise<void>) | null>(null);
 
   // Hook unificado enterprise - carga todos los datos de una vez
   const proceso = selectedProcess.toUpperCase() as 'CCM' | 'PRR'
@@ -37,16 +40,51 @@ export default function DashboardPage() {
   const handleFullRefresh = async () => {
     setIsRefreshing(true);
     try {
-      const response = await fetch('/api/cache/clear', { method: 'POST' });
-      if (!response.ok) {
+      console.log('🔄 Iniciando limpieza completa de caché...');
+      
+      // 1. Limpiar caché del servidor
+      const serverResponse = await fetch('/api/cache/clear', { method: 'POST' });
+      if (!serverResponse.ok) {
         throw new Error('Error al limpiar la caché del servidor');
       }
-      // Forzar la recarga de la página para obtener datos frescos
-      window.location.reload();
+      console.log('✅ Caché del servidor limpiado');
+      
+      // 2. Limpiar caché de TanStack Query
+      clearAllCache();
+      console.log('✅ Caché de TanStack Query limpiado');
+      
+      // 3. Limpiar caché del frontend (localStorage)
+      if (typeof window !== 'undefined') {
+        // Limpiar TODOS los cachés del frontend
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('ufsm_cache_')) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+        console.log(`✅ Frontend cache limpiado: ${keysToRemove.length} elementos`);
+      }
+      
+      // 4. Invalidar y refrescar datos sin recargar página
+      await invalidateAll();
+      console.log('✅ Datos invalidados y refrescados');
+      
+      // 5. Refrescar módulo activo específico para mostrar datos inmediatamente
+      if (moduleRefreshRef.current) {
+        console.log('🔄 Refrescando módulo activo...');
+        await moduleRefreshRef.current();
+        console.log('✅ Módulo activo refrescado');
+      }
+      
+      // 6. Mostrar feedback al usuario
+      console.log('🎉 Actualización completa exitosa');
+      
     } catch (err) {
-      console.error("Error al refrescar los datos:", err);
-      // Aquí se podría usar un toast para notificar al usuario.
+      console.error("❌ Error al refrescar los datos:", err);
       alert('No se pudo actualizar la información. Por favor, inténtelo de nuevo.');
+    } finally {
       setIsRefreshing(false);
     }
   };
@@ -91,6 +129,11 @@ export default function DashboardPage() {
             selectedProcess={selectedProcess}
             selectedModule={activeModule}
             onModuleChange={handleModuleChange}
+            onRefresh={async () => {
+              // Esta función se usa para configurar la referencia de refresh
+              // La implementación real se hará en ProcessModules via moduleRefreshRef
+            }}
+            moduleRefreshRef={moduleRefreshRef}
           />
         </div>
       </div>

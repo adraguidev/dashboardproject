@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Card } from '../ui/card'
 import { PendientesReportTable } from '../ui/pendientes-report-table'
 import { AdvancedPendientesReportTable } from '../ui/advanced-pendientes-report-table'
@@ -16,14 +16,18 @@ interface ProcessModulesProps {
   selectedProcess: 'ccm' | 'prr'
   selectedModule: string
   onModuleChange: (module: string) => void
+  onRefresh?: () => Promise<void>
+  moduleRefreshRef?: React.MutableRefObject<(() => Promise<void>) | null>
 }
 
 export function ProcessModules({ 
   selectedProcess, 
   selectedModule, 
-  onModuleChange 
+  onModuleChange,
+  onRefresh,
+  moduleRefreshRef
 }: ProcessModulesProps) {
-  const { report: reportData, loading, error, groupBy, changeGrouping } = usePendientesReport({
+  const { report: reportData, loading, error, groupBy, changeGrouping, refreshData: refreshPendientes } = usePendientesReport({
     process: selectedProcess,
     groupBy: 'year',
     enabled: selectedModule === 'pendientes',
@@ -40,7 +44,8 @@ export function ProcessModules({
     report: ingresosReport, 
     isLoading: ingresosLoading, 
     error: ingresosError, 
-    updatePeriod: updateIngresosPeriod 
+    updatePeriod: updateIngresosPeriod,
+    refreshData: refreshIngresos
   } = useIngresos({
     process: selectedProcess,
     enabled: selectedModule === 'ingresos',
@@ -52,6 +57,39 @@ export function ProcessModules({
   const { evaluadores: otherProcessEvaluadores } = useEvaluadores({
     process: otherProcess
   })
+
+  // Registrar función de refresh específica del módulo activo
+  useEffect(() => {
+    const refreshCurrentModule = async () => {
+      console.log(`🔄 Refrescando módulo activo: ${selectedModule} para ${selectedProcess.toUpperCase()}`);
+      
+      switch (selectedModule) {
+        case 'pendientes':
+          await refreshPendientes();
+          break;
+        case 'ingresos':
+          await refreshIngresos();
+          break;
+        case 'produccion':
+          await refetchProduccion();
+          break;
+        default:
+          console.log(`ℹ️ Módulo ${selectedModule} no requiere refresh`);
+      }
+    };
+    
+    // Configurar la referencia para que el componente padre pueda llamar la función
+    if (moduleRefreshRef) {
+      moduleRefreshRef.current = refreshCurrentModule;
+    }
+    
+    // Cleanup: limpiar la referencia cuando el componente se desmonte o cambie
+    return () => {
+      if (moduleRefreshRef) {
+        moduleRefreshRef.current = null;
+      }
+    };
+  }, [selectedModule, selectedProcess, moduleRefreshRef, refreshPendientes, refreshIngresos, refetchProduccion]);
 
   const modules = [
     {

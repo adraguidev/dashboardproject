@@ -61,20 +61,33 @@ export const schema = {
   evaluadoresPRR,
 };
 
-// Función para obtener conexión directa a PostgreSQL
-export async function getDrizzleDB() {
-  // Usar la URL directa de conexión
-  const connectionString = process.env.DATABASE_DIRECT_URL || process.env.DATABASE_URL;
+// Función para obtener conexión a la base de datos (POOLED o DIRECTA)
+export async function getDrizzleDB(options: { type: 'pooled' | 'direct' } = { type: 'pooled' }) {
+  
+  let connectionString: string | undefined;
+  let connectionType: string;
+
+  if (options.type === 'direct') {
+    console.log('🔗 Usando conexión DIRECTA a la base de datos...');
+    connectionString = process.env.DATABASE_DIRECT_URL;
+    connectionType = 'Directa';
+  } else {
+    console.log('🌊 Usando conexión POOLED a la base de datos...');
+    connectionString = process.env.DATABASE_URL;
+    connectionType = 'En Pool';
+  }
 
   if (!connectionString) {
-    throw new Error("No se encontró DATABASE_DIRECT_URL ni DATABASE_URL en variables de entorno");
+    throw new Error(`No se encontró la URL de la base de datos para el tipo de conexión: ${options.type}`);
   }
 
   const db = drizzle(neon(connectionString), { schema });
 
+  console.log(`✅ Conexión a DB (${connectionType}) establecida.`);
+
   return {
     db,
-    connectionString: connectionString.replace(/:[^:@]*@/, ':***@') // Ocultar password en logs
+    connectionString: connectionString.replace(/:[^:@]*@/, ':***@')
   };
 }
 
@@ -290,6 +303,30 @@ export class DirectDatabaseAPI {
           lte(tablePRR.fechaexpendiente, endDateStr)
         )
       )
+      .orderBy(desc(tablePRR.fechaexpendiente));
+  }
+
+  // MÉTODOS PARA OBTENER TODOS LOS INGRESOS (SIN LÍMITE DE DÍAS)
+  
+  async getAllCCMIngresos() {
+    return await this.db
+      .select({
+        fechaexpendiente: tableCCM.fechaexpendiente,
+        numerotramite: tableCCM.numerotramite
+      })
+      .from(tableCCM)
+      .where(isNotNull(tableCCM.fechaexpendiente))
+      .orderBy(desc(tableCCM.fechaexpendiente));
+  }
+
+  async getAllPRRIngresos() {
+    return await this.db
+      .select({
+        fechaexpendiente: tablePRR.fechaexpendiente,
+        numerotramite: tablePRR.numerotramite
+      })
+      .from(tablePRR)
+      .where(isNotNull(tablePRR.fechaexpendiente))
       .orderBy(desc(tablePRR.fechaexpendiente));
   }
 
@@ -625,7 +662,7 @@ export class DirectDatabaseAPI {
 }
 
 // Función helper para crear una instancia de la API
-export async function createDirectDatabaseAPI(): Promise<DirectDatabaseAPI> {
-  const { db } = await getDrizzleDB();
+export async function createDirectDatabaseAPI(options: { type: 'pooled' | 'direct' } = { type: 'pooled' }): Promise<DirectDatabaseAPI> {
+  const { db } = await getDrizzleDB(options);
   return new DirectDatabaseAPI(db);
 } 

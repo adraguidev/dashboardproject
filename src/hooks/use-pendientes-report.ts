@@ -18,6 +18,7 @@ interface UsePendientesReportReturn {
   error: string | null
   changeGrouping: (newGroupBy: 'year' | 'quarter' | 'month') => void
   groupBy: 'year' | 'quarter' | 'month'
+  refreshData: () => Promise<void>
 }
 
 export function usePendientesReport({
@@ -86,6 +87,11 @@ export function usePendientesReport({
     setGroupBy(newGroupBy)
   }
 
+  const refreshData = useCallback(async () => {
+    console.log(`🔄 Refrescando datos pendientes para: ${process.toUpperCase()}`);
+    await fetchReport({ isBackground: false })
+  }, [fetchReport])
+
   // Efecto para carga en PRIMER PLANO
   useEffect(() => {
     if (enabled) {
@@ -121,7 +127,8 @@ export function usePendientesReport({
     loading,
     error,
     changeGrouping,
-    groupBy
+    groupBy,
+    refreshData
   }
 } 
  

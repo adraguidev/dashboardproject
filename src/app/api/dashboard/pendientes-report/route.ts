@@ -224,7 +224,7 @@ export async function GET(request: NextRequest) {
     // Usar cachedOperation para manejar el caché
     const report = await cachedOperation({
       key: cacheKey,
-      ttlSeconds: 24 * 60 * 60, // 24 horas de caché para datos persistentes
+      ttlSeconds: 2 * 60 * 60, // 2 horas de caché para datos persistentes (REDUCIDO para evitar datos obsoletos)
       fetcher: async () => {
         let data: any[] = []
         let evaluadores: Evaluador[] = []

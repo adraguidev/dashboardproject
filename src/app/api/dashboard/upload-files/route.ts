@@ -397,14 +397,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Conectar a la base de datos
-    console.log('🔌 Conectando a la base de datos...')
-    const connectionString = process.env.DATABASE_DIRECT_URL || process.env.DATABASE_URL
+    console.log('🔌 Conectando a la base de datos (modo DIRECTO para carga)...')
+    const connectionString = process.env.DATABASE_DIRECT_URL
     if (!connectionString) {
-      throw new Error("No se encontró DATABASE_DIRECT_URL ni DATABASE_URL en variables de entorno")
+      throw new Error("No se encontró DATABASE_DIRECT_URL en variables de entorno. Es requerida para la carga de archivos.")
     }
     
     const sql = neon(connectionString)
-    console.log('✅ Conexión a la base de datos establecida')
+    console.log('✅ Conexión a la base de datos (DIRECTA) establecida')
 
     let totalProcessedRows = 0
 

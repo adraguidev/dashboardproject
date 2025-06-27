@@ -124,7 +124,7 @@ const defaultValidator = (data: any): boolean => {
 export async function cachedOperation<T>({
   key,
   fetcher,
-  ttlSeconds = 18 * 60 * 60, // 18 horas por defecto
+  ttlSeconds = 2 * 60 * 60, // 2 horas por defecto (REDUCIDO de 18 horas)
   validator = defaultValidator,
 }: CacheOptions<T>): Promise<T> {
   // 1. Intentar obtener desde cache en memoria

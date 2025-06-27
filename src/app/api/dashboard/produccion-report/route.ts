@@ -335,7 +335,7 @@ export async function GET(request: NextRequest) {
     // Usar cachedOperation para gestionar el caché y generar datos cuando sea necesario
     const report = await cachedOperation({
       key: cacheKey,
-      ttlSeconds: 24 * 60 * 60, // 24 horas de caché para datos persistentes
+      ttlSeconds: 2 * 60 * 60, // 2 horas de caché para datos persistentes (REDUCIDO para evitar datos obsoletos)
       fetcher: async () => generateProduccionReport(data, evaluadores, process, days, dayType)
     });
 

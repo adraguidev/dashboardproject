@@ -405,7 +405,8 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
 
-    let data: any[] = [];
+    let dailyData: any[] = [];
+    let allData: any[] = []; // Datos completos para mensuales/semanales
     let hasDataLimitations = false;
 
     // Obtener datos según el proceso con manejo robusto de errores
@@ -414,9 +415,15 @@ export async function GET(request: NextRequest) {
       const dbAPI = await createDirectDatabaseAPI();
 
       if (process === 'ccm') {
-        data = await dbAPI.getCCMIngresos(days);
+        // Datos limitados para gráfico diario
+        dailyData = await dbAPI.getCCMIngresos(days);
+        // Datos completos para mensuales/semanales (SIN LÍMITE)
+        allData = await dbAPI.getAllCCMIngresos();
       } else {
-        data = await dbAPI.getPRRIngresos(days);
+        // Datos limitados para gráfico diario  
+        dailyData = await dbAPI.getPRRIngresos(days);
+        // Datos completos para mensuales/semanales (SIN LÍMITE)
+        allData = await dbAPI.getAllPRRIngresos();
       }
     } catch (error) {
       console.error(`❌ Error obteniendo datos de ${process?.toUpperCase()}:`, error);
@@ -425,7 +432,8 @@ export async function GET(request: NextRequest) {
       if (process === 'prr') {
         console.warn('⚠️ PRR: Usando estrategia de recuperación con datos limitados');
         hasDataLimitations = true;
-        data = []; // Datos vacíos que se manejarán en generateIngresosReport
+        dailyData = []; // Datos vacíos que se manejarán en generateIngresosReport
+        allData = [];
       } else {
         // Para CCM, propagar el error ya que generalmente funciona
         throw error;
@@ -435,18 +443,35 @@ export async function GET(request: NextRequest) {
     // Usar cachedOperation para gestionar el caché y generar datos cuando sea necesario
     const report = await cachedOperation({
       key: cacheKey,
-      ttlSeconds: 24 * 60 * 60, // 24 horas de caché para datos persistentes
-      fetcher: async () => generateIngresosReport(data, process as 'ccm' | 'prr', days)
+      ttlSeconds: 2 * 60 * 60, // 2 horas de caché para datos persistentes (REDUCIDO para evitar datos obsoletos)
+      fetcher: async () => {
+        // Generar reporte con datos separados
+        const dailyReport = generateIngresosReport(dailyData, process as 'ccm' | 'prr', days);
+        
+        // Generar datos mensuales y semanales INDEPENDIENTES con datos completos
+        const monthlyData = generateMonthlyData(allData);
+        const weeklyData = generateWeeklyData(allData);
+        
+        // Combinar en el reporte final
+        return {
+          ...dailyReport,
+          monthlyData,
+          weeklyData
+        };
+      }
     });
 
     return NextResponse.json({
       success: true,
       report,
       meta: {
-        processedRecords: data.length,
+        dailyRecords: dailyData.length,
+        allRecords: allData.length,
         generatedAt: new Date().toISOString(),
         filters: {
-          fechaexpendiente: `Últimos ${days} días - TODOS los registros`
+          dailyChart: `Últimos ${days} días`,
+          monthlyChart: 'Todos los datos disponibles (2024 vs 2025)',
+          weeklyChart: 'Todo el año 2025'
         }
       }
     });
