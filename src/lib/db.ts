@@ -1,7 +1,7 @@
 import { neon } from "@neondatabase/serverless";
 import { drizzle, NeonHttpDatabase } from "drizzle-orm/neon-http";
 import { pgTable, text, integer, timestamp, serial, date } from "drizzle-orm/pg-core";
-import { eq, and, isNull, isNotNull, desc, asc, count, gte, lte, inArray, like, or } from "drizzle-orm";
+import { eq, and, isNull, isNotNull, desc, asc, count, gte, lte, inArray, like, or, sql } from "drizzle-orm";
 
 // Schema para table_ccm
 export const tableCCM = pgTable('table_ccm', {
@@ -150,7 +150,7 @@ export class DirectDatabaseAPI {
       .where(
         and(
           inArray(tablePRR.ultimaetapa, etapas),
-          isNull(tablePRR.estadopre),
+          eq(tablePRR.estadopre, ''),
           eq(tablePRR.estadotramite, 'PENDIENTE')
         )
       )
@@ -177,7 +177,7 @@ export class DirectDatabaseAPI {
       .where(
         and(
           inArray(tablePRR.ultimaetapa, etapas),
-          isNull(tablePRR.estadopre),
+          eq(tablePRR.estadopre, ''),
           eq(tablePRR.estadotramite, 'PENDIENTE')
         )
       );
@@ -202,7 +202,7 @@ export class DirectDatabaseAPI {
       .where(
         and(
           inArray(tablePRR.ultimaetapa, etapas),
-          isNull(tablePRR.estadopre),
+          eq(tablePRR.estadopre, ''),
           eq(tablePRR.estadotramite, 'PENDIENTE')
         )
       )
@@ -488,6 +488,92 @@ export class DirectDatabaseAPI {
         description: 'Tabla PRR - Conexión directa con Drizzle ORM'
       }
     };
+  }
+
+  /**
+   * Obtener evaluadores activos (simplificado)
+   */
+  async getEvaluadores() {
+    try {
+      console.log('👥 Obteniendo evaluadores activos');
+      
+      const listaCCM: any[] = await this.db.select().from(evaluadoresCCM);
+      const listaPRR: any[] = await this.db.select().from(evaluadoresPRR);
+
+      const allEvaluadores = [
+        ...listaCCM.map((e: any) => ({
+          nombre: e.nombre_en_base,
+          casos_total: 0,
+          casos_completados: 0,
+          casos_pendientes: 0,
+          proceso: 'CCM'
+        })),
+        ...listaPRR.map((e: any) => ({
+          nombre: e.nombre_en_base,
+          casos_total: 0,
+          casos_completados: 0,
+          casos_pendientes: 0,
+          proceso: 'PRR'
+        }))
+      ];
+
+      console.log(`✅ Evaluadores obtenidos: ${allEvaluadores.length} registros`);
+      return allEvaluadores;
+      
+    } catch (error) {
+      console.error('❌ Error obteniendo evaluadores:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Health check robusto de la base de datos
+   */
+  async healthCheck() {
+    const startTime = Date.now();
+    
+    try {
+      const testConnection = await this.testConnection();
+      
+      if (!testConnection) {
+        return {
+          status: 'unhealthy',
+          database: 'PostgreSQL (Neon)',
+          timestamp: new Date().toISOString(),
+          responseTime: Date.now() - startTime,
+          poolStats: { error: 'Conexión fallida' }
+        };
+      }
+
+      const [ccmCount, prrCount] = await Promise.allSettled([
+        this.db.select({ count: count() }).from(tableCCM).limit(1),
+        this.db.select({ count: count() }).from(tablePRR).limit(1)
+      ]);
+
+      const tablesCounts = {
+        table_ccm: ccmCount.status === 'fulfilled' ? ccmCount.value[0]?.count : 'timeout',
+        table_prr: prrCount.status === 'fulfilled' ? prrCount.value[0]?.count : 'timeout'
+      };
+
+      return {
+        status: 'healthy',
+        database: 'PostgreSQL (Neon)',
+        timestamp: new Date().toISOString(),
+        responseTime: Date.now() - startTime,
+        poolStats: { status: 'Conexión directa sin pool' },
+        tablesCounts
+      };
+      
+    } catch (error) {
+      console.error('❌ Health check falló:', error);
+      return {
+        status: 'unhealthy',
+        database: 'PostgreSQL (Neon)',
+        timestamp: new Date().toISOString(),
+        responseTime: Date.now() - startTime,
+        poolStats: { error: 'No disponible' }
+      };
+    }
   }
 
   // Método genérico para filtros personalizados
