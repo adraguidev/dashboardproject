@@ -72,10 +72,17 @@ export async function POST(request: NextRequest) {
     const dbAPI = await createDirectDatabaseAPI();
     const result = await dbAPI.createEvaluador(process as 'ccm' | 'prr', data);
     
-    // Invalidar caché
-    const cacheKey = `evaluadores_general_${process}`
-    await memoryCache.del(cacheKey)
-    logInfo(`🧹 Caché en memoria invalidado para: ${cacheKey}`);
+    // Invalidar cachés relevantes
+    const cacheKeysToClear = [
+      `evaluadores_general_${process}`,
+      `pendientes_${process}_year`,
+      `pendientes_${process}_quarter`,
+      `pendientes_${process}_month`
+    ];
+    cacheKeysToClear.forEach(async (key) => {
+      await memoryCache.del(key)
+      logInfo(`🧹 Caché en memoria invalidado para: ${key}`);
+    });
 
     logInfo('✅ Evaluador creado exitosamente');
     return NextResponse.json(result, { status: 201 });
@@ -113,10 +120,17 @@ export async function PUT(request: NextRequest) {
     const dbAPI = await createDirectDatabaseAPI();
     const result = await dbAPI.updateEvaluador(process as 'ccm' | 'prr', parseInt(id), data);
     
-    // Invalidar caché
-    const cacheKey = `evaluadores_general_${process}`
-    await memoryCache.del(cacheKey)
-    logInfo(`🧹 Caché en memoria invalidado para: ${cacheKey}`);
+    // Invalidar cachés relevantes
+    const cacheKeysToClear = [
+      `evaluadores_general_${process}`,
+      `pendientes_${process}_year`,
+      `pendientes_${process}_quarter`,
+      `pendientes_${process}_month`
+    ];
+    cacheKeysToClear.forEach(async (key) => {
+      await memoryCache.del(key)
+      logInfo(`🧹 Caché en memoria invalidado para: ${key}`);
+    });
 
     logInfo('✅ Evaluador actualizado exitosamente');
     return NextResponse.json(result);
@@ -155,10 +169,17 @@ export async function DELETE(request: NextRequest) {
     const dbAPI = await createDirectDatabaseAPI();
     const success = await dbAPI.deleteEvaluador(process as 'ccm' | 'prr', parseInt(id));
     
-    // Invalidar caché
-    const cacheKey = `evaluadores_general_${process}`
-    await memoryCache.del(cacheKey)
-    logInfo(`🧹 Caché en memoria invalidado para: ${cacheKey}`);
+    // Invalidar cachés relevantes
+    const cacheKeysToClear = [
+      `evaluadores_general_${process}`,
+      `pendientes_${process}_year`,
+      `pendientes_${process}_quarter`,
+      `pendientes_${process}_month`
+    ];
+    cacheKeysToClear.forEach(async (key) => {
+      await memoryCache.del(key)
+      logInfo(`🧹 Caché en memoria invalidado para: ${key}`);
+    });
 
     if (!success) {
       return NextResponse.json({ error: 'Evaluador no encontrado' }, { status: 404 })

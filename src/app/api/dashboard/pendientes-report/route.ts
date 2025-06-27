@@ -117,6 +117,13 @@ function customPeriodSort(a: string, b: string): number {
   return getComparableValue(a) - getComparableValue(b);
 }
 
+// Función para normalizar nombres para una comparación robusta
+function normalizeName(name: string | null | undefined): string {
+  if (!name) return '';
+  // Convierte a mayúsculas, elimina espacios al inicio/final y reemplaza múltiples espacios por uno solo.
+  return name.trim().toUpperCase().replace(/\s+/g, ' ');
+}
+
 function generatePendientesReport(
   data: any[], 
   evaluadores: Evaluador[], 
@@ -128,7 +135,9 @@ function generatePendientesReport(
   
   const evaluadorMap = new Map<string, Evaluador>();
   evaluadores.forEach(evaluador => {
-    evaluadorMap.set(evaluador.nombre_en_base, evaluador);
+    if (evaluador.nombre_en_base) {
+      evaluadorMap.set(normalizeName(evaluador.nombre_en_base), evaluador);
+    }
   });
   
   data.forEach(record => {
@@ -154,7 +163,8 @@ function generatePendientesReport(
   });
   
   operadorMap.forEach((periodData, operadorName) => {
-    const evaluador = evaluadorMap.get(operadorName);
+    const normalizedOperadorName = normalizeName(operadorName);
+    const evaluador = evaluadorMap.get(normalizedOperadorName);
     const subEquipo = evaluador?.sub_equipo;
     const { colorClass } = getColorConfig(subEquipo);
     
