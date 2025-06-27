@@ -46,7 +46,6 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
   }
 
   const handleFileSelect = (type: 'ccm' | 'prr', file: File) => {
-    // Validar el tipo de archivo
     const validExtensions = ['.xlsx', '.xls', '.csv']
     const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
     
@@ -55,22 +54,8 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
       return
     }
 
-    // Validar el nombre del archivo
-    const expectedNames = {
-      ccm: 'consolidado_final_CCM_personal',
-      prr: 'consolidado_final_PRR_personal'
-    }
-
-    const baseFileName = file.name.replace(/\.(xlsx|xls|csv)$/i, '').toLowerCase()
-    const expectedName = expectedNames[type].toLowerCase()
-
-    if (!baseFileName.includes('ccm') && type === 'ccm') {
-      error('El archivo CCM debe contener "CCM" en el nombre')
-      return
-    }
-
-    if (!baseFileName.includes('prr') && type === 'prr') {
-      error('El archivo PRR debe contener "PRR" en el nombre')
+    if (!file.name.toLowerCase().includes(type)) {
+      error(`El archivo ${type.toUpperCase()} debe contener "${type.toUpperCase()}" en el nombre`)
       return
     }
 
@@ -101,6 +86,34 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
     })
   }
 
+  const uploadFile = async (file: File, table: 'table_ccm' | 'table_prr') => {
+    setUploadProgress(prev => ({ ...prev, step: `Obteniendo URL para ${file.name}...` }))
+    const presignedUrlResponse = await fetch('/api/dashboard/generate-upload-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: file.name, contentType: file.type }),
+    });
+
+    if (!presignedUrlResponse.ok) {
+      throw new Error(`No se pudo obtener la URL de subida para ${file.name}.`);
+    }
+
+    const { uploadUrl, key } = await presignedUrlResponse.json();
+
+    setUploadProgress(prev => ({ ...prev, step: `Subiendo ${file.name} a R2...` }))
+    const uploadResponse = await fetch(uploadUrl, {
+      method: 'PUT',
+      body: file,
+      headers: { 'Content-Type': file.type },
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error(`Error al subir ${file.name} a R2.`);
+    }
+
+    console.log(`Archivo ${file.name} subido exitosamente con clave: ${key}. Procesamiento pendiente.`);
+  }
+
   const handleUpload = async () => {
     if (!files.ccm && !files.prr) {
       error('Debes seleccionar al menos un archivo (CCM o PRR)')
@@ -114,62 +127,39 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
     })
 
     try {
-      const formData = new FormData()
       if (files.ccm) {
-        formData.append('ccm_file', files.ccm)
+        await uploadFile(files.ccm, 'table_ccm')
+        setUploadProgress(prev => ({ ...prev, progress: prev.progress + 50 }))
       }
       if (files.prr) {
-        formData.append('prr_file', files.prr)
+        await uploadFile(files.prr, 'table_prr')
+        setUploadProgress(prev => ({ ...prev, progress: 100 }))
       }
-
-      // Simular progreso mientras se sube
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => ({
-          ...prev,
-          progress: Math.min(prev.progress + 5, 90)
-        }))
-      }, 200)
-
-      setUploadProgress(prev => ({ ...prev, step: 'Subiendo archivos a R2...' }))
-
-      const response = await fetch('/api/dashboard/upload-files', {
-        method: 'POST',
-        body: formData
-      })
-
-      clearInterval(progressInterval)
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Error en la subida')
-      }
-
-      const result = await response.json()
 
       setUploadProgress({
         uploading: false,
         progress: 100,
-        step: 'Procesamiento completado exitosamente',
+        step: 'Subida a R2 completada. El procesamiento se hará en segundo plano.',
         success: true
       })
 
-      success(`✅ Archivos procesados exitosamente. ${result.message}`)
+      success('✅ Archivos subidos. El procesamiento en la base de datos comenzará en breve.')
       
-      // Esperar un momento para mostrar el éxito y luego cerrar
       setTimeout(() => {
         onUploadComplete?.()
         onClose()
         resetFiles()
-      }, 2000)
+      }, 3000)
 
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
       setUploadProgress({
         uploading: false,
         progress: 0,
         step: '',
-        error: err instanceof Error ? err.message : 'Error desconocido'
+        error: errorMessage
       })
-      error(`${err instanceof Error ? err.message : 'Error desconocido'}`)
+      error(errorMessage)
     }
   }
 
