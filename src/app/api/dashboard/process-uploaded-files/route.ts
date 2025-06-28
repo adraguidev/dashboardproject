@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import { neon } from '@neondatabase/serverless'
-import * as XLSX from 'xlsx'
-import { Readable } from 'stream'
-import { getJsDateFromExcel } from 'excel-date-to-js'
-import * as path from 'path'
+import { Readable, Writable } from 'stream'
+import { pipeline } from 'stream/promises'
 import csvParser from 'csv-parser'
+import { Workbook } from 'exceljs'
+import * as path from 'path'
 
 // Configuración de Cloudflare R2
 const r2Client = new S3Client({
@@ -19,18 +19,28 @@ const r2Client = new S3Client({
 
 const BUCKET_NAME = process.env.CLOUDFLARE_R2_BUCKET_NAME!
 
-// Columnas que deben ser DATE
-const columnas_fecha = [
+// Esquema canónico para asegurar que las tablas siempre tengan las columnas correctas.
+const canonicalSchema = {
+  table_ccm: [
+    "textbox4", "dependencia", "anio", "mes", "numerotramite", "ultimaetapa",
+    "fechaexpendiente", "fechaetapaaprobacionmasivafin", "fechapre", "operadorpre",
+    "estadopre", "estadotramite", "archivo_origen", "operador", "fecha_asignacion",
+    "modalidad", "regimen", "meta_antigua", "meta_nueva", "equipo"
+  ],
+  table_prr: [
+    "textbox4", "dependencia", "anio", "mes", "numerotramite", "ultimaetapa",
+    "fechaexpendiente", "fechaetapaaprobacionmasivafin", "fechapre", "operadorpre",
+    "estadopre", "estadotramite", "archivo_origen", "operador", "fecha_asignacion",
+    "modalidad", "regimen", "meta_antigua", "meta_nueva", "equipo"
+  ]
+};
+
+const dateColumns = [
   "fechaexpendiente",
   "fechaetapaaprobacionmasivafin", 
   "fechapre",
   "fecha_asignacion"
 ]
-
-const conversiones = {
-  "table_ccm": columnas_fecha,
-  "table_prr": columnas_fecha
-}
 
 export async function POST(request: NextRequest) {
   console.log('🔄 Iniciando procesamiento de archivos desde R2...');
@@ -81,327 +91,193 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Función para procesar archivos desde R2 en background
+// Lógica principal de procesamiento en background
 async function processFilesFromR2(files: Array<{fileName: string, key: string, table: string}>) {
-  console.log('🔄 Procesando archivos desde R2 en background...');
-  
-  try {
-    const sql = neon(process.env.DATABASE_DIRECT_URL!);
-    const processedTables = [];
+  console.log('[Stream] 🔄 Iniciando procesamiento en background...');
+  // Nota: La conexión a la BD se pasa a la función que procesa cada archivo
+  // para asegurar que las conexiones se manejan de forma aislada.
+  const sql = neon(process.env.DATABASE_DIRECT_URL!);
 
-    for (const fileInfo of files) {
-      console.log(`📁 Procesando ${fileInfo.fileName} desde R2...`);
-      
-      // Descargar archivo de R2
-      const fileBuffer = await downloadFromR2(fileInfo.key);
-      
-      // Procesar archivo
-      const rawData = await readFileAuto(fileBuffer, fileInfo.fileName);
-      const { columns, rows } = cleanColumnNames(rawData);
-      
-      console.log(`📊 ${fileInfo.table}: ${rows.length} filas, ${columns.length} columnas`);
-      
-      // Cargar a base de datos
-      const insertedRows = await copyDataFrameToPostgres(columns, rows, fileInfo.table, sql);
-      processedTables.push({
-        table: fileInfo.table,
-        rows: insertedRows,
-        columns: columns.length
-      });
-    }
-
-    // Convertir columnas de fechas
-    console.log('🗓️ Convirtiendo columnas de fecha...');
-    await convertirColumnasFecha(sql, conversiones);
-
-    const totalRows = processedTables.reduce((sum, table) => sum + table.rows, 0);
-    console.log(`🎉 ¡Procesamiento completado! ${totalRows} registros procesados.`);
-
-  } catch (error) {
-    console.error('❌ Error crítico en procesamiento desde R2:', error);
-  }
-}
-
-// Función para descargar archivo de R2
-async function downloadFromR2(key: string): Promise<Buffer> {
-  const command = new GetObjectCommand({
-    Bucket: BUCKET_NAME,
-    Key: key
-  });
-  
-  const response = await r2Client.send(command);
-  
-  if (!response.Body) {
-    throw new Error('No se pudo descargar el archivo de R2');
-  }
-
-  // Convertir stream a buffer
-  const chunks: Buffer[] = [];
-  const stream = response.Body as Readable;
-  
-  return new Promise((resolve, reject) => {
-    stream.on('data', (chunk: Buffer) => chunks.push(chunk));
-    stream.on('end', () => resolve(Buffer.concat(chunks)));
-    stream.on('error', reject);
-  });
-}
-
-// Incluir las funciones de procesamiento necesarias aquí
-// [Las funciones readFileAuto, cleanColumnNames, copyDataFrameToPostgres, convertirColumnasFecha]
-// se mantendrían igual que en el archivo original
-
-// Función para detectar si un valor es un número serial de Excel (fecha)
-function isExcelDateSerial(value: any): boolean {
-  return typeof value === 'number' && 
-         value > 0 && 
-         value < 100000 && 
-         Number.isInteger(value * 86400)
-}
-
-// Función para convertir fechas de Excel a formato ISO string
-function convertExcelDateToISO(value: any): string | null {
-  try {
-    if (isExcelDateSerial(value)) {
-      const jsDate = getJsDateFromExcel(value)
-      return jsDate.toISOString().split('T')[0]
-    }
-    
-    if (typeof value === 'string' && value.trim()) {
-      const parts = value.split('/');
-      if (parts.length === 3) {
-        const [day, month, year] = parts;
-        const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-        const parsed = new Date(formattedDate);
-        if (!isNaN(parsed.getTime())) {
-          return parsed.toISOString().split('T')[0];
-        }
-      }
-      
-      const parsed = new Date(value)
-      if (!isNaN(parsed.getTime())) {
-        return parsed.toISOString().split('T')[0]
-      }
-    }
-    
-    return null
-  } catch (error) {
-    console.warn(`Error convirtiendo fecha Excel: ${value}`, error)
-    return null
-  }
-}
-
-// Función para procesar y limpiar datos incluyendo conversión de fechas de Excel
-function processRowData(columns: string[], row: any[], tableName: string, rowIndex: number = -1): any[] {
-  const dateColumns = conversiones[tableName as keyof typeof conversiones] || []
-  let dateConversions = 0
-  
-  const processedRow = row.map((value, index) => {
-    const columnName = columns[index]
-    
-    if (dateColumns.includes(columnName)) {
-      const convertedDate = convertExcelDateToISO(value)
-      if (convertedDate) {
-        dateConversions++
-        if (rowIndex === 0) {
-          console.log(`🔄 Fecha convertida en ${columnName}: ${value} → ${convertedDate}`)
-        }
-        return convertedDate;
-      } else {
-        if (rowIndex === 0 && value != null && value !== '') {
-          console.log(`⚠️ No se pudo convertir fecha en ${columnName}: ${value}, se usará NULL.`)
-        }
-        return null;
-      }
-    }
-    
-    return value != null ? String(value) : null
-  })
-  
-  if (rowIndex === 0 && dateConversions > 0) {
-    console.log(`✅ Convertidas ${dateConversions} fechas de Excel en la primera fila`)
-  }
-  
-  return processedRow
-}
-
-// Lógica de lectura unificada: Soporta CSV, XLSX y XLS
-async function readFileAuto(fileBuffer: Buffer, fileName: string): Promise<any[][]> {
-  const fileExtension = path.extname(fileName).toLowerCase();
-  console.log(`🚀 Iniciando lectura de archivo: ${fileName}.`);
-
-  if (fileExtension === '.csv') {
-    return new Promise((resolve, reject) => {
-      console.log("🧠 Usando el parser de streaming 'csv-parser'.");
-      const data: any[][] = [];
-      const stream = Readable.from(fileBuffer);
-      
-      stream
-        .pipe(csvParser({ 
-          headers: false,
-          separator: ';'
-        })) 
-        .on('data', (row: any) => {
-          data.push(Object.values(row));
-        })
-        .on('end', () => {
-          console.log(`✅ Lectura de CSV completada. ${data.length} filas.`);
-          resolve(data);
-        })
-        .on('error', (error: Error) => {
-          console.error('❌ Error durante el streaming del CSV:', error);
-          reject(new Error(`Error al procesar el archivo CSV: ${error.message}`));
-        });
-    });
-  } 
-  else if (fileExtension === '.xlsx' || fileExtension === '.xls') {
-    console.log(`🧠 Usando el lector de Excel en memoria (SheetJS) para ${fileExtension}.`);
+  for (const fileInfo of files) {
     try {
-      const workbook = XLSX.read(fileBuffer, { type: 'buffer', cellFormula: false, cellNF: false, cellStyles: false });
-      const sheetName = workbook.SheetNames[0];
-      if (!sheetName) throw new Error("El archivo no contiene hojas o no pudo ser leído.");
-      
-      const worksheet = workbook.Sheets[sheetName];
-      const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
-
-      if (!data || data.length === 0) throw new Error("El archivo parece estar vacío.");
-      
-      console.log(`✅ Lectura de Excel completada. ${data.length} filas.`);
-      return data;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      throw new Error(`Error al procesar el archivo Excel (${fileName}): ${errorMessage}`);
+      // Se pasa la conexión `sql` a la función que procesa cada archivo
+      await processSingleFileStream(fileInfo, sql);
+    } catch (error) {
+      console.error(`[Stream] ❌ Error fatal procesando ${fileInfo.fileName}:`, error);
+      // Aquí se podría añadir lógica para reintentos o para notificar el fallo
     }
-  } else {
-    throw new Error(`Formato de archivo no soportado: ${fileExtension}`);
   }
+
+  // Conversión de fechas post-procesamiento para todas las tablas
+  console.log('[Stream] 🗓️  Iniciando conversión de columnas de fecha a tipo DATE...');
+  await convertAllDateColumns(sql);
+  console.log('[Stream] ✅ Conversión de fechas completada.');
 }
 
-// Función para limpiar nombres de columnas
-function cleanColumnNames(data: any[][]): { columns: string[], rows: any[][] } {
-  if (data.length === 0) throw new Error("Archivo vacío")
-  
-  const originalColumns = data[0]
-  const columns = originalColumns.map((col: any) => 
-    String(col).trim().replace(/\s+/g, '_').replace(/-/g, '_').toLowerCase()
-  )
-  
-  const rows = data.slice(1)
-  
-  return { columns, rows }
-}
+// Procesa un único archivo usando streams, de forma más robusta
+async function processSingleFileStream(fileInfo: {fileName: string, key: string, table: string}, sql: any) {
+    const { fileName, key, table } = fileInfo;
+    console.log(`[Stream] 🚀 Comenzando a procesar: ${fileName} para la tabla ${table}`);
 
-// Función para cargar DataFrame a PostgreSQL
-async function copyDataFrameToPostgres(
-  columns: string[], 
-  rows: any[][], 
-  tableName: string, 
-  sql: any
-): Promise<number> {
-  try {
-    console.log(`🔄 Procesando tabla: ${tableName}`)
+    const r2Stream = await getR2FileStream(key);
+    const canonicalColumns = canonicalSchema[table as keyof typeof canonicalSchema];
     
-    // Crear tabla si no existe con todas las columnas como TEXT
-    const colDefs = columns.map(col => `"${col}" TEXT`).join(', ')
-    const createTableQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (${colDefs});`
-    await sql.query(createTableQuery)
+    // Preparar la tabla: crearla si no existe con el esquema canónico y truncarla
+    const colDefs = canonicalColumns.map(col => `"${col}" TEXT`).join(', ');
+    await sql.query(`CREATE TABLE IF NOT EXISTS ${table} (${colDefs});`);
+    await sql.query(`TRUNCATE TABLE ${table};`);
+    console.log(`[Stream] ✅ Tabla ${table} preparada y limpia.`);
     
-    console.log(`📋 Tabla ${tableName} preparada con ${columns.length} columnas`)
-    
-    // Truncar tabla antes de insertar
-    const truncateQuery = `TRUNCATE TABLE ${tableName};`
-    await sql.query(truncateQuery)
-    console.log(`🗑️ Tabla ${tableName} truncada`)
-    
-    // Insertar datos usando múltiples valores
-    let insertedRows = 0
-    const batchSize = 1000
-    
-    for (let i = 0; i < rows.length; i += batchSize) {
-      const batch = rows.slice(i, i + batchSize)
-      
-      if (batch.length === 0) continue
-      
-      const valueGroups = []
-      const allValues = []
-      
-      for (let rowIndex = 0; rowIndex < batch.length; rowIndex++) {
-        const row = batch[rowIndex]
-        const actualRowIndex = i + rowIndex
-        const processedRow = processRowData(columns, row, tableName, actualRowIndex)
-        
-        const paddedRow = Array(columns.length).fill(null)
-        for (let j = 0; j < Math.min(processedRow.length, columns.length); j++) {
-          paddedRow[j] = processedRow[j]
+    let fileHeaders: string[] = [];
+    const headerIndexMap: { [key: string]: number } = {}; // Usamos const porque el objeto no se reasigna
+    let columnsToInsert: string[] = [];
+    let isFirstRow = true;
+    let rowCount = 0;
+    let processedRowCount = 0;
+    const batchSize = 250; // Reducido para dynos con menos memoria, asegura un flujo más constante.
+    let batch: any[][] = [];
+
+    const dataStream = createParserStream(fileName, r2Stream);
+
+    console.log(`[Stream] 🧠 Creado parser para ${fileName}, iniciando iteración...`);
+
+    for await (const row of dataStream) {
+        rowCount++;
+        if (isFirstRow) {
+            fileHeaders = row.map((h: any) => String(h || '').trim().replace(/\s+/g, '_').replace(/-/g, '_').toLowerCase());
+            fileHeaders.forEach((col, index) => { if(col) headerIndexMap[col] = index; });
+            columnsToInsert = canonicalColumns.filter(col => headerIndexMap.hasOwnProperty(col));
+            isFirstRow = false;
+
+            if (columnsToInsert.length === 0) {
+                throw new Error(`No se encontraron columnas compatibles en el archivo ${fileName} para el esquema de la tabla ${table}.`);
+            }
+            console.log(`[Stream] 🗺️  Mapeadas ${columnsToInsert.length} columnas desde ${fileName}.`);
+            continue; // Saltar la fila de cabecera
         }
-        
-        const startIndex = rowIndex * columns.length
-        const placeholders = columns.map((_, colIndex) => `$${startIndex + colIndex + 1}`).join(', ')
-        valueGroups.push(`(${placeholders})`)
-        
-        allValues.push(...paddedRow)
+
+        const processedRow = processRowData(row, fileHeaders);
+        const dbRow = columnsToInsert.map(colName => processedRow[headerIndexMap[colName]]);
+        batch.push(dbRow);
+
+        if (batch.length >= batchSize) {
+            await insertBatch(sql, table, columnsToInsert, batch);
+            processedRowCount += batch.length;
+            console.log(`[Stream] 📦 Lote de ${batch.length} insertado. Total: ${processedRowCount}`);
+            batch = [];
+        }
+    }
+
+    if (batch.length > 0) {
+        await insertBatch(sql, table, columnsToInsert, batch);
+        processedRowCount += batch.length;
+    }
+
+    console.log(`[Stream] ✅ Finalizado ${fileName}. Total de filas leídas: ${rowCount - 1}, filas procesadas: ${processedRowCount}`);
+}
+
+// Funciones de ayuda
+async function getR2FileStream(key: string): Promise<Readable> {
+  const command = new GetObjectCommand({ Bucket: BUCKET_NAME, Key: key });
+  const response = await r2Client.send(command);
+  if (!response.Body) throw new Error('No se pudo descargar el archivo de R2');
+  return response.Body as Readable;
+}
+
+function createParserStream(fileName: string, stream: Readable): Readable {
+  const fileExtension = path.extname(fileName).toLowerCase();
+  if (fileExtension === '.csv') {
+    return stream.pipe(csvParser({ headers: false, separator: ';' }));
+  } else if (fileExtension === '.xlsx') {
+    const readable = new Readable({ objectMode: true });
+    readable._read = () => {}; // No-op, ya que empujaremos datos manualmente
+
+    const workbook = new Workbook();
+    workbook.xlsx.read(stream).then(() => {
+      const worksheet = workbook.worksheets[0];
+      if (worksheet) {
+        worksheet.eachRow((row, rowNumber) => {
+          const values = row.values as any[];
+          // exceljs usa un array 1-based, lo convertimos a 0-based
+          readable.push(values.slice(1));
+        });
       }
-      
-      const columnNames = columns.map(col => `"${col}"`).join(', ')
-      const insertQuery = `INSERT INTO ${tableName} (${columnNames}) VALUES ${valueGroups.join(', ')}`
-      
-      await sql.query(insertQuery, allValues)
-      insertedRows += batch.length
-      
-      console.log(`📊 Procesado lote ${Math.floor(i / batchSize) + 1}, total: ${insertedRows} filas`)
-    }
+      readable.push(null); // Fin del stream
+    }).catch(err => readable.emit('error', err));
     
-    console.log(`✅ ${insertedRows} filas cargadas en '${tableName}'`)
-    return insertedRows
-    
-  } catch (error) {
-    console.error(`❌ Error en carga a '${tableName}':`, error)
-    throw error
+    return readable;
+  } else {
+    throw new Error(`Formato de archivo no soportado: ${fileName}`);
   }
 }
 
-// Función para convertir columnas a tipo DATE
-async function convertirColumnasFecha(sql: any, conversiones: Record<string, string[]>) {
-  for (const [tabla, columnas] of Object.entries(conversiones)) {
-    console.log(`\n🔄 Procesando tabla: ${tabla}`)
-    
-    for (const col of columnas) {
+function processRowData(row: any[], headers: string[]): any[] {
+  return row.map((value, index) => {
+    const columnName = headers[index];
+    if (dateColumns.includes(columnName)) {
+      return convertExcelDate(value);
+    }
+    return value != null ? String(value) : null;
+  });
+}
+
+function convertExcelDate(value: any): string | null {
+  if (value === null || typeof value === 'undefined') return null;
+  if (typeof value === 'object' && value instanceof Date) {
+    return value.toISOString().split('T')[0];
+  }
+  if (typeof value === 'number' && value > 0 && value < 2958466) { // Rango de fechas de Excel
+    const jsDate = new Date(Date.UTC(1899, 11, 30, 0, 0, 0, 0) + value * 86400000);
+    return jsDate.toISOString().split('T')[0];
+  }
+  if (typeof value === 'string') {
+    try {
+      return new Date(value).toISOString().split('T')[0];
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+async function insertBatch(sql: any, table: string, columns: string[], batch: any[][]) {
+  const valueGroups = [];
+  const allValues = [];
+  let placeholderIndex = 1;
+
+  for (const row of batch) {
+    const placeholders = [];
+    for (const value of row) {
+      placeholders.push(`$${placeholderIndex++}`);
+      allValues.push(value);
+    }
+    valueGroups.push(`(${placeholders.join(', ')})`);
+  }
+
+  const columnNames = columns.map(col => `"${col}"`).join(', ');
+  const query = `INSERT INTO ${table} (${columnNames}) VALUES ${valueGroups.join(', ')}`;
+  
+  await sql.query(query, allValues);
+}
+
+async function convertAllDateColumns(sql: any) {
+  for (const table in canonicalSchema) {
+    for (const col of dateColumns) {
       try {
-        console.log(` - Convirtiendo columna: ${col} → DATE...`)
-        
-        const checkColumnQuery = `
-          SELECT column_name 
-          FROM information_schema.columns 
-          WHERE table_name = '${tabla}' AND column_name = '${col}';
-        `
-        const columnExists = await sql.query(checkColumnQuery)
-        
-        if (columnExists.length > 0) {
-          const checkTypeQuery = `
-            SELECT data_type 
-            FROM information_schema.columns 
-            WHERE table_name = '${tabla}' AND column_name = '${col}';
-          `
-          const columnTypeResult = await sql.query(checkTypeQuery)
-          
-          if (columnTypeResult[0]?.data_type === 'date') {
-            console.log(`   ✅ ${col} ya es tipo DATE, omitiendo conversión.`)
-          } else {
-            const alterQuery = `
-              ALTER TABLE ${tabla}
-              ALTER COLUMN "${col}" TYPE DATE
-              USING CASE 
-                WHEN "${col}" IS NULL OR "${col}" ~ '^\\s*$' THEN NULL
-                ELSE "${col}"::DATE
-              END;
-            `
-            await sql.query(alterQuery)
-            console.log(`   ✅ Columna ${col} convertida a tipo DATE.`)
-          }
-        } else {
-          console.log(`   ⚠️ La columna ${col} no existe en la tabla ${tabla}.`)
-        }
+        const alterQuery = `
+          ALTER TABLE ${table}
+          ALTER COLUMN "${col}" TYPE DATE
+          USING CASE 
+            WHEN "${col}" IS NULL OR "${col}" = '' THEN NULL
+            ELSE "${col}"::DATE
+          END;
+        `;
+        await sql.query(alterQuery);
       } catch (error) {
-        console.error(`   ❌ Error al convertir columna ${col} a tipo DATE:`, error)
+        // Ignorar error si la columna no existe en esa tabla particular
+        if (!(error instanceof Error && error.message.includes('column "') && error.message.includes('" of relation "') && error.message.includes('" does not exist'))) {
+          console.error(`[Stream] ❌ Error convirtiendo ${col} en ${table}:`, error);
+        }
       }
     }
   }

@@ -31,6 +31,7 @@
     "drizzle-kit": "^0.31.2",
     "drizzle-orm": "^0.44.2",
     "excel-date-to-js": "^1.1.5",
+    "exceljs": "^4.4.0",
     "jose": "^6.0.11",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.523.0",

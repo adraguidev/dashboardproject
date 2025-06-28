@@ -136,7 +136,7 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
               headers: { 'Content-Type': files.ccm.type }
             })
           )
-        }
+      }
       }
 
       if (files.prr) {
@@ -168,7 +168,7 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
       }
 
       const result = await processResponse.json()
-      
+
       setUploadProgress({
         uploading: false,
         progress: 100,
