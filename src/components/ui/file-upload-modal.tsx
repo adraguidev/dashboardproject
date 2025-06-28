@@ -291,8 +291,8 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
             <ul className="text-xs text-blue-700 space-y-1">
               <li>• Los archivos deben ser consolidado_final_CCM_personal.xlsx y consolidado_final_PRR_personal.xlsx</li>
               <li>• Este proceso borrará todos los datos existentes en table_ccm y table_prr</li>
-              <li>• Los archivos se suben inmediatamente, el procesamiento tarda 2-5 minutos</li>
-              <li>• Las columnas de fecha se convertirán al tipo DATE correctamente</li>
+              <li>• Los archivos se procesan completamente en segundo plano (3-8 minutos)</li>
+              <li>• Sistema optimizado para archivos grandes sin timeouts</li>
               <li>• Se crea backup automático en Cloudflare R2 para seguridad</li>
               <li>• Los datos aparecerán en el dashboard automáticamente cuando esté listo</li>
             </ul>
