@@ -9,18 +9,15 @@ let redis: Redis;
 //
 // 1. Ve a https://upstash.com/ y crea una cuenta.
 // 2. Crea una nueva base de datos de Redis.
-// 3. Copia las credenciales y añádelas a tu archivo .env.local:
+// 3. Copia el string de conexión (Connection String) y añádelo a tu archivo .env.local:
 //
-// UPSTASH_REDIS_REST_URL="https://eu1-active-dassie-12345.upstash.io"
-// UPSTASH_REDIS_REST_TOKEN="..."
+// UPSTASH_REDIS_URL="rediss://default:..."
 
-if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-  redis = new Redis(process.env.UPSTASH_REDIS_REST_URL, {
-    password: process.env.UPSTASH_REDIS_REST_TOKEN,
-  });
+if (process.env.UPSTASH_REDIS_URL) {
+  redis = new Redis(process.env.UPSTASH_REDIS_URL);
   console.log('✅ Conexión a Redis (Upstash) establecida.');
 } else {
-  console.warn('⚠️  Las variables de entorno de Redis no están configuradas. El monitoreo de progreso no funcionará.');
+  console.warn('⚠️  La variable de entorno UPSTASH_REDIS_URL no está configurada. El monitoreo de progreso no funcionará.');
   // Fallback a un mock si no hay credenciales para evitar que la app crashee
   redis = {
     get: async () => null,
