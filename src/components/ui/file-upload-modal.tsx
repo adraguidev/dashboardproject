@@ -88,81 +88,111 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
 
   const handleUpload = async () => {
     if (!files.ccm && !files.prr) {
-      error('Debes seleccionar al menos un archivo (CCM o PRR)')
+      error('Por favor selecciona al menos un archivo.')
       return
     }
 
     setUploadProgress({
       uploading: true,
       progress: 0,
-      step: 'Iniciando procesamiento...'
+      step: 'Preparando subida...',
+      error: undefined,
+      success: undefined
     })
 
     try {
-      // Crear FormData para enviar archivos
-      const formData = new FormData();
+      // PASO 1: Generar URLs de subida directa
+      setUploadProgress(prev => ({ ...prev, step: 'Generando URLs de subida...', progress: 10 }))
+      
+      const fileInfos = []
+      if (files.ccm) fileInfos.push({ name: files.ccm.name, type: files.ccm.type, size: files.ccm.size })
+      if (files.prr) fileInfos.push({ name: files.prr.name, type: files.prr.type, size: files.prr.size })
+
+      const urlResponse = await fetch('/api/dashboard/upload-files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: fileInfos }),
+      })
+
+      if (!urlResponse.ok) {
+        throw new Error('No se pudieron generar las URLs de subida.')
+      }
+
+      const urlResult = await urlResponse.json()
+      const uploadUrls = urlResult.uploadUrls
+
+      // PASO 2: Subir archivos directamente a R2
+      setUploadProgress(prev => ({ ...prev, step: 'Subiendo archivos directamente a R2...', progress: 30 }))
+      
+      const uploadPromises = []
       
       if (files.ccm) {
-        formData.append('ccm_file', files.ccm);
-        setUploadProgress(prev => ({ ...prev, progress: 25, step: 'Preparando archivo CCM...' }))
+        const ccmUrl = uploadUrls.find((u: any) => u.fileName === files.ccm!.name)
+        if (ccmUrl) {
+          uploadPromises.push(
+            fetch(ccmUrl.uploadUrl, {
+              method: 'PUT',
+              body: files.ccm,
+              headers: { 'Content-Type': files.ccm.type }
+            })
+          )
+        }
       }
+
       if (files.prr) {
-        formData.append('prr_file', files.prr);
-        setUploadProgress(prev => ({ ...prev, progress: 25, step: 'Preparando archivo PRR...' }))
+        const prrUrl = uploadUrls.find((u: any) => u.fileName === files.prr!.name)
+        if (prrUrl) {
+          uploadPromises.push(
+            fetch(prrUrl.uploadUrl, {
+              method: 'PUT', 
+              body: files.prr,
+              headers: { 'Content-Type': files.prr.type }
+            })
+          )
+        }
       }
 
-      setUploadProgress(prev => ({ ...prev, progress: 50, step: 'Procesando archivos y actualizando base de datos...' }))
-
-      // Enviar archivos al endpoint de procesamiento
-      const response = await fetch('/api/dashboard/upload-files', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.details || errorData.error || 'Error al procesar archivos');
-      }
-
-      const result = await response.json();
+      await Promise.all(uploadPromises)
       
-      if (response.status === 202) {
-        // Procesamiento asíncrono iniciado
-        setUploadProgress({
-          uploading: false,
-          progress: 100,
-          step: `✅ Archivos subidos. Procesamiento en curso (${result.estimatedTime})`,
-          success: true
-        })
+      setUploadProgress(prev => ({ ...prev, step: 'Archivos subidos, iniciando procesamiento...', progress: 70 }))
 
-        success(`✅ ¡Archivos subidos! El procesamiento tardará ${result.estimatedTime}. Los datos aparecerán automáticamente cuando esté listo.`)
-      } else {
-        // Procesamiento síncrono completado (para retrocompatibilidad)
-        setUploadProgress({
-          uploading: false,
-          progress: 100,
-          step: `✅ Procesamiento completado: ${result.totalRowsProcessed || 'Varios'} registros actualizados`,
-          success: true
-        })
+      // PASO 3: Iniciar procesamiento desde R2
+      const processResponse = await fetch('/api/dashboard/process-uploaded-files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: uploadUrls }),
+      })
 
-        success(`✅ ¡Éxito! ${result.totalRowsProcessed || 'Archivos'} procesados y ${result.summary?.tables_updated || 'tablas'} actualizadas.`)
+      if (!processResponse.ok) {
+        throw new Error('Error iniciando el procesamiento de archivos.')
       }
+
+      const result = await processResponse.json()
+      
+      setUploadProgress({
+        uploading: false,
+        progress: 100,
+        step: `✅ Archivos subidos. Procesamiento en curso (${result.estimatedTime})`,
+        success: true
+      })
+
+      success(`✅ ¡Archivos subidos exitosamente! Procesamiento en curso: ${result.estimatedTime}. Los datos aparecerán automáticamente.`)
       
       setTimeout(() => {
         onUploadComplete?.()
         onClose()
         resetFiles()
-      }, 5000) // Más tiempo para leer el mensaje
+      }, 5000)
 
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
+      console.error('Error durante la subida:', err)
       setUploadProgress({
         uploading: false,
         progress: 0,
         step: '',
-        error: errorMessage
+        error: err instanceof Error ? err.message : 'Error desconocido'
       })
-      error(errorMessage)
+      error(err instanceof Error ? err.message : 'Error durante la subida')
     }
   }
 

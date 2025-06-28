@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import { neon } from '@neondatabase/serverless'
 import * as XLSX from 'xlsx'
 import { Readable } from 'stream'
@@ -8,7 +7,7 @@ import { getJsDateFromExcel } from 'excel-date-to-js'
 import * as path from 'path'
 import csvParser from 'csv-parser'
 
-// Configuración optimizada de Cloudflare R2 con timeouts
+// Configuración de Cloudflare R2
 const r2Client = new S3Client({
   region: 'auto',
   endpoint: process.env.CLOUDFLARE_R2_ENDPOINT!,
@@ -16,18 +15,14 @@ const r2Client = new S3Client({
     accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID!,
     secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY!,
   },
-  requestHandler: {
-    requestTimeout: 120000, // 2 minutos timeout para uploads grandes
-    connectionTimeout: 30000, // 30 segundos para establecer conexión
-  },
 })
 
 const BUCKET_NAME = process.env.CLOUDFLARE_R2_BUCKET_NAME!
 
-// Columnas que deben ser DATE - exactamente como en el código de Colab
+// Columnas que deben ser DATE
 const columnas_fecha = [
   "fechaexpendiente",
-  "fechaetapaaprobacionmasivafin",
+  "fechaetapaaprobacionmasivafin", 
   "fechapre",
   "fecha_asignacion"
 ]
@@ -37,13 +32,130 @@ const conversiones = {
   "table_prr": columnas_fecha
 }
 
+export async function POST(request: NextRequest) {
+  console.log('🔄 Iniciando procesamiento de archivos desde R2...');
+  
+  try {
+    // Verificar variables de entorno
+    if (!process.env.DATABASE_DIRECT_URL) {
+      throw new Error('Variable DATABASE_DIRECT_URL no configurada');
+    }
+
+    const body = await request.json();
+    const { files } = body;
+
+    if (!files || !Array.isArray(files) || files.length === 0) {
+      return NextResponse.json(
+        { error: 'Debes proporcionar información de los archivos a procesar.' },
+        { status: 400 }
+      );
+    }
+
+    // Iniciar procesamiento en background (NO ESPERAR)
+    processFilesFromR2(files).catch(error => {
+      console.error('❌ Error en procesamiento desde R2:', error);
+    });
+
+    console.log('✅ Procesamiento iniciado desde R2. Respondiendo inmediatamente.');
+
+    // Responder inmediatamente
+    return NextResponse.json({
+      success: true,
+      message: 'Procesamiento de archivos iniciado desde R2.',
+      files: files.map(f => ({ fileName: f.fileName, table: f.table })),
+      status: 'processing',
+      estimatedTime: '3-8 minutos para completarse',
+      note: 'Los datos aparecerán en el dashboard automáticamente cuando esté listo.'
+    }, { status: 202 }); // 202 Accepted
+
+  } catch (error) {
+    console.error('❌ Error iniciando procesamiento desde R2:', error);
+    
+    return NextResponse.json(
+      { 
+        error: 'Error al procesar archivos desde R2',
+        details: error instanceof Error ? error.message : 'Error desconocido'
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// Función para procesar archivos desde R2 en background
+async function processFilesFromR2(files: Array<{fileName: string, key: string, table: string}>) {
+  console.log('🔄 Procesando archivos desde R2 en background...');
+  
+  try {
+    const sql = neon(process.env.DATABASE_DIRECT_URL!);
+    const processedTables = [];
+
+    for (const fileInfo of files) {
+      console.log(`📁 Procesando ${fileInfo.fileName} desde R2...`);
+      
+      // Descargar archivo de R2
+      const fileBuffer = await downloadFromR2(fileInfo.key);
+      
+      // Procesar archivo
+      const rawData = await readFileAuto(fileBuffer, fileInfo.fileName);
+      const { columns, rows } = cleanColumnNames(rawData);
+      
+      console.log(`📊 ${fileInfo.table}: ${rows.length} filas, ${columns.length} columnas`);
+      
+      // Cargar a base de datos
+      const insertedRows = await copyDataFrameToPostgres(columns, rows, fileInfo.table, sql);
+      processedTables.push({
+        table: fileInfo.table,
+        rows: insertedRows,
+        columns: columns.length
+      });
+    }
+
+    // Convertir columnas de fechas
+    console.log('🗓️ Convirtiendo columnas de fecha...');
+    await convertirColumnasFecha(sql, conversiones);
+
+    const totalRows = processedTables.reduce((sum, table) => sum + table.rows, 0);
+    console.log(`🎉 ¡Procesamiento completado! ${totalRows} registros procesados.`);
+
+  } catch (error) {
+    console.error('❌ Error crítico en procesamiento desde R2:', error);
+  }
+}
+
+// Función para descargar archivo de R2
+async function downloadFromR2(key: string): Promise<Buffer> {
+  const command = new GetObjectCommand({
+    Bucket: BUCKET_NAME,
+    Key: key
+  });
+  
+  const response = await r2Client.send(command);
+  
+  if (!response.Body) {
+    throw new Error('No se pudo descargar el archivo de R2');
+  }
+
+  // Convertir stream a buffer
+  const chunks: Buffer[] = [];
+  const stream = response.Body as Readable;
+  
+  return new Promise((resolve, reject) => {
+    stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    stream.on('error', reject);
+  });
+}
+
+// Incluir las funciones de procesamiento necesarias aquí
+// [Las funciones readFileAuto, cleanColumnNames, copyDataFrameToPostgres, convertirColumnasFecha]
+// se mantendrían igual que en el archivo original
+
 // Función para detectar si un valor es un número serial de Excel (fecha)
 function isExcelDateSerial(value: any): boolean {
-  // Debe ser un número, positivo, y típicamente entre 1 y 50000+ (fechas razonables)
   return typeof value === 'number' && 
          value > 0 && 
-         value < 100000 && // fechas hasta aprox año 2173
-         Number.isInteger(value * 86400) // puede tener decimales para horas/minutos
+         value < 100000 && 
+         Number.isInteger(value * 86400)
 }
 
 // Función para convertir fechas de Excel a formato ISO string
@@ -54,13 +166,10 @@ function convertExcelDateToISO(value: any): string | null {
       return jsDate.toISOString().split('T')[0]
     }
     
-    // Si ya es una fecha en string, intentar parsearlo
     if (typeof value === 'string' && value.trim()) {
-      // Primero, intentamos el formato DD/MM/YYYY que viene del CSV
       const parts = value.split('/');
       if (parts.length === 3) {
         const [day, month, year] = parts;
-        // Creamos la fecha en formato YYYY-MM-DD para asegurar consistencia
         const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
         const parsed = new Date(formattedDate);
         if (!isNaN(parsed.getTime())) {
@@ -68,7 +177,6 @@ function convertExcelDateToISO(value: any): string | null {
         }
       }
       
-      // Como fallback, intentamos el constructor de Date directamente
       const parsed = new Date(value)
       if (!isNaN(parsed.getTime())) {
         return parsed.toISOString().split('T')[0]
@@ -90,25 +198,22 @@ function processRowData(columns: string[], row: any[], tableName: string, rowInd
   const processedRow = row.map((value, index) => {
     const columnName = columns[index]
     
-    // Si es una columna de fecha, el resultado DEBE ser una fecha o NULL.
     if (dateColumns.includes(columnName)) {
       const convertedDate = convertExcelDateToISO(value)
       if (convertedDate) {
         dateConversions++
-        if (rowIndex === 0) { // Log solo para la primera fila
+        if (rowIndex === 0) {
           console.log(`🔄 Fecha convertida en ${columnName}: ${value} → ${convertedDate}`)
         }
         return convertedDate;
       } else {
-        // Si no se pudo convertir (ej. celda vacía), SIEMPRE retornar NULL para la DB.
         if (rowIndex === 0 && value != null && value !== '') {
-          console.log(`⚠️ No se pudo convertir fecha en ${columnName}: ${value} (tipo: ${typeof value}), se usará NULL.`)
+          console.log(`⚠️ No se pudo convertir fecha en ${columnName}: ${value}, se usará NULL.`)
         }
         return null;
       }
     }
     
-    // Para otras columnas, convertir a string si no es null/undefined
     return value != null ? String(value) : null
   })
   
@@ -119,12 +224,11 @@ function processRowData(columns: string[], row: any[], tableName: string, rowInd
   return processedRow
 }
 
-// Lógica de lectura unificada: Soporta CSV, XLSX y XLS usando solo SheetJS.
+// Lógica de lectura unificada: Soporta CSV, XLSX y XLS
 async function readFileAuto(fileBuffer: Buffer, fileName: string): Promise<any[][]> {
   const fileExtension = path.extname(fileName).toLowerCase();
   console.log(`🚀 Iniciando lectura de archivo: ${fileName}.`);
 
-  // Para CSV, usamos un parser de streaming dedicado para máxima eficiencia de memoria.
   if (fileExtension === '.csv') {
     return new Promise((resolve, reject) => {
       console.log("🧠 Usando el parser de streaming 'csv-parser'.");
@@ -133,15 +237,14 @@ async function readFileAuto(fileBuffer: Buffer, fileName: string): Promise<any[]
       
       stream
         .pipe(csvParser({ 
-          headers: false, // Para que no ignore la primera fila (que es el header)
-          separator: ';'  // ¡La clave! Especificamos el delimitador correcto.
+          headers: false,
+          separator: ';'
         })) 
         .on('data', (row: any) => {
-          // csv-parser devuelve un objeto con claves numéricas, lo convertimos a un array de valores.
           data.push(Object.values(row));
         })
         .on('end', () => {
-          console.log(`✅ Lectura de CSV con streaming completada. Se encontraron ${data.length} filas.`);
+          console.log(`✅ Lectura de CSV completada. ${data.length} filas.`);
           resolve(data);
         })
         .on('error', (error: Error) => {
@@ -150,7 +253,6 @@ async function readFileAuto(fileBuffer: Buffer, fileName: string): Promise<any[]
         });
     });
   } 
-  // Para XLSX/XLS, la carga en buffer es necesaria por la naturaleza del formato (ZIP).
   else if (fileExtension === '.xlsx' || fileExtension === '.xls') {
     console.log(`🧠 Usando el lector de Excel en memoria (SheetJS) para ${fileExtension}.`);
     try {
@@ -163,7 +265,7 @@ async function readFileAuto(fileBuffer: Buffer, fileName: string): Promise<any[]
 
       if (!data || data.length === 0) throw new Error("El archivo parece estar vacío.");
       
-      console.log(`✅ Lectura de Excel completada. Se encontraron ${data.length} filas.`);
+      console.log(`✅ Lectura de Excel completada. ${data.length} filas.`);
       return data;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -174,7 +276,7 @@ async function readFileAuto(fileBuffer: Buffer, fileName: string): Promise<any[]
   }
 }
 
-// Función para limpiar nombres de columnas - igual que en Colab
+// Función para limpiar nombres de columnas
 function cleanColumnNames(data: any[][]): { columns: string[], rows: any[][] } {
   if (data.length === 0) throw new Error("Archivo vacío")
   
@@ -183,27 +285,12 @@ function cleanColumnNames(data: any[][]): { columns: string[], rows: any[][] } {
     String(col).trim().replace(/\s+/g, '_').replace(/-/g, '_').toLowerCase()
   )
   
-  const rows = data.slice(1) // Todos los datos excepto el header
+  const rows = data.slice(1)
   
   return { columns, rows }
 }
 
-// Función para subir archivo a R2
-async function uploadToR2(fileBuffer: Buffer, fileName: string): Promise<string> {
-  const key = `uploads/${Date.now()}-${fileName}`
-  
-  const command = new PutObjectCommand({
-    Bucket: BUCKET_NAME,
-    Key: key,
-    Body: fileBuffer,
-    ContentType: 'application/octet-stream'
-  })
-  
-  await r2Client.send(command)
-  return key
-}
-
-// Función para cargar DataFrame a PostgreSQL - adaptada del código de Colab
+// Función para cargar DataFrame a PostgreSQL
 async function copyDataFrameToPostgres(
   columns: string[], 
   rows: any[][], 
@@ -220,17 +307,13 @@ async function copyDataFrameToPostgres(
     
     console.log(`📋 Tabla ${tableName} preparada con ${columns.length} columnas`)
     
-    // Truncar tabla antes de insertar - exactamente como en Colab
+    // Truncar tabla antes de insertar
     const truncateQuery = `TRUNCATE TABLE ${tableName};`
     await sql.query(truncateQuery)
     console.log(`🗑️ Tabla ${tableName} truncada`)
     
-    // Insertar datos usando múltiples valores (más eficiente)
+    // Insertar datos usando múltiples valores
     let insertedRows = 0
-    // Aumentamos el tamaño del lote para optimizar la velocidad de inserción.
-    // Menos lotes = menos viajes de red a la base de datos = más rápido.
-    // El límite de parámetros de PostgreSQL es 65535. Con ~30 columnas,
-    // un lote de 1000 (30,000 parámetros) es seguro y mucho más eficiente.
     const batchSize = 1000
     
     for (let i = 0; i < rows.length; i += batchSize) {
@@ -238,33 +321,26 @@ async function copyDataFrameToPostgres(
       
       if (batch.length === 0) continue
       
-      // Preparar múltiples filas para inserción
       const valueGroups = []
       const allValues = []
       
       for (let rowIndex = 0; rowIndex < batch.length; rowIndex++) {
         const row = batch[rowIndex]
-        
-        // Procesar la fila incluyendo conversión de fechas de Excel
-        const actualRowIndex = i + rowIndex // índice global de la fila
+        const actualRowIndex = i + rowIndex
         const processedRow = processRowData(columns, row, tableName, actualRowIndex)
         
-        // Asegurar que la fila tenga el mismo número de columnas
         const paddedRow = Array(columns.length).fill(null)
         for (let j = 0; j < Math.min(processedRow.length, columns.length); j++) {
           paddedRow[j] = processedRow[j]
         }
         
-        // Crear placeholders para esta fila
         const startIndex = rowIndex * columns.length
         const placeholders = columns.map((_, colIndex) => `$${startIndex + colIndex + 1}`).join(', ')
         valueGroups.push(`(${placeholders})`)
         
-        // Añadir valores al array
         allValues.push(...paddedRow)
       }
       
-      // Usar template literals para la inserción
       const columnNames = columns.map(col => `"${col}"`).join(', ')
       const insertQuery = `INSERT INTO ${tableName} (${columnNames}) VALUES ${valueGroups.join(', ')}`
       
@@ -283,7 +359,7 @@ async function copyDataFrameToPostgres(
   }
 }
 
-// Función para convertir columnas a tipo DATE - exactamente como en Colab
+// Función para convertir columnas a tipo DATE
 async function convertirColumnasFecha(sql: any, conversiones: Record<string, string[]>) {
   for (const [tabla, columnas] of Object.entries(conversiones)) {
     console.log(`\n🔄 Procesando tabla: ${tabla}`)
@@ -292,7 +368,6 @@ async function convertirColumnasFecha(sql: any, conversiones: Record<string, str
       try {
         console.log(` - Convirtiendo columna: ${col} → DATE...`)
         
-        // Verificar si la columna existe antes de intentar convertirla
         const checkColumnQuery = `
           SELECT column_name 
           FROM information_schema.columns 
@@ -301,7 +376,6 @@ async function convertirColumnasFecha(sql: any, conversiones: Record<string, str
         const columnExists = await sql.query(checkColumnQuery)
         
         if (columnExists.length > 0) {
-          // Primero verificar si ya es tipo DATE
           const checkTypeQuery = `
             SELECT data_type 
             FROM information_schema.columns 
@@ -331,74 +405,4 @@ async function convertirColumnasFecha(sql: any, conversiones: Record<string, str
       }
     }
   }
-}
-
-export async function POST(request: NextRequest) {
-  console.log('🚀 Generando URLs de subida directa...');
-  
-  try {
-    // Verificar variables de entorno básicas
-    if (!process.env.CLOUDFLARE_R2_ENDPOINT || !process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || 
-        !process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || !process.env.CLOUDFLARE_R2_BUCKET_NAME) {
-      throw new Error('Variables de entorno de Cloudflare R2 no configuradas');
-    }
-
-    const body = await request.json();
-    const { files } = body;
-
-    if (!files || !Array.isArray(files) || files.length === 0) {
-      return NextResponse.json(
-        { error: 'Debes proporcionar información de los archivos a subir.' },
-        { status: 400 }
-      );
-    }
-
-    console.log('📋 Generando URLs pre-firmadas para subida directa a R2...');
-
-    // Generar URLs pre-firmadas para cada archivo
-    const uploadUrls = [];
-    for (const fileInfo of files) {
-      const { name, type, size } = fileInfo;
-      const key = `uploads/${Date.now()}-${name}`;
-      
-      const command = new PutObjectCommand({
-        Bucket: BUCKET_NAME,
-        Key: key,
-        ContentType: type || 'application/octet-stream',
-        ContentLength: size,
-      });
-
-      // Generar URL pre-firmada con 10 minutos de expiración
-      const uploadUrl = await getSignedUrl(r2Client, command, { expiresIn: 600 });
-      
-      uploadUrls.push({
-        fileName: name,
-        uploadUrl,
-        key,
-        table: name.toLowerCase().includes('ccm') ? 'table_ccm' : 'table_prr'
-      });
-    }
-
-    console.log(`✅ ${uploadUrls.length} URLs generadas. Respondiendo inmediatamente.`);
-
-    // Responder inmediatamente con las URLs
-    return NextResponse.json({
-      success: true,
-      message: 'URLs de subida generadas. Use estas URLs para subir directamente a R2.',
-      uploadUrls,
-      status: 'urls_ready',
-      note: 'Suba los archivos usando las URLs y luego llame al endpoint de procesamiento.'
-    }, { status: 200 });
-
-  } catch (error) {
-    console.error('❌ Error generando URLs de subida:', error);
-    
-    return NextResponse.json(
-      { 
-        error: 'Error al generar URLs de subida',
-        details: error instanceof Error ? error.message : 'Error desconocido'
-      },
-      { status: 500 }
-    );
-  }
-}
+} 
