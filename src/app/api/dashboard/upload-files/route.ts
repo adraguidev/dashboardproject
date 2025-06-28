@@ -4,8 +4,8 @@ import { neon } from '@neondatabase/serverless'
 import * as XLSX from 'xlsx'
 import { Readable } from 'stream'
 import { getJsDateFromExcel } from 'excel-date-to-js'
-import path from 'path'
-import csv from 'csv-parser'
+import * as path from 'path'
+import csvParser from 'csv-parser'
 
 // Configuración de Cloudflare R2
 const r2Client = new S3Client({
@@ -127,7 +127,7 @@ async function readFileAuto(fileBuffer: Buffer, fileName: string): Promise<any[]
       const stream = Readable.from(fileBuffer);
       
       stream
-        .pipe(csv({ 
+        .pipe(csvParser({ 
           headers: false, // Para que no ignore la primera fila (que es el header)
           separator: ';'  // ¡La clave! Especificamos el delimitador correcto.
         })) 
@@ -353,13 +353,18 @@ async function convertirColumnasFecha(sql: any, conversiones: Record<string, str
 }
 
 export async function POST(request: NextRequest) {
-  console.log('🚀 Iniciando subida de archivos a R2...');
+  console.log('🚀 Iniciando procesamiento completo de archivos...');
   
   try {
     // Verificar variables de entorno de Cloudflare R2
     if (!process.env.CLOUDFLARE_R2_ENDPOINT || !process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || 
         !process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || !process.env.CLOUDFLARE_R2_BUCKET_NAME) {
       throw new Error('Variables de entorno de Cloudflare R2 no configuradas');
+    }
+
+    // Verificar variables de entorno de la base de datos
+    if (!process.env.DATABASE_DIRECT_URL) {
+      throw new Error('Variable de entorno DATABASE_DIRECT_URL no configurada');
     }
 
     const formData = await request.formData();
@@ -374,39 +379,87 @@ export async function POST(request: NextRequest) {
     }
 
     const uploadedFiles = [];
+    const processedTables = [];
+
+    // Conectar a la base de datos usando conexión directa para optimizar el rendimiento
+    const sql = neon(process.env.DATABASE_DIRECT_URL);
 
     if (ccmFile) {
+      console.log(`📁 Procesando archivo CCM: ${ccmFile.name}`);
+      
+      // 1. Subir a R2 para backup
       console.log(`☁️ Subiendo ${ccmFile.name} a R2...`);
       const ccmBuffer = Buffer.from(await ccmFile.arrayBuffer());
       const ccmKey = await uploadToR2(ccmBuffer, ccmFile.name);
       uploadedFiles.push({ fileName: ccmFile.name, key: ccmKey, table: 'table_ccm' });
       console.log(`✅ Archivo CCM subido a R2 con clave: ${ccmKey}`);
+
+      // 2. Procesar el archivo y cargar a base de datos
+      console.log(`🔄 Leyendo y procesando archivo CCM...`);
+      const rawData = await readFileAuto(ccmBuffer, ccmFile.name);
+      const { columns, rows } = cleanColumnNames(rawData);
+      
+      console.log(`📊 CCM: ${rows.length} filas de datos con ${columns.length} columnas`);
+      
+      const insertedRows = await copyDataFrameToPostgres(columns, rows, 'table_ccm', sql);
+      processedTables.push({
+        table: 'table_ccm',
+        rows: insertedRows,
+        columns: columns.length
+      });
     }
 
     if (prrFile) {
+      console.log(`📁 Procesando archivo PRR: ${prrFile.name}`);
+      
+      // 1. Subir a R2 para backup
       console.log(`☁️ Subiendo ${prrFile.name} a R2...`);
       const prrBuffer = Buffer.from(await prrFile.arrayBuffer());
       const prrKey = await uploadToR2(prrBuffer, prrFile.name);
       uploadedFiles.push({ fileName: prrFile.name, key: prrKey, table: 'table_prr' });
       console.log(`✅ Archivo PRR subido a R2 con clave: ${prrKey}`);
+
+      // 2. Procesar el archivo y cargar a base de datos
+      console.log(`🔄 Leyendo y procesando archivo PRR...`);
+      const rawData = await readFileAuto(prrBuffer, prrFile.name);
+      const { columns, rows } = cleanColumnNames(rawData);
+      
+      console.log(`📊 PRR: ${rows.length} filas de datos con ${columns.length} columnas`);
+      
+      const insertedRows = await copyDataFrameToPostgres(columns, rows, 'table_prr', sql);
+      processedTables.push({
+        table: 'table_prr',
+        rows: insertedRows,
+        columns: columns.length
+      });
     }
 
-    // AÑADIR A LA COLA DE TRABAJO (Este es el siguiente paso a implementar)
-    // Por ahora, solo confirmamos la subida.
-    console.log('✅ Subida completada. Los archivos serán procesados en segundo plano.');
+    // 3. Convertir columnas de fechas de TEXT a DATE
+    console.log(`🗓️ Convirtiendo columnas de fecha a tipo DATE...`);
+    await convertirColumnasFecha(sql, conversiones);
+
+    console.log('🎉 ¡Procesamiento completado exitosamente!');
 
     return NextResponse.json({
       success: true,
-      message: 'Archivos recibidos y en cola para procesamiento.',
+      message: 'Archivos procesados exitosamente y datos cargados a la base de datos.',
       files: uploadedFiles,
-    }, { status: 202 }); // 202 Accepted indica que la solicitud fue aceptada pero el procesamiento no ha terminado.
+      processed: processedTables,
+      totalRowsProcessed: processedTables.reduce((sum, table) => sum + table.rows, 0),
+      summary: {
+        tables_updated: processedTables.length,
+        files_uploaded: uploadedFiles.length,
+        backup_location: 'Cloudflare R2',
+        date_columns_converted: true
+      }
+    }, { status: 200 }); // 200 OK ya que el procesamiento está completo
 
   } catch (error) {
-    console.error('❌ Error durante la subida de archivos a R2:', error);
+    console.error('❌ Error durante el procesamiento de archivos:', error);
     
     return NextResponse.json(
       { 
-        error: 'Error al subir los archivos',
+        error: 'Error al procesar los archivos',
         details: error instanceof Error ? error.message : 'Error desconocido'
       },
       { status: 500 }

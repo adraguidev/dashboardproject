@@ -86,34 +86,6 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
     })
   }
 
-  const uploadFile = async (file: File, table: 'table_ccm' | 'table_prr') => {
-    setUploadProgress(prev => ({ ...prev, step: `Obteniendo URL para ${file.name}...` }))
-    const presignedUrlResponse = await fetch('/api/dashboard/generate-upload-url', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename: file.name, contentType: file.type }),
-    });
-
-    if (!presignedUrlResponse.ok) {
-      throw new Error(`No se pudo obtener la URL de subida para ${file.name}.`);
-    }
-
-    const { uploadUrl, key } = await presignedUrlResponse.json();
-
-    setUploadProgress(prev => ({ ...prev, step: `Subiendo ${file.name} a R2...` }))
-    const uploadResponse = await fetch(uploadUrl, {
-      method: 'PUT',
-      body: file,
-      headers: { 'Content-Type': file.type },
-    });
-
-    if (!uploadResponse.ok) {
-      throw new Error(`Error al subir ${file.name} a R2.`);
-    }
-
-    console.log(`Archivo ${file.name} subido exitosamente con clave: ${key}. Procesamiento pendiente.`);
-  }
-
   const handleUpload = async () => {
     if (!files.ccm && !files.prr) {
       error('Debes seleccionar al menos un archivo (CCM o PRR)')
@@ -123,27 +95,45 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
     setUploadProgress({
       uploading: true,
       progress: 0,
-      step: 'Iniciando subida...'
+      step: 'Iniciando procesamiento...'
     })
 
     try {
+      // Crear FormData para enviar archivos
+      const formData = new FormData();
+      
       if (files.ccm) {
-        await uploadFile(files.ccm, 'table_ccm')
-        setUploadProgress(prev => ({ ...prev, progress: prev.progress + 50 }))
+        formData.append('ccm_file', files.ccm);
+        setUploadProgress(prev => ({ ...prev, progress: 25, step: 'Preparando archivo CCM...' }))
       }
       if (files.prr) {
-        await uploadFile(files.prr, 'table_prr')
-        setUploadProgress(prev => ({ ...prev, progress: 100 }))
+        formData.append('prr_file', files.prr);
+        setUploadProgress(prev => ({ ...prev, progress: 25, step: 'Preparando archivo PRR...' }))
       }
 
+      setUploadProgress(prev => ({ ...prev, progress: 50, step: 'Procesando archivos y actualizando base de datos...' }))
+
+      // Enviar archivos al endpoint de procesamiento
+      const response = await fetch('/api/dashboard/upload-files', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || errorData.error || 'Error al procesar archivos');
+      }
+
+      const result = await response.json();
+      
       setUploadProgress({
         uploading: false,
         progress: 100,
-        step: 'Subida a R2 completada. El procesamiento se hará en segundo plano.',
+        step: `✅ Procesamiento completado: ${result.totalRowsProcessed} registros actualizados`,
         success: true
       })
 
-      success('✅ Archivos subidos. El procesamiento en la base de datos comenzará en breve.')
+      success(`✅ ¡Éxito! ${result.totalRowsProcessed} registros procesados y ${result.summary.tables_updated} tablas actualizadas.`)
       
       setTimeout(() => {
         onUploadComplete?.()
@@ -284,13 +274,14 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
 
           {/* Info Box */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-blue-800 mb-2">⚠️ Información importante:</h3>
+            <h3 className="text-sm font-medium text-blue-800 mb-2">ℹ️ Información importante:</h3>
             <ul className="text-xs text-blue-700 space-y-1">
               <li>• Los archivos deben ser consolidado_final_CCM_personal.xlsx y consolidado_final_PRR_personal.xlsx</li>
               <li>• Este proceso borrará todos los datos existentes en table_ccm y table_prr</li>
-              <li>• Los nuevos datos se insertarán automáticamente</li>
+              <li>• Los nuevos datos se insertarán automáticamente en tiempo real</li>
               <li>• Las columnas de fecha se convertirán al tipo DATE correctamente</li>
-              <li>• Usar Cloudflare R2 para archivos grandes (evita problemas de memoria)</li>
+              <li>• Se crea backup automático en Cloudflare R2 para seguridad</li>
+              <li>• El procesamiento es inmediato y se ve reflejado al instante</li>
             </ul>
           </div>
         </div>

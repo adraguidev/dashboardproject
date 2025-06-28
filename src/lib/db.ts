@@ -6,7 +6,7 @@ import { eq, and, isNull, isNotNull, desc, asc, count, gte, lte, inArray, like, 
 // Schema para table_ccm
 export const tableCCM = pgTable('table_ccm', {
   numerotramite: text('numerotramite'),
-  fechaexpendiente: text('fechaexpendiente'),
+  fechaexpendiente: date('fechaexpendiente'),
   operador: text('operador'),
   ultimaetapa: text('ultimaetapa'),
   estadopre: text('estadopre'),
@@ -14,14 +14,14 @@ export const tableCCM = pgTable('table_ccm', {
   anio: integer('anio'),
   mes: integer('mes'),
   operadorpre: text('operadorpre'),
-  fechapre: text('fechapre'),
+  fechapre: date('fechapre'),
   // Agregar más campos según sea necesario
 });
 
 // Schema para table_prr
 export const tablePRR = pgTable('table_prr', {
   numerotramite: text('numerotramite'),
-  fechaexpendiente: text('fechaexpendiente'),
+  fechaexpendiente: date('fechaexpendiente'),
   operador: text('operador'),
   ultimaetapa: text('ultimaetapa'),
   estadopre: text('estadopre'),
@@ -29,7 +29,7 @@ export const tablePRR = pgTable('table_prr', {
   anio: integer('anio'),
   mes: integer('mes'),
   operadorpre: text('operadorpre'),
-  fechapre: text('fechapre'),
+  fechapre: date('fechapre'),
   // Agregar más campos según sea necesario
 });
 
