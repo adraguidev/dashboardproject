@@ -126,20 +126,33 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
 
       const result = await response.json();
       
-      setUploadProgress({
-        uploading: false,
-        progress: 100,
-        step: `✅ Procesamiento completado: ${result.totalRowsProcessed} registros actualizados`,
-        success: true
-      })
+      if (response.status === 202) {
+        // Procesamiento asíncrono iniciado
+        setUploadProgress({
+          uploading: false,
+          progress: 100,
+          step: `✅ Archivos subidos. Procesamiento en curso (${result.estimatedTime})`,
+          success: true
+        })
 
-      success(`✅ ¡Éxito! ${result.totalRowsProcessed} registros procesados y ${result.summary.tables_updated} tablas actualizadas.`)
+        success(`✅ ¡Archivos subidos! El procesamiento tardará ${result.estimatedTime}. Los datos aparecerán automáticamente cuando esté listo.`)
+      } else {
+        // Procesamiento síncrono completado (para retrocompatibilidad)
+        setUploadProgress({
+          uploading: false,
+          progress: 100,
+          step: `✅ Procesamiento completado: ${result.totalRowsProcessed || 'Varios'} registros actualizados`,
+          success: true
+        })
+
+        success(`✅ ¡Éxito! ${result.totalRowsProcessed || 'Archivos'} procesados y ${result.summary?.tables_updated || 'tablas'} actualizadas.`)
+      }
       
       setTimeout(() => {
         onUploadComplete?.()
         onClose()
         resetFiles()
-      }, 3000)
+      }, 5000) // Más tiempo para leer el mensaje
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
@@ -278,10 +291,10 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
             <ul className="text-xs text-blue-700 space-y-1">
               <li>• Los archivos deben ser consolidado_final_CCM_personal.xlsx y consolidado_final_PRR_personal.xlsx</li>
               <li>• Este proceso borrará todos los datos existentes en table_ccm y table_prr</li>
-              <li>• Los nuevos datos se insertarán automáticamente en tiempo real</li>
+              <li>• Los archivos se suben inmediatamente, el procesamiento tarda 2-5 minutos</li>
               <li>• Las columnas de fecha se convertirán al tipo DATE correctamente</li>
               <li>• Se crea backup automático en Cloudflare R2 para seguridad</li>
-              <li>• El procesamiento es inmediato y se ve reflejado al instante</li>
+              <li>• Los datos aparecerán en el dashboard automáticamente cuando esté listo</li>
             </ul>
           </div>
         </div>

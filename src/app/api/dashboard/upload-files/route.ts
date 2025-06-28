@@ -198,30 +198,6 @@ async function uploadToR2(fileBuffer: Buffer, fileName: string): Promise<string>
   return key
 }
 
-// Función para descargar archivo de R2
-async function downloadFromR2(key: string): Promise<Buffer> {
-  const command = new GetObjectCommand({
-    Bucket: BUCKET_NAME,
-    Key: key
-  })
-  
-  const response = await r2Client.send(command)
-  
-  if (!response.Body) {
-    throw new Error('No se pudo descargar el archivo de R2')
-  }
-
-  // Convertir stream a buffer
-  const chunks: Buffer[] = []
-  const stream = response.Body as Readable
-  
-  return new Promise((resolve, reject) => {
-    stream.on('data', (chunk: Buffer) => chunks.push(chunk))
-    stream.on('end', () => resolve(Buffer.concat(chunks)))
-    stream.on('error', reject)
-  })
-}
-
 // Función para cargar DataFrame a PostgreSQL - adaptada del código de Colab
 async function copyDataFrameToPostgres(
   columns: string[], 
@@ -353,18 +329,13 @@ async function convertirColumnasFecha(sql: any, conversiones: Record<string, str
 }
 
 export async function POST(request: NextRequest) {
-  console.log('🚀 Iniciando procesamiento completo de archivos...');
+  console.log('🚀 Iniciando subida de archivos a R2...');
   
   try {
     // Verificar variables de entorno de Cloudflare R2
     if (!process.env.CLOUDFLARE_R2_ENDPOINT || !process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || 
         !process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || !process.env.CLOUDFLARE_R2_BUCKET_NAME) {
       throw new Error('Variables de entorno de Cloudflare R2 no configuradas');
-    }
-
-    // Verificar variables de entorno de la base de datos
-    if (!process.env.DATABASE_DIRECT_URL) {
-      throw new Error('Variable de entorno DATABASE_DIRECT_URL no configurada');
     }
 
     const formData = await request.formData();
@@ -379,90 +350,97 @@ export async function POST(request: NextRequest) {
     }
 
     const uploadedFiles = [];
-    const processedTables = [];
 
-    // Conectar a la base de datos usando conexión directa para optimizar el rendimiento
-    const sql = neon(process.env.DATABASE_DIRECT_URL);
-
+    // FASE 1: Subida rápida a R2 (esto debe ser rápido)
     if (ccmFile) {
-      console.log(`📁 Procesando archivo CCM: ${ccmFile.name}`);
-      
-      // 1. Subir a R2 para backup
       console.log(`☁️ Subiendo ${ccmFile.name} a R2...`);
       const ccmBuffer = Buffer.from(await ccmFile.arrayBuffer());
       const ccmKey = await uploadToR2(ccmBuffer, ccmFile.name);
       uploadedFiles.push({ fileName: ccmFile.name, key: ccmKey, table: 'table_ccm' });
       console.log(`✅ Archivo CCM subido a R2 con clave: ${ccmKey}`);
-
-      // 2. Procesar el archivo y cargar a base de datos
-      console.log(`🔄 Leyendo y procesando archivo CCM...`);
-      const rawData = await readFileAuto(ccmBuffer, ccmFile.name);
-      const { columns, rows } = cleanColumnNames(rawData);
-      
-      console.log(`📊 CCM: ${rows.length} filas de datos con ${columns.length} columnas`);
-      
-      const insertedRows = await copyDataFrameToPostgres(columns, rows, 'table_ccm', sql);
-      processedTables.push({
-        table: 'table_ccm',
-        rows: insertedRows,
-        columns: columns.length
-      });
     }
 
     if (prrFile) {
-      console.log(`📁 Procesando archivo PRR: ${prrFile.name}`);
-      
-      // 1. Subir a R2 para backup
       console.log(`☁️ Subiendo ${prrFile.name} a R2...`);
       const prrBuffer = Buffer.from(await prrFile.arrayBuffer());
       const prrKey = await uploadToR2(prrBuffer, prrFile.name);
       uploadedFiles.push({ fileName: prrFile.name, key: prrKey, table: 'table_prr' });
       console.log(`✅ Archivo PRR subido a R2 con clave: ${prrKey}`);
+    }
 
-      // 2. Procesar el archivo y cargar a base de datos
-      console.log(`🔄 Leyendo y procesando archivo PRR...`);
-      const rawData = await readFileAuto(prrBuffer, prrFile.name);
+    // FASE 2: Iniciar procesamiento en background (no esperar)
+    processFilesInBackground(uploadedFiles).catch(error => {
+      console.error('❌ Error en procesamiento background:', error);
+    });
+
+    console.log('✅ Archivos subidos a R2. Procesamiento iniciado en background.');
+
+    // Retornar inmediatamente (evita timeout de Heroku)
+    return NextResponse.json({
+      success: true,
+      message: 'Archivos subidos exitosamente. El procesamiento se está ejecutando en segundo plano.',
+      files: uploadedFiles,
+      status: 'processing',
+      estimatedTime: '2-5 minutos para completarse',
+      note: 'Los datos aparecerán en el dashboard una vez completado el procesamiento.'
+    }, { status: 202 }); // 202 Accepted - procesamiento en curso
+
+  } catch (error) {
+    console.error('❌ Error durante la subida de archivos a R2:', error);
+    
+    return NextResponse.json(
+      { 
+        error: 'Error al subir los archivos',
+        details: error instanceof Error ? error.message : 'Error desconocido'
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// Función para procesar archivos en background (no bloquea la respuesta HTTP)
+async function processFilesInBackground(uploadedFiles: Array<{fileName: string, key: string, table: string}>) {
+  console.log('🔄 Iniciando procesamiento en background...');
+  
+  try {
+    // Verificar variable de entorno de base de datos
+    if (!process.env.DATABASE_DIRECT_URL) {
+      throw new Error('Variable de entorno DATABASE_DIRECT_URL no configurada');
+    }
+
+    // Conectar a la base de datos usando conexión directa
+    const sql = neon(process.env.DATABASE_DIRECT_URL);
+    const processedTables = [];
+
+    for (const fileInfo of uploadedFiles) {
+      console.log(`📁 Procesando archivo background: ${fileInfo.fileName}`);
+      
+      // Descargar archivo de R2
+      const fileBuffer = await downloadFromR2(fileInfo.key);
+      
+      // Leer y procesar archivo
+      const rawData = await readFileAuto(fileBuffer, fileInfo.fileName);
       const { columns, rows } = cleanColumnNames(rawData);
       
-      console.log(`📊 PRR: ${rows.length} filas de datos con ${columns.length} columnas`);
+      console.log(`📊 ${fileInfo.table}: ${rows.length} filas de datos con ${columns.length} columnas`);
       
-      const insertedRows = await copyDataFrameToPostgres(columns, rows, 'table_prr', sql);
+      // Cargar a base de datos
+      const insertedRows = await copyDataFrameToPostgres(columns, rows, fileInfo.table, sql);
       processedTables.push({
-        table: 'table_prr',
+        table: fileInfo.table,
         rows: insertedRows,
         columns: columns.length
       });
     }
 
-    // 3. Convertir columnas de fechas de TEXT a DATE
+    // Convertir columnas de fechas de TEXT a DATE
     console.log(`🗓️ Convirtiendo columnas de fecha a tipo DATE...`);
     await convertirColumnasFecha(sql, conversiones);
 
-    console.log('🎉 ¡Procesamiento completado exitosamente!');
-
-    return NextResponse.json({
-      success: true,
-      message: 'Archivos procesados exitosamente y datos cargados a la base de datos.',
-      files: uploadedFiles,
-      processed: processedTables,
-      totalRowsProcessed: processedTables.reduce((sum, table) => sum + table.rows, 0),
-      summary: {
-        tables_updated: processedTables.length,
-        files_uploaded: uploadedFiles.length,
-        backup_location: 'Cloudflare R2',
-        date_columns_converted: true
-      }
-    }, { status: 200 }); // 200 OK ya que el procesamiento está completo
+    const totalRows = processedTables.reduce((sum, table) => sum + table.rows, 0);
+    console.log(`🎉 ¡Procesamiento background completado! ${totalRows} registros procesados.`);
 
   } catch (error) {
-    console.error('❌ Error durante el procesamiento de archivos:', error);
-    
-    return NextResponse.json(
-      { 
-        error: 'Error al procesar los archivos',
-        details: error instanceof Error ? error.message : 'Error desconocido'
-      },
-      { status: 500 }
-    );
+    console.error('❌ Error en procesamiento background:', error);
   }
 }
