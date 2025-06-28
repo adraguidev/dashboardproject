@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import { neon } from '@neondatabase/serverless'
-import { Readable, Writable } from 'stream'
-import { pipeline } from 'stream/promises'
-import csvParser from 'csv-parser'
+import { Readable } from 'stream'
 import { Workbook } from 'exceljs'
+import csvParser from 'csv-parser'
 import * as path from 'path'
+import { drizzle } from 'drizzle-orm/neon-http'
+import { sql } from 'drizzle-orm'
 
 // Configuración de Cloudflare R2
 const r2Client = new S3Client({
@@ -94,28 +95,29 @@ export async function POST(request: NextRequest) {
 // Lógica principal de procesamiento en background
 async function processFilesFromR2(files: Array<{fileName: string, key: string, table: string}>) {
   console.log('[Stream] 🔄 Iniciando procesamiento en background...');
-  // Nota: La conexión a la BD se pasa a la función que procesa cada archivo
-  // para asegurar que las conexiones se manejan de forma aislada.
-  const sql = neon(process.env.DATABASE_DIRECT_URL!);
+  const db = drizzle(neon(process.env.DATABASE_DIRECT_URL!));
 
   for (const fileInfo of files) {
     try {
-      // Se pasa la conexión `sql` a la función que procesa cada archivo
-      await processSingleFileStream(fileInfo, sql);
+      // Cada archivo se procesa en su propia transacción para aislar fallos.
+      await db.transaction(async (tx) => {
+        console.log(`[Transaction] 🏁 Iniciando transacción para ${fileInfo.fileName}`);
+        await processSingleFileStream(tx, fileInfo);
+        console.log(`[Transaction] ✅ COMMIT para ${fileInfo.fileName}`);
+      });
     } catch (error) {
-      console.error(`[Stream] ❌ Error fatal procesando ${fileInfo.fileName}:`, error);
-      // Aquí se podría añadir lógica para reintentos o para notificar el fallo
+      console.error(`[Transaction] ❌ Error fatal en transacción para ${fileInfo.fileName}. Se hizo ROLLBACK.`, error);
     }
   }
 
   // Conversión de fechas post-procesamiento para todas las tablas
   console.log('[Stream] 🗓️  Iniciando conversión de columnas de fecha a tipo DATE...');
-  await convertAllDateColumns(sql);
+  await convertAllDateColumns(db); // Usar la conexión principal para esto
   console.log('[Stream] ✅ Conversión de fechas completada.');
 }
 
-// Procesa un único archivo usando streams, de forma más robusta
-async function processSingleFileStream(fileInfo: {fileName: string, key: string, table: string}, sql: any) {
+// Procesa un único archivo usando streams dentro de una transacción
+async function processSingleFileStream(tx: any, fileInfo: {fileName: string, key: string, table: string}) {
     const { fileName, key, table } = fileInfo;
     console.log(`[Stream] 🚀 Comenzando a procesar: ${fileName} para la tabla ${table}`);
 
@@ -124,17 +126,17 @@ async function processSingleFileStream(fileInfo: {fileName: string, key: string,
     
     // Preparar la tabla: crearla si no existe con el esquema canónico y truncarla
     const colDefs = canonicalColumns.map(col => `"${col}" TEXT`).join(', ');
-    await sql.query(`CREATE TABLE IF NOT EXISTS ${table} (${colDefs});`);
-    await sql.query(`TRUNCATE TABLE ${table};`);
+    await tx.execute(sql.raw(`CREATE TABLE IF NOT EXISTS ${table} (${colDefs});`));
+    await tx.execute(sql.raw(`TRUNCATE TABLE ${table};`));
     console.log(`[Stream] ✅ Tabla ${table} preparada y limpia.`);
     
     let fileHeaders: string[] = [];
-    const headerIndexMap: { [key: string]: number } = {}; // Usamos const porque el objeto no se reasigna
+    const headerIndexMap: { [key: string]: number } = {};
     let columnsToInsert: string[] = [];
     let isFirstRow = true;
     let rowCount = 0;
     let processedRowCount = 0;
-    const batchSize = 250; // Reducido para dynos con menos memoria, asegura un flujo más constante.
+    const batchSize = 250;
     let batch: any[][] = [];
 
     const dataStream = createParserStream(fileName, r2Stream);
@@ -150,10 +152,10 @@ async function processSingleFileStream(fileInfo: {fileName: string, key: string,
             isFirstRow = false;
 
             if (columnsToInsert.length === 0) {
-                throw new Error(`No se encontraron columnas compatibles en el archivo ${fileName} para el esquema de la tabla ${table}.`);
+                throw new Error(`No se encontraron columnas compatibles en el archivo ${fileName}.`);
             }
-            console.log(`[Stream] 🗺️  Mapeadas ${columnsToInsert.length} columnas desde ${fileName}.`);
-            continue; // Saltar la fila de cabecera
+            console.log(`[Stream] 🗺️  Mapeadas ${columnsToInsert.length} columnas.`);
+            continue;
         }
 
         const processedRow = processRowData(row, fileHeaders);
@@ -161,7 +163,7 @@ async function processSingleFileStream(fileInfo: {fileName: string, key: string,
         batch.push(dbRow);
 
         if (batch.length >= batchSize) {
-            await insertBatch(sql, table, columnsToInsert, batch);
+            await insertBatch(tx, table, columnsToInsert, batch);
             processedRowCount += batch.length;
             console.log(`[Stream] 📦 Lote de ${batch.length} insertado. Total: ${processedRowCount}`);
             batch = [];
@@ -169,11 +171,11 @@ async function processSingleFileStream(fileInfo: {fileName: string, key: string,
     }
 
     if (batch.length > 0) {
-        await insertBatch(sql, table, columnsToInsert, batch);
+        await insertBatch(tx, table, columnsToInsert, batch);
         processedRowCount += batch.length;
     }
 
-    console.log(`[Stream] ✅ Finalizado ${fileName}. Total de filas leídas: ${rowCount - 1}, filas procesadas: ${processedRowCount}`);
+    console.log(`[Stream] ✅ Finalizado ${fileName}. Total filas leídas: ${rowCount - 1}, filas procesadas: ${processedRowCount}`);
 }
 
 // Funciones de ayuda
@@ -240,45 +242,44 @@ function convertExcelDate(value: any): string | null {
   return null;
 }
 
-async function insertBatch(sql: any, table: string, columns: string[], batch: any[][]) {
-  const valueGroups = [];
-  const allValues = [];
-  let placeholderIndex = 1;
+async function insertBatch(tx: any, table: string, columns: string[], batch: any[][]) {
+    const valueGroups = [];
+    const allValues = [];
+    let placeholderIndex = 1;
 
-  for (const row of batch) {
-    const placeholders = [];
-    for (const value of row) {
-      placeholders.push(`$${placeholderIndex++}`);
-      allValues.push(value);
+    for (const row of batch) {
+        const placeholders = [];
+        for (const value of row) {
+            placeholders.push(`$${placeholderIndex++}`);
+            allValues.push(value);
+        }
+        valueGroups.push(`(${placeholders.join(', ')})`);
     }
-    valueGroups.push(`(${placeholders.join(', ')})`);
-  }
 
-  const columnNames = columns.map(col => `"${col}"`).join(', ');
-  const query = `INSERT INTO ${table} (${columnNames}) VALUES ${valueGroups.join(', ')}`;
-  
-  await sql.query(query, allValues);
+    const columnNames = columns.map(col => `"${col}"`).join(', ');
+    const query = `INSERT INTO ${table} (${columnNames}) VALUES ${valueGroups.join(', ')}`;
+    
+    await tx.execute(sql.raw(query), allValues);
 }
 
-async function convertAllDateColumns(sql: any) {
-  for (const table in canonicalSchema) {
-    for (const col of dateColumns) {
-      try {
-        const alterQuery = `
-          ALTER TABLE ${table}
-          ALTER COLUMN "${col}" TYPE DATE
-          USING CASE 
-            WHEN "${col}" IS NULL OR "${col}" = '' THEN NULL
-            ELSE "${col}"::DATE
-          END;
-        `;
-        await sql.query(alterQuery);
-      } catch (error) {
-        // Ignorar error si la columna no existe en esa tabla particular
-        if (!(error instanceof Error && error.message.includes('column "') && error.message.includes('" of relation "') && error.message.includes('" does not exist'))) {
-          console.error(`[Stream] ❌ Error convirtiendo ${col} en ${table}:`, error);
+async function convertAllDateColumns(db: any) {
+    for (const table in canonicalSchema) {
+        for (const col of dateColumns) {
+            try {
+                const alterQuery = `
+                    ALTER TABLE ${table}
+                    ALTER COLUMN "${col}" TYPE DATE
+                    USING CASE 
+                        WHEN "${col}" IS NULL OR "${col}" = '' THEN NULL
+                        ELSE "${col}"::DATE
+                    END;
+                `;
+                await db.execute(sql.raw(alterQuery));
+            } catch (error) {
+                if (!(error instanceof Error && error.message.includes('does not exist'))) {
+                  console.error(`[Stream] ❌ Error convirtiendo ${col} en ${table}:`, error);
+                }
+            }
         }
-      }
     }
-  }
 } 
