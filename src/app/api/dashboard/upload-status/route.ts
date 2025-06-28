@@ -1,39 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { neon } from '@neondatabase/serverless'
+import { jobStatusManager } from '@/lib/redis'
+
+export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url)
+  const jobId = searchParams.get('jobId')
+
+  if (!jobId) {
+    return NextResponse.json({ error: 'Falta el ID del trabajo (jobId).' }, { status: 400 })
+  }
+
   try {
-    // Verificar estado general de las tablas
-    // Esto es útil para detectar cuándo hay datos nuevos
-    if (!process.env.DATABASE_DIRECT_URL) {
-      return NextResponse.json({ 
-        error: 'Database URL no configurada' 
-      }, { status: 500 })
+    const status = await jobStatusManager.get(jobId)
+    
+    if (!status) {
+      return NextResponse.json({ jobId, status: 'not_found', message: 'El trabajo no se encontró o ha expirado.' }, { status: 404 })
     }
 
-    const sql = neon(process.env.DATABASE_DIRECT_URL)
-    
-    // Verificar última actualización de las tablas
-    const [ccmCount, prrCount] = await Promise.all([
-      sql`SELECT COUNT(*) as count FROM table_ccm`.then(r => r[0]?.count || 0),
-      sql`SELECT COUNT(*) as count FROM table_prr`.then(r => r[0]?.count || 0)
-    ])
-
-    return NextResponse.json({
-      success: true,
-      status: 'ready',
-      tables: {
-        ccm: parseInt(ccmCount as string),
-        prr: parseInt(prrCount as string)
-      },
-      lastChecked: new Date().toISOString()
-    })
+    return NextResponse.json({ jobId, ...status })
 
   } catch (error) {
-    console.error('Error verificando estado:', error)
-    return NextResponse.json({ 
-      error: 'Error al verificar estado',
-      details: error instanceof Error ? error.message : 'Error desconocido'
-    }, { status: 500 })
+    console.error(`[Status] Error obteniendo el estado para el trabajo ${jobId}:`, error)
+    return NextResponse.json({ error: 'Error interno al obtener el estado del trabajo.' }, { status: 500 })
   }
 } 

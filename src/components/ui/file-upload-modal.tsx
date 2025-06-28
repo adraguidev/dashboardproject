@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Upload, X, FileCheck, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
 import { useToast } from './toast'
@@ -32,14 +32,152 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
     step: ''
   })
   const [isMounted, setIsMounted] = useState(false)
+  const [jobId, setJobId] = useState<string | null>(null)
   
   const ccmInputRef = useRef<HTMLInputElement>(null)
   const prrInputRef = useRef<HTMLInputElement>(null)
   const { success, error } = useToast()
 
+  const resetFiles = useCallback(() => {
+    setFiles({ ccm: null, prr: null })
+    setUploadProgress({ uploading: false, progress: 0, step: '' })
+    setJobId(null)
+  }, [])
+
+  const resetAndClose = useCallback(() => {
+    setFiles({ ccm: null, prr: null })
+    setUploadProgress({ uploading: false, progress: 0, step: '' })
+    setJobId(null)
+    onClose()
+  }, [onClose])
+
+  const handleUpload = useCallback(async () => {
+    if (!files.ccm && !files.prr) {
+      error('Por favor selecciona al menos un archivo.')
+      return
+    }
+
+    setUploadProgress({
+      uploading: true,
+      progress: 0,
+      step: 'Preparando subida...',
+      error: undefined,
+      success: undefined
+    })
+
+    try {
+      setUploadProgress(prev => ({ ...prev, step: 'Generando URLs de subida...', progress: 10 }))
+      
+      const fileInfos: { name: string, type: string, size: number }[] = []
+      if (files.ccm) fileInfos.push({ name: files.ccm.name, type: files.ccm.type, size: files.ccm.size })
+      if (files.prr) fileInfos.push({ name: files.prr.name, type: files.prr.type, size: files.prr.size })
+
+      const urlResponse = await fetch('/api/dashboard/upload-files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: fileInfos }),
+      })
+
+      if (!urlResponse.ok) throw new Error('No se pudieron generar las URLs de subida.')
+
+      const urlResult = await urlResponse.json()
+      const uploadUrls: Array<{fileName: string; uploadUrl: string}> = urlResult.uploadUrls
+
+      setUploadProgress(prev => ({ ...prev, step: 'Subiendo archivos a almacenamiento seguro...', progress: 30 }))
+      
+      const uploadPromises: Promise<Response>[] = []
+      
+      if (files.ccm) {
+        const ccmUrlData = uploadUrls.find(u => u.fileName === files.ccm!.name)
+        if (ccmUrlData) {
+          uploadPromises.push(
+            fetch(ccmUrlData.uploadUrl, { method: 'PUT', body: files.ccm, headers: { 'Content-Type': files.ccm.type } })
+          )
+        }
+      }
+
+      if (files.prr) {
+        const prrUrlData = uploadUrls.find(u => u.fileName === files.prr!.name)
+        if (prrUrlData) {
+          uploadPromises.push(
+            fetch(prrUrlData.uploadUrl, { method: 'PUT', body: files.prr, headers: { 'Content-Type': files.prr.type } })
+          )
+        }
+      }
+
+      await Promise.all(uploadPromises)
+      
+      setUploadProgress(prev => ({ ...prev, step: 'Iniciando procesamiento en servidor...', progress: 70 }))
+
+      const processResponse = await fetch('/api/dashboard/process-uploaded-files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: urlResult.uploadUrls }),
+      })
+
+      if (!processResponse.ok) throw new Error('Error al iniciar el procesamiento.')
+
+      const result = await processResponse.json()
+      setJobId(result.jobId)
+
+      setUploadProgress(prev => ({ ...prev, progress: 80, step: 'Tarea creada. Monitoreando progreso...' }))
+
+    } catch (err) {
+      console.error('Error durante la subida:', err)
+      const message = err instanceof Error ? err.message : 'Error desconocido durante la subida'
+      setUploadProgress({ uploading: false, progress: 0, step: '', error: message })
+      error(message)
+    }
+  }, [files, error])
+
   useEffect(() => {
     setIsMounted(true)
   }, [])
+
+  useEffect(() => {
+    if (!jobId) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const statusResponse = await fetch(`/api/dashboard/upload-status?jobId=${jobId}`);
+        const status = await statusResponse.json();
+
+        if (!statusResponse.ok) {
+          throw new Error(status.message || 'Error al verificar el estado.');
+        }
+
+        setUploadProgress(prev => ({
+          ...prev,
+          step: status.message || prev.step,
+          progress: status.progress || prev.progress,
+          error: status.status === 'error' ? status.error : undefined,
+          success: status.status === 'completed'
+        }));
+
+        if (status.status === 'completed' || status.status === 'error') {
+          clearInterval(interval);
+          setJobId(null);
+          if (status.status === 'completed') {
+            success('¡Archivos procesados exitosamente!');
+            setTimeout(() => {
+              onUploadComplete?.();
+              onClose();
+              resetFiles();
+            }, 2000);
+          } else {
+            error(status.error || 'Ocurrió un error en el servidor.');
+          }
+        }
+      } catch (e) {
+        console.error('Error durante el polling de estado:', e);
+        error('Error de red al verificar el estado.');
+        clearInterval(interval);
+        setJobId(null);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [jobId, onUploadComplete, onClose, success, error, resetFiles]);
 
   if (!isMounted || !isOpen) {
     return null
@@ -73,127 +211,6 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
-  }
-
-  const resetFiles = () => {
-    setFiles({ ccm: null, prr: null })
-    setUploadProgress({
-      uploading: false,
-      progress: 0,
-      step: '',
-      error: undefined,
-      success: undefined
-    })
-  }
-
-  const handleUpload = async () => {
-    if (!files.ccm && !files.prr) {
-      error('Por favor selecciona al menos un archivo.')
-      return
-    }
-
-    setUploadProgress({
-      uploading: true,
-      progress: 0,
-      step: 'Preparando subida...',
-      error: undefined,
-      success: undefined
-    })
-
-    try {
-      // PASO 1: Generar URLs de subida directa
-      setUploadProgress(prev => ({ ...prev, step: 'Generando URLs de subida...', progress: 10 }))
-      
-      const fileInfos = []
-      if (files.ccm) fileInfos.push({ name: files.ccm.name, type: files.ccm.type, size: files.ccm.size })
-      if (files.prr) fileInfos.push({ name: files.prr.name, type: files.prr.type, size: files.prr.size })
-
-      const urlResponse = await fetch('/api/dashboard/upload-files', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files: fileInfos }),
-      })
-
-      if (!urlResponse.ok) {
-        throw new Error('No se pudieron generar las URLs de subida.')
-      }
-
-      const urlResult = await urlResponse.json()
-      const uploadUrls = urlResult.uploadUrls
-
-      // PASO 2: Subir archivos directamente a R2
-      setUploadProgress(prev => ({ ...prev, step: 'Subiendo archivos directamente a R2...', progress: 30 }))
-      
-      const uploadPromises = []
-      
-      if (files.ccm) {
-        const ccmUrl = uploadUrls.find((u: any) => u.fileName === files.ccm!.name)
-        if (ccmUrl) {
-          uploadPromises.push(
-            fetch(ccmUrl.uploadUrl, {
-              method: 'PUT',
-              body: files.ccm,
-              headers: { 'Content-Type': files.ccm.type }
-            })
-          )
-      }
-      }
-
-      if (files.prr) {
-        const prrUrl = uploadUrls.find((u: any) => u.fileName === files.prr!.name)
-        if (prrUrl) {
-          uploadPromises.push(
-            fetch(prrUrl.uploadUrl, {
-              method: 'PUT', 
-              body: files.prr,
-              headers: { 'Content-Type': files.prr.type }
-            })
-          )
-        }
-      }
-
-      await Promise.all(uploadPromises)
-      
-      setUploadProgress(prev => ({ ...prev, step: 'Archivos subidos, iniciando procesamiento...', progress: 70 }))
-
-      // PASO 3: Iniciar procesamiento desde R2
-      const processResponse = await fetch('/api/dashboard/process-uploaded-files', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files: uploadUrls }),
-      })
-
-      if (!processResponse.ok) {
-        throw new Error('Error iniciando el procesamiento de archivos.')
-      }
-
-      const result = await processResponse.json()
-
-      setUploadProgress({
-        uploading: false,
-        progress: 100,
-        step: `✅ Archivos subidos. Procesamiento en curso (${result.estimatedTime})`,
-        success: true
-      })
-
-      success(`✅ ¡Archivos subidos exitosamente! Procesamiento en curso: ${result.estimatedTime}. Los datos aparecerán automáticamente.`)
-      
-      setTimeout(() => {
-        onUploadComplete?.()
-        onClose()
-        resetFiles()
-      }, 5000)
-
-    } catch (err) {
-      console.error('Error durante la subida:', err)
-      setUploadProgress({
-        uploading: false,
-        progress: 0,
-        step: '',
-        error: err instanceof Error ? err.message : 'Error desconocido'
-      })
-      error(err instanceof Error ? err.message : 'Error durante la subida')
-    }
   }
 
   const FileDropZone = ({ type, file }: { type: 'ccm' | 'prr', file: File | null }) => (
@@ -258,7 +275,7 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={resetAndClose}
             disabled={uploadProgress.uploading}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
           >
@@ -341,7 +358,7 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
           
           <div className="flex gap-3">
             <button
-              onClick={onClose}
+              onClick={resetAndClose}
               disabled={uploadProgress.uploading}
               className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
             >

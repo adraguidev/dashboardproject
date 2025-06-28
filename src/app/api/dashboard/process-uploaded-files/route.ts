@@ -7,6 +7,8 @@ import csvParser from 'csv-parser'
 import * as path from 'path'
 import { drizzle } from 'drizzle-orm/neon-http'
 import { sql } from 'drizzle-orm'
+import { v4 as uuidv4 } from 'uuid'
+import { jobStatusManager } from '@/lib/redis'
 
 // Configuración de Cloudflare R2
 const r2Client = new S3Client({
@@ -46,8 +48,9 @@ const dateColumns = [
 export async function POST(request: NextRequest) {
   console.log('🔄 Iniciando procesamiento de archivos desde R2...');
   
+  const jobId = uuidv4();
+
   try {
-    // Verificar variables de entorno
     if (!process.env.DATABASE_DIRECT_URL) {
       throw new Error('Variable DATABASE_DIRECT_URL no configurada');
     }
@@ -56,79 +59,89 @@ export async function POST(request: NextRequest) {
     const { files } = body;
 
     if (!files || !Array.isArray(files) || files.length === 0) {
-      return NextResponse.json(
-        { error: 'Debes proporcionar información de los archivos a procesar.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Debes proporcionar información de los archivos a procesar.' }, { status: 400 });
     }
 
-    // Iniciar procesamiento en background (NO ESPERAR)
-    processFilesFromR2(files).catch(error => {
-      console.error('❌ Error en procesamiento desde R2:', error);
+    // Iniciar el procesamiento en background sin esperar (no usar await)
+    processFilesFromR2(jobId, files).catch(async (error) => {
+      console.error(`[Job ${jobId}] ❌ Error en la ejecución principal del background:`, error);
+      await jobStatusManager.update(jobId, { 
+        status: 'error', 
+        message: 'Error crítico en el worker.',
+        error: error instanceof Error ? error.message : 'Error desconocido'
+      });
     });
 
-    console.log('✅ Procesamiento iniciado desde R2. Respondiendo inmediatamente.');
+    console.log(`[Job ${jobId}] ✅ Tarea de procesamiento iniciada. Respondiendo inmediatamente.`);
 
-    // Responder inmediatamente
+    // Responder inmediatamente con el ID del trabajo
     return NextResponse.json({
       success: true,
-      message: 'Procesamiento de archivos iniciado desde R2.',
-      files: files.map(f => ({ fileName: f.fileName, table: f.table })),
-      status: 'processing',
-      estimatedTime: '3-8 minutos para completarse',
-      note: 'Los datos aparecerán en el dashboard automáticamente cuando esté listo.'
-    }, { status: 202 }); // 202 Accepted
+      message: 'Procesamiento de archivos iniciado. Consulta el estado con el ID del trabajo.',
+      jobId: jobId,
+      status: 'processing_started'
+    }, { status: 202 });
 
   } catch (error) {
-    console.error('❌ Error iniciando procesamiento desde R2:', error);
-    
-    return NextResponse.json(
-      { 
-        error: 'Error al procesar archivos desde R2',
-        details: error instanceof Error ? error.message : 'Error desconocido'
-      },
-      { status: 500 }
-    );
+    console.error(`[Job ${jobId}] ❌ Error al iniciar el procesamiento:`, error);
+    return NextResponse.json({ 
+      error: 'Error al iniciar el procesamiento', 
+      details: error instanceof Error ? error.message : 'Error desconocido' 
+    }, { status: 500 });
   }
 }
 
-// Lógica principal de procesamiento en background
-async function processFilesFromR2(files: Array<{fileName: string, key: string, table: string}>) {
-  console.log('[Stream] 🔄 Iniciando procesamiento en background...');
+// Lógica principal de procesamiento en background, ahora acepta un jobId
+async function processFilesFromR2(jobId: string, files: Array<{fileName: string, key: string, table: string}>) {
+  await jobStatusManager.update(jobId, { status: 'in_progress', message: 'Iniciando...', progress: 0 });
+  console.log(`[Job ${jobId}] [Stream] 🔄 Iniciando procesamiento en background...`);
+  
   const db = drizzle(neon(process.env.DATABASE_DIRECT_URL!));
 
-  for (const fileInfo of files) {
+  for (const [index, fileInfo] of files.entries()) {
+    const fileProgressStart = (index / files.length) * 100;
+    const fileProgressEnd = ((index + 1) / files.length) * 100;
+
     try {
-      // Cada archivo se procesa en su propia transacción para aislar fallos.
       await db.transaction(async (tx) => {
-        console.log(`[Transaction] 🏁 Iniciando transacción para ${fileInfo.fileName}`);
-        await processSingleFileStream(tx, fileInfo);
-        console.log(`[Transaction] ✅ COMMIT para ${fileInfo.fileName}`);
+        const message = `Procesando archivo ${index + 1}/${files.length}: ${fileInfo.fileName}`;
+        await jobStatusManager.update(jobId, { status: 'in_progress', message, progress: fileProgressStart });
+        
+        await processSingleFileStream(tx, fileInfo, jobId, (progress) => {
+          // Actualizar progreso dentro del archivo (0 a 100) -> escalado al progreso total
+          const overallProgress = fileProgressStart + (progress / 100) * (fileProgressEnd - fileProgressStart);
+          jobStatusManager.update(jobId, { status: 'in_progress', message, progress: overallProgress });
+        });
       });
     } catch (error) {
-      console.error(`[Transaction] ❌ Error fatal en transacción para ${fileInfo.fileName}. Se hizo ROLLBACK.`, error);
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      await jobStatusManager.update(jobId, { status: 'error', message: `Error en ${fileInfo.fileName}`, error: errorMessage });
+      console.error(`[Job ${jobId}] [Transaction] ❌ Error en transacción para ${fileInfo.fileName}.`, error);
+      return; // Detener el proceso si un archivo falla
     }
   }
 
-  // Conversión de fechas post-procesamiento para todas las tablas
-  console.log('[Stream] 🗓️  Iniciando conversión de columnas de fecha a tipo DATE...');
-  await convertAllDateColumns(db); // Usar la conexión principal para esto
-  console.log('[Stream] ✅ Conversión de fechas completada.');
+  await jobStatusManager.update(jobId, { status: 'in_progress', message: 'Convirtiendo columnas de fecha...', progress: 98 });
+  await convertAllDateColumns(db);
+  
+  await jobStatusManager.update(jobId, { status: 'completed', message: '¡Procesamiento completado!', progress: 100 });
+  console.log(`[Job ${jobId}] [Stream] ✅ Procesamiento finalizado.`);
 }
 
 // Procesa un único archivo usando streams dentro de una transacción
-async function processSingleFileStream(tx: any, fileInfo: {fileName: string, key: string, table: string}) {
+async function processSingleFileStream(tx: any, fileInfo: {fileName: string, key: string, table: string}, jobId: string, onProgress: (progress: number) => void) {
     const { fileName, key, table } = fileInfo;
-    console.log(`[Stream] 🚀 Comenzando a procesar: ${fileName} para la tabla ${table}`);
+    console.log(`[Job ${jobId}] [Stream] 🚀 Procesando: ${fileName}`);
 
     const r2Stream = await getR2FileStream(key);
     const canonicalColumns = canonicalSchema[table as keyof typeof canonicalSchema];
     
-    // Preparar la tabla: crearla si no existe con el esquema canónico y truncarla
+    // Preparación de la tabla
+    onProgress(5);
     const colDefs = canonicalColumns.map(col => `"${col}" TEXT`).join(', ');
     await tx.execute(sql.raw(`CREATE TABLE IF NOT EXISTS ${table} (${colDefs});`));
     await tx.execute(sql.raw(`TRUNCATE TABLE ${table};`));
-    console.log(`[Stream] ✅ Tabla ${table} preparada y limpia.`);
+    onProgress(10);
     
     let fileHeaders: string[] = [];
     const headerIndexMap: { [key: string]: number } = {};
@@ -140,9 +153,12 @@ async function processSingleFileStream(tx: any, fileInfo: {fileName: string, key
     let batch: any[][] = [];
 
     const dataStream = createParserStream(fileName, r2Stream);
-
-    console.log(`[Stream] 🧠 Creado parser para ${fileName}, iniciando iteración...`);
-
+    
+    // Obtener el total de filas para el progreso (aproximado para streams)
+    // Para simplificar, asumiremos un número grande y actualizaremos basado en lotes
+    const totalSteps = 10; // Dividir el progreso en 10 partes
+    let stepCounter = 0;
+    
     for await (const row of dataStream) {
         rowCount++;
         if (isFirstRow) {
@@ -150,11 +166,7 @@ async function processSingleFileStream(tx: any, fileInfo: {fileName: string, key
             fileHeaders.forEach((col, index) => { if(col) headerIndexMap[col] = index; });
             columnsToInsert = canonicalColumns.filter(col => headerIndexMap.hasOwnProperty(col));
             isFirstRow = false;
-
-            if (columnsToInsert.length === 0) {
-                throw new Error(`No se encontraron columnas compatibles en el archivo ${fileName}.`);
-            }
-            console.log(`[Stream] 🗺️  Mapeadas ${columnsToInsert.length} columnas.`);
+            if (columnsToInsert.length === 0) throw new Error(`No se encontraron columnas compatibles.`);
             continue;
         }
 
@@ -165,8 +177,11 @@ async function processSingleFileStream(tx: any, fileInfo: {fileName: string, key
         if (batch.length >= batchSize) {
             await insertBatch(tx, table, columnsToInsert, batch);
             processedRowCount += batch.length;
-            console.log(`[Stream] 📦 Lote de ${batch.length} insertado. Total: ${processedRowCount}`);
             batch = [];
+            
+            // Actualizar progreso
+            stepCounter++;
+            onProgress(10 + (stepCounter / totalSteps) * 80);
         }
     }
 
@@ -174,8 +189,9 @@ async function processSingleFileStream(tx: any, fileInfo: {fileName: string, key
         await insertBatch(tx, table, columnsToInsert, batch);
         processedRowCount += batch.length;
     }
-
-    console.log(`[Stream] ✅ Finalizado ${fileName}. Total filas leídas: ${rowCount - 1}, filas procesadas: ${processedRowCount}`);
+    
+    onProgress(100);
+    console.log(`[Job ${jobId}] [Stream] ✅ Finalizado ${fileName}. Filas procesadas: ${processedRowCount}`);
 }
 
 // Funciones de ayuda
