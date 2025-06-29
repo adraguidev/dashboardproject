@@ -149,7 +149,6 @@ async function processSingleFileStream(tx: any, fileInfo: {fileName: string, key
     const r2Stream = await getR2FileStream(key);
     const canonicalColumns = canonicalSchema[table as keyof typeof canonicalSchema];
     
-    onProgress(5);
     // 1. Asegurar que la tabla exista con el esquema correcto
     await ensureTableSchema(tx, table, canonicalColumns);
     console.log(`[Stream] ✅ Esquema de tabla ${table} verificado y corregido.`);
