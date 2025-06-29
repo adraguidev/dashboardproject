@@ -49,54 +49,59 @@ const canonicalSchema = {
   ]
 }
 
+// La URL de tu worker desplegado.
+// Es buena práctica mover esto a una variable de entorno.
+const WORKER_URL = 'https://worker-processor.aaguirreb16.workers.dev';
+
+/**
+ * Este endpoint ahora actúa como un "proxy" o "disparador".
+ * Su única responsabilidad es recibir la información del archivo subido a R2
+ * y reenviarla al Cloudflare Worker para que este haga el trabajo pesado.
+ */
 export async function POST(request: NextRequest) {
-  console.log('🔄 Iniciando procesamiento de archivos desde R2...');
-  
-  const jobId = uuidv4();
+	try {
+		const { files }: { files: { key: string; table: string }[] } = await request.json();
 
-  try {
-    if (!process.env.DATABASE_DIRECT_URL) {
-      throw new Error('Variable DATABASE_DIRECT_URL no configurada');
-    }
+		if (!files || !Array.isArray(files) || files.length === 0) {
+			return NextResponse.json({ error: 'No se proporcionaron archivos para procesar.' }, { status: 400 });
+		}
 
-    const body = await request.json();
-    const { files, jobId: providedJobId } = body;
+		// Disparamos una petición al worker por cada archivo.
+		// Usamos Promise.all para esperar a que todas las peticiones se inicien.
+		const processingPromises = files.map(file => {
+			const jobId = uuidv4();
+			console.log(`[Job ${jobId}] Disparando worker para el archivo: ${file.key}`);
 
-    // Usar el jobId proporcionado si existe, sino crear uno nuevo
-    const actualJobId = providedJobId || jobId;
+			return fetch(WORKER_URL, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					key: file.key,
+					jobId: jobId,
+					table: file.table,
+				}),
+			});
+		});
 
-    if (!files || !Array.isArray(files) || files.length === 0) {
-      return NextResponse.json({ error: 'Debes proporcionar información de los archivos a procesar.' }, { status: 400 });
-    }
+		// Esperamos a que todas las llamadas al worker se completen.
+		// No esperamos el resultado del procesamiento, solo que la llamada inicial sea exitosa.
+		await Promise.all(processingPromises);
 
-    // Iniciar el procesamiento en background sin esperar (no usar await)
-    processFilesFromR2(actualJobId, files).catch(async (error) => {
-      console.error(`[Job ${actualJobId}] ❌ Error en la ejecución principal del background:`, error);
-      await jobStatusManager.update(actualJobId, { 
-        status: 'error', 
-        message: 'Error crítico en el worker.',
-        error: error instanceof Error ? error.message : 'Error desconocido'
-      });
-    });
-
-    console.log(`[Job ${actualJobId}] ✅ Tarea de procesamiento iniciada. Respondiendo inmediatamente.`);
-
-    // Responder inmediatamente con HTTP 202
-    return NextResponse.json({
-      success: true,
-      message: 'Procesamiento de archivos iniciado en background. Consulta el estado con el ID del trabajo.',
-      jobId: actualJobId,
-      status: 'processing_started',
-      estimatedTime: '3-8 minutos'
-    }, { status: 202 });
-
-  } catch (error) {
-    console.error(`[Job ${jobId}] ❌ Error al iniciar el procesamiento:`, error);
-    return NextResponse.json({ 
-      error: 'Error al iniciar el procesamiento', 
-      details: error instanceof Error ? error.message : 'Error desconocido' 
-    }, { status: 500 });
-  }
+		// Devolvemos una respuesta 202 (Accepted) para que el frontend
+		// sepa que la tarea fue aceptada y se está procesando en background.
+		return NextResponse.json(
+			{
+				message: 'Las tareas de procesamiento de archivos han sido aceptadas y se están ejecutando en background.',
+			},
+			{ status: 202 }
+		);
+	} catch (error) {
+		console.error('Error al disparar el Cloudflare Worker:', error);
+		const errorMessage = error instanceof Error ? error.message : 'Error desconocido.';
+		return NextResponse.json({ error: 'Error interno del servidor al contactar el servicio de procesamiento.', details: errorMessage }, { status: 500 });
+	}
 }
 
 // Lógica principal de procesamiento en background usando psycopg2 con COPY

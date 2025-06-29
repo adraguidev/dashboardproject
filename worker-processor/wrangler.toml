@@ -1,0 +1,18 @@
+# Este es el archivo de configuración principal para tu Worker.
+# Puedes encontrar más información en la documentación de Wrangler:
+# https://developers.cloudflare.com/workers/wrangler/configuration/
+
+name = "worker-processor" # 👈 El nombre de tu Worker
+main = "src/index.ts" # 👈 El punto de entrada de tu Worker
+compatibility_date = "2024-06-28" # 👈 La fecha de compatibilidad para asegurar que no haya breaking changes
+compatibility_flags = ["nodejs_compat"] # 👈 AÑADIR ESTO para usar APIs de Node.js
+
+# =================================================================================
+#  VINCULACIÓN CON SERVICIOS DE CLOUDFLARE
+# =================================================================================
+
+# 📦 Vinculación con el Bucket de R2
+# Esto permite que el Worker lea los archivos que sube tu app de Heroku.
+[[r2_buckets]]
+binding = "R2_BUCKET" # Nombre con el que nos referiremos al bucket en el código del Worker.
+bucket_name = "excelfiles" # ⚡️ ¡IMPORTANTE! Este es el nombre exacto de tu bucket en Cloudflare R2. 
