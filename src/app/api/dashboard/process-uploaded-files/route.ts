@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
-import { neon } from '@neondatabase/serverless'
+import { Pool } from 'pg'
+import { drizzle as drizzleNode, NodePgDatabase } from 'drizzle-orm/node-postgres'
+import { sql } from 'drizzle-orm'
 import { Readable } from 'stream'
 import { Workbook } from 'exceljs'
 import csvParser from 'csv-parser'
 import * as path from 'path'
-import { drizzle } from 'drizzle-orm/neon-http'
-import { sql } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 import { jobStatusManager } from '@/lib/redis'
 
@@ -91,12 +91,14 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Lógica principal de procesamiento en background, ahora acepta un jobId
+// Lógica principal de procesamiento en background
 async function processFilesFromR2(jobId: string, files: Array<{fileName: string, key: string, table: string}>) {
   await jobStatusManager.update(jobId, { status: 'in_progress', message: 'Iniciando...', progress: 0 });
   console.log(`[Job ${jobId}] [Stream] 🔄 Iniciando procesamiento en background...`);
   
-  const db = drizzle(neon(process.env.DATABASE_DIRECT_URL!));
+  // Usar el driver pg que soporta transacciones completas
+  const pool = new Pool({ connectionString: process.env.DATABASE_DIRECT_URL! });
+  const db: NodePgDatabase = drizzleNode(pool);
 
   for (const [index, fileInfo] of files.entries()) {
     const fileProgressStart = (index / files.length) * 100;
@@ -121,11 +123,12 @@ async function processFilesFromR2(jobId: string, files: Array<{fileName: string,
     }
   }
 
-  await jobStatusManager.update(jobId, { status: 'in_progress', message: 'Convirtiendo columnas de fecha...', progress: 98 });
+  // Conversión de fechas post-procesamiento
+  console.log(`[Job ${jobId}] [Stream] 🗓️  Iniciando conversión de columnas de fecha...`);
   await convertAllDateColumns(db);
+  console.log(`[Job ${jobId}] [Stream] ✅ Conversión de fechas completada.`);
   
-  await jobStatusManager.update(jobId, { status: 'completed', message: '¡Procesamiento completado!', progress: 100 });
-  console.log(`[Job ${jobId}] [Stream] ✅ Procesamiento finalizado.`);
+  await pool.end(); // Cerrar la conexión al finalizar
 }
 
 // Procesa un único archivo usando streams dentro de una transacción
