@@ -250,8 +250,6 @@ async function processCSVInChunks(
   onProgress: (progress: number) => void
 ) {
   return new Promise((resolve, reject) => {
-    const { Readable } = require('stream');
-    const csvParser = require('csv-parser');
     
     let rowCount = 0;
     let batch: any[] = [];
