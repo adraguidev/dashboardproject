@@ -30,7 +30,7 @@ interface ProcessResponse {
 }
 
 interface UploadUrlResponse {
-	uploadUrls: { fileName: string; url: string; key: string }[];
+	uploadUrls: { fileName: string; uploadUrl: string; key: string; table: string }[];
 	jobId: string;
 }
 
@@ -156,7 +156,7 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
         if (!uploadInfo) {
           throw new Error(`No se encontró URL de subida para ${file.name}`);
         }
-        return uploadFileToR2(file, uploadInfo.url, (progress) => {
+        return uploadFileToR2(file, uploadInfo.uploadUrl, (progress) => {
           setUploadProgress(prev => prev.map((p, index) => 
             index === i ? { ...p, progress, status: progress === 100 ? 'uploaded' : 'uploading' } : p
           ));
