@@ -23,5 +23,8 @@ pnpm-debug.log*
 .vscode/
 .idea/
 
+# Carpeta del Cloudflare Worker (guardada como respaldo)
+/worker-processor-backup
+
 # Carpeta del Cloudflare Worker (se despliega por separado)
 /worker-processor 
