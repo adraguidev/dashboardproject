@@ -162,7 +162,7 @@ async function processFilesFromR2(jobId: string, files: Array<{fileName: string,
   }
 }
 
-// Procesa un único archivo usando COPY - inspirado en el código de Colab
+// Procesa un único archivo optimizado para memoria
 async function processSingleFileWithCopy(
   client: any, 
   fileInfo: {fileName: string, key: string, table: string}, 
@@ -170,29 +170,188 @@ async function processSingleFileWithCopy(
   onProgress: (progress: number) => void
 ) {
   const { fileName, key, table } = fileInfo;
-  console.log(`[Job ${jobId}] 🚀 Procesando con COPY: ${fileName}`);
+  console.log(`[Job ${jobId}] 🚀 Procesando optimizado para memoria: ${fileName}`);
 
-  // 1. Descargar archivo desde R2
-  onProgress(5);
-  const fileBuffer = await downloadFileFromR2(key);
-  console.log(`[Job ${jobId}] ✅ Archivo descargado desde R2: ${fileName}`);
+  try {
+    // 1. Descargar archivo desde R2
+    onProgress(5);
+    const fileBuffer = await downloadFileFromR2(key);
+    console.log(`[Job ${jobId}] ✅ Archivo descargado desde R2: ${fileName}`);
 
-  // 2. Leer archivo según extensión
-  onProgress(15);
-  const rawData = await readFileAuto(fileBuffer, fileName);
-  console.log(`[Job ${jobId}] ✅ Archivo leído: ${rawData.length} filas`);
+    // 2. Procesar archivo por chunks para evitar problemas de memoria
+    onProgress(15);
+    await processFileInChunks(fileBuffer, fileName, table, client, jobId, onProgress);
+    
+    onProgress(100);
+  } catch (error) {
+    console.error(`[Job ${jobId}] ❌ Error procesando archivo:`, error);
+    throw error;
+  }
+}
 
-  // 3. Limpiar nombres de columnas - exactamente como en Colab
-  onProgress(25);
-  const { columns, rows } = cleanColumnNames(rawData);
-  console.log(`[Job ${jobId}] ✅ Columnas limpiadas: ${columns.length} columnas`);
+// Nueva función para procesar archivos por chunks y evitar problemas de memoria
+async function processFileInChunks(
+  fileBuffer: Buffer, 
+  fileName: string, 
+  tableName: string, 
+  client: any, 
+  jobId: string,
+  onProgress: (progress: number) => void
+) {
+  console.log(`[Job ${jobId}] 🔄 Procesando archivo por chunks para optimizar memoria`);
+  
+  // Preparar tabla
+  onProgress(20);
+  const tempColumns = [
+    "textbox4", "dependencia", "anio", "mes", "numerotramite", "ultimaetapa",
+    "fechaexpendiente", "fechaetapaaprobacionmasivafin", "fechapre", "operadorpre",
+    "estadopre", "estadotramite", "archivo_origen", "operador", "fecha_asignacion",
+    "modalidad", "regimen", "meta_antigua", "meta_nueva", "equipo"
+  ];
+  
+  // Crear tabla si no existe
+  const colDefs = tempColumns.map(col => `"${col}" TEXT`).join(', ');
+  const createTableQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (${colDefs});`;
+  await client.query(createTableQuery);
+  
+  // Truncar tabla
+  const truncateQuery = `TRUNCATE TABLE ${tableName};`;
+  await client.query(truncateQuery);
+  console.log(`[Job ${jobId}] ✅ Tabla ${tableName} preparada y truncada`);
+  
+  onProgress(30);
+  
+  // Leer archivo línea por línea para evitar cargar todo en memoria
+  const fileExtension = fileName.toLowerCase().endsWith('.csv') ? 'csv' : 'excel';
+  
+  if (fileExtension === 'csv') {
+    await processCSVInChunks(fileBuffer, tableName, tempColumns, client, jobId, onProgress);
+  } else {
+    // Para Excel, tenemos que cargar en memoria pero optimizamos el procesamiento
+    const rawData = await readFileAuto(fileBuffer, fileName);
+    console.log(`[Job ${jobId}] ✅ Archivo Excel leído: ${rawData.length} filas`);
+    
+    const { columns, rows } = cleanColumnNames(rawData);
+    console.log(`[Job ${jobId}] ✅ Columnas limpiadas: ${columns.length} columnas`);
+    
+    onProgress(50);
+    const insertedRows = await copyDataFrameToPostgres(columns, rows, tableName, client);
+    console.log(`[Job ${jobId}] ✅ ${insertedRows} filas procesadas en '${tableName}'`);
+  }
+}
 
-  // 4. Cargar a PostgreSQL usando COPY - exactamente como en Colab
-  onProgress(35);
-  const insertedRows = await copyDataFrameToPostgres(columns, rows, table, client);
-  console.log(`[Job ${jobId}] ✅ ${insertedRows} filas cargadas con COPY en '${table}'`);
+// Procesar CSV por chunks usando streams
+async function processCSVInChunks(
+  fileBuffer: Buffer, 
+  tableName: string, 
+  columns: string[], 
+  client: any, 
+  jobId: string,
+  onProgress: (progress: number) => void
+) {
+  return new Promise((resolve, reject) => {
+    const { Readable } = require('stream');
+    const csvParser = require('csv-parser');
+    
+    let rowCount = 0;
+    let batch: any[] = [];
+    const batchSize = 1000;
+    let isFirstRow = true;
+    let actualColumns: string[] = [];
+    
+    const stream = Readable.from(fileBuffer)
+      .pipe(csvParser({ 
+        headers: false,
+        separator: ';'
+      }));
+    
+    stream.on('data', async (row: any) => {
+      try {
+        if (isFirstRow) {
+          // Primera fila son los headers
+          actualColumns = Object.values(row).map((col: any) => 
+            String(col).trim().replace(/\s+/g, '_').replace(/-/g, '_').toLowerCase()
+          );
+          isFirstRow = false;
+          console.log(`[Job ${jobId}] ✅ Headers detectados: ${actualColumns.length} columnas`);
+          return;
+        }
+        
+        // Procesar fila de datos
+        const rowData = Object.values(row);
+        const paddedRow = Array(columns.length).fill(null);
+        
+        // Mapear datos a columnas conocidas
+        for (let i = 0; i < Math.min(rowData.length, columns.length); i++) {
+          const value = rowData[i];
+          paddedRow[i] = value != null ? String(value) : null;
+        }
+        
+        batch.push(paddedRow);
+        rowCount++;
+        
+        // Procesar lote cuando esté lleno
+        if (batch.length >= batchSize) {
+          stream.pause(); // Pausar el stream mientras procesamos
+          
+          await insertBatch(client, tableName, columns, batch);
+          console.log(`[Job ${jobId}] 📊 Procesadas ${rowCount} filas`);
+          
+          // Actualizar progreso (30% base + 60% del procesamiento)
+          const progressPercent = 30 + (rowCount / 600000) * 60; // Estimamos máximo 600k filas
+          onProgress(Math.min(progressPercent, 90));
+          
+          batch = []; // Limpiar lote
+          stream.resume(); // Reanudar el stream
+        }
+      } catch (error) {
+        console.error(`[Job ${jobId}] ❌ Error procesando fila:`, error);
+        stream.destroy();
+        reject(error);
+      }
+    });
+    
+    stream.on('end', async () => {
+      try {
+        // Procesar último lote si queda algo
+        if (batch.length > 0) {
+          await insertBatch(client, tableName, columns, batch);
+        }
+        
+        console.log(`[Job ${jobId}] ✅ CSV procesado completamente: ${rowCount} filas`);
+        onProgress(90);
+        resolve(rowCount);
+      } catch (error) {
+        reject(error);
+      }
+    });
+    
+    stream.on('error', (error: any) => {
+      console.error(`[Job ${jobId}] ❌ Error en stream CSV:`, error);
+      reject(error);
+    });
+  });
+}
 
-  onProgress(100);
+// Helper para insertar lotes
+async function insertBatch(client: any, tableName: string, columns: string[], batch: any[][]) {
+  if (batch.length === 0) return;
+  
+  const valueGroups = [];
+  const allValues = [];
+  
+  for (let rowIndex = 0; rowIndex < batch.length; rowIndex++) {
+    const row = batch[rowIndex];
+    const startIndex = rowIndex * columns.length;
+    const placeholders = columns.map((_, colIndex) => `$${startIndex + colIndex + 1}`).join(', ');
+    valueGroups.push(`(${placeholders})`);
+    allValues.push(...row);
+  }
+  
+  const columnNames = columns.map(col => `"${col}"`).join(', ');
+  const insertQuery = `INSERT INTO ${tableName} (${columnNames}) VALUES ${valueGroups.join(', ')}`;
+  
+  await client.query(insertQuery, allValues);
 }
 
 // Descargar archivo desde R2
@@ -280,7 +439,7 @@ function cleanColumnNames(data: any[][]): { columns: string[], rows: any[][] } {
   return { columns, rows };
 }
 
-// Cargar DataFrame a PostgreSQL usando COPY - exactamente como en Colab
+// Cargar DataFrame a PostgreSQL usando INSERT en lotes - optimizado para memoria
 async function copyDataFrameToPostgres(
   columns: string[], 
   rows: any[][], 
@@ -288,7 +447,7 @@ async function copyDataFrameToPostgres(
   client: any
 ): Promise<number> {
   try {
-    console.log(`🔄 Procesando tabla con COPY: ${tableName}`);
+    console.log(`🔄 Procesando tabla con INSERT en lotes: ${tableName}`);
     
     // Crear tabla si no existe con todas las columnas como TEXT
     const colDefs = columns.map(col => `"${col}" TEXT`).join(', ');
@@ -297,40 +456,64 @@ async function copyDataFrameToPostgres(
     
     console.log(`📋 Tabla ${tableName} preparada con ${columns.length} columnas`);
     
-    // Truncar tabla antes de insertar - exactamente como en Colab
+    // Truncar tabla antes de insertar
     const truncateQuery = `TRUNCATE TABLE ${tableName};`;
     await client.query(truncateQuery);
     console.log(`🗑️ Tabla ${tableName} truncada`);
     
-    // Usar COPY para inserción masiva - LA CLAVE DEL PERFORMANCE
-    const copyQuery = `COPY ${tableName} FROM STDIN WITH (FORMAT CSV)`;
+    // Usar INSERT en lotes grandes para optimizar memoria y performance
+    const batchSize = 1000; // Lotes de 1000 filas para evitar problemas de memoria
+    let insertedRows = 0;
     
-    // Convertir datos a formato CSV en memoria
-    const csvData = rows.map(row => {
-      // Asegurar que la fila tenga el mismo número de columnas
-      const paddedRow = Array(columns.length).fill('');
-      for (let i = 0; i < Math.min(row.length, columns.length); i++) {
-        const value = row[i];
-        paddedRow[i] = value != null ? String(value).replace(/"/g, '""') : '';
+    console.log(`📊 Insertando ${rows.length} filas en lotes de ${batchSize}...`);
+    
+    for (let i = 0; i < rows.length; i += batchSize) {
+      const batch = rows.slice(i, i + batchSize);
+      
+      // Preparar placeholders y valores para el lote
+      const valueGroups = [];
+      const allValues = [];
+      
+      for (let rowIndex = 0; rowIndex < batch.length; rowIndex++) {
+        const row = batch[rowIndex];
+        
+        // Asegurar que la fila tenga el mismo número de columnas
+        const paddedRow = Array(columns.length).fill(null);
+        for (let j = 0; j < Math.min(row.length, columns.length); j++) {
+          const value = row[j];
+          paddedRow[j] = value != null ? String(value) : null;
+        }
+        
+        // Crear placeholders para esta fila ($1, $2, $3, etc.)
+        const startIndex = rowIndex * columns.length;
+        const placeholders = columns.map((_, colIndex) => `$${startIndex + colIndex + 1}`).join(', ');
+        valueGroups.push(`(${placeholders})`);
+        
+        // Añadir valores al array
+        allValues.push(...paddedRow);
       }
-      return paddedRow.map(val => `"${val}"`).join(',');
-    }).join('\n');
-
-    // Ejecutar COPY - esto es 300x más rápido que INSERT individual
-    const copyStream = client.query(copyQuery);
-    copyStream.write(csvData);
-    copyStream.end();
+      
+      // Ejecutar INSERT del lote
+      const columnNames = columns.map(col => `"${col}"`).join(', ');
+      const insertQuery = `INSERT INTO ${tableName} (${columnNames}) VALUES ${valueGroups.join(', ')}`;
+      
+      await client.query(insertQuery, allValues);
+      insertedRows += batch.length;
+      
+      // Log progreso cada 10 lotes
+      if ((Math.floor(i / batchSize) + 1) % 10 === 0) {
+        console.log(`📊 Procesado lote ${Math.floor(i / batchSize) + 1}, total: ${insertedRows} filas`);
+      }
+      
+      // Liberar memoria del lote procesado
+      batch.length = 0;
+    }
     
-    await new Promise((resolve, reject) => {
-      copyStream.on('end', resolve);
-      copyStream.on('error', reject);
-    });
-    
-    console.log(`✅ ${rows.length} filas cargadas con COPY en '${tableName}'`);
-    return rows.length;
+    console.log(`✅ ${insertedRows} filas cargadas con INSERT en lotes en '${tableName}'`);
+    return insertedRows;
     
   } catch (error) {
-    console.error(`❌ Error en COPY a '${tableName}':`, error);
+    console.error(`❌ Error en INSERT a '${tableName}':`, error);
     throw error;
   }
 }
