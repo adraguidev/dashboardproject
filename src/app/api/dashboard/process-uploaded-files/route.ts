@@ -140,9 +140,13 @@ async function processSingleFileStream(tx: any, fileInfo: {fileName: string, key
     const canonicalColumns = canonicalSchema[table as keyof typeof canonicalSchema];
     
     onProgress(5);
-    const colDefs = canonicalColumns.map(col => `"${col}" TEXT`).join(', ');
-    await tx.execute(sql.raw(`CREATE TABLE IF NOT EXISTS ${table} (${colDefs});`));
+    // 1. Asegurar que la tabla exista con el esquema correcto
+    await ensureTableSchema(tx, table, canonicalColumns);
+    console.log(`[Stream] ✅ Esquema de tabla ${table} verificado y corregido.`);
+
+    // 2. Truncar la tabla para nuevos datos
     await tx.execute(sql.raw(`TRUNCATE TABLE ${table};`));
+    console.log(`[Stream] ✅ Tabla ${table} truncada.`);
     onProgress(10);
     
     let fileHeaders: string[] = [];
@@ -190,6 +194,29 @@ async function processSingleFileStream(tx: any, fileInfo: {fileName: string, key
     
     onProgress(100);
     console.log(`[Job ${jobId}] [Stream] ✅ Finalizado ${fileName}. Filas procesadas: ${processedRowCount}`);
+}
+
+// Nueva función para asegurar que el esquema de la tabla esté correcto
+async function ensureTableSchema(tx: any, tableName: string, canonicalColumns: string[]) {
+  // Crear la tabla si no existe
+  const colDefs = canonicalColumns.map(col => `"${col}" TEXT`).join(', ');
+  await tx.execute(sql.raw(`CREATE TABLE IF NOT EXISTS ${tableName} (${colDefs});`));
+
+  // Obtener columnas existentes
+  const existingColsResult = await tx.execute(sql.raw(`
+    SELECT column_name 
+    FROM information_schema.columns 
+    WHERE table_name = '${tableName}';
+  `));
+  const existingCols = existingColsResult.rows.map((r: any) => r.column_name);
+
+  // Añadir columnas faltantes
+  const missingCols = canonicalColumns.filter(col => !existingCols.includes(col));
+  if (missingCols.length > 0) {
+    console.log(`[Schema] Columnas faltantes en ${tableName}: ${missingCols.join(', ')}. Añadiendo...`);
+    const addColQueries = missingCols.map(col => `ADD COLUMN IF NOT EXISTS "${col}" TEXT`).join(', ');
+    await tx.execute(sql.raw(`ALTER TABLE ${tableName} ${addColQueries};`));
+  }
 }
 
 // Funciones de ayuda
