@@ -1,0 +1,52 @@
+# Nombre del Workflow
+name: Process Uploaded File
+
+# Define cuándo se ejecuta este workflow
+on:
+  # Se activa cuando la API de GitHub recibe un evento de "repository_dispatch"
+  # con el tipo de evento 'process-file-event'.
+  repository_dispatch:
+    types: [process-file-event]
+
+# Define los trabajos (jobs) que se ejecutarán
+jobs:
+  process-file:
+    # El tipo de máquina virtual en la que se ejecutará el job
+    runs-on: ubuntu-latest
+
+    # Los pasos que se ejecutarán en secuencia
+    steps:
+      # 1. Checkout del código
+      # Descarga el código de tu repositorio a la máquina virtual
+      - name: Check out repository code
+        uses: actions/checkout@v3
+
+      # 2. Configurar Node.js
+      # Instala la versión de Node.js que necesitamos
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18' # Usamos una versión LTS estable
+
+      # 3. Instalar dependencias
+      # Instala las librerías necesarias (postgres, aws-sdk, etc.)
+      - name: Install dependencies
+        run: npm install
+
+      # 4. Ejecutar el script de procesamiento
+      # Este es el paso clave. Ejecuta nuestro script de Node.js
+      - name: Run file processing script
+        run: node .github/actions/scripts/process-file.js
+        # Pasa los secretos y la información del evento al script como variables de entorno
+        env:
+          # Secretos que debes configurar en tu repositorio de GitHub
+          # (Settings -> Secrets and variables -> Actions)
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+          # Información del archivo, pasada desde el evento que disparó el workflow
+          FILE_KEY: ${{ github.event.client_payload.file_key }}
+          TABLE_NAME: ${{ github.event.client_payload.table_name }} 

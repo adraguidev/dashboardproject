@@ -54,11 +54,21 @@ const canonicalSchema = {
 const WORKER_URL = 'https://worker-processor.aaguirreb16.workers.dev';
 
 /**
- * Este endpoint ahora actúa como un "proxy" o "disparador".
- * Su única responsabilidad es recibir la información del archivo subido a R2
- * y reenviarla al Cloudflare Worker para que este haga el trabajo pesado.
+ * Este endpoint ahora actúa como un "disparador" para el workflow de GitHub Actions.
+ * Su única responsabilidad es recibir la información del archivo y enviar un
+ * evento "repository_dispatch" a la API de GitHub.
  */
 export async function POST(request: NextRequest) {
+	// Obtener las credenciales de GitHub desde las variables de entorno de Heroku
+	const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+	const GITHUB_USER = process.env.GITHUB_USER;
+	const GITHUB_REPO = process.env.GITHUB_REPO;
+
+	if (!GITHUB_TOKEN || !GITHUB_USER || !GITHUB_REPO) {
+		console.error('Faltan variables de entorno de GitHub en Heroku.');
+		return NextResponse.json({ error: 'Configuración del servidor incompleta.' }, { status: 500 });
+	}
+
 	try {
 		const { files }: { files: { key: string; table: string }[] } = await request.json();
 
@@ -66,41 +76,53 @@ export async function POST(request: NextRequest) {
 			return NextResponse.json({ error: 'No se proporcionaron archivos para procesar.' }, { status: 400 });
 		}
 
-		// Disparamos una petición al worker por cada archivo.
-		// Usamos Promise.all para esperar a que todas las peticiones se inicien.
-		const processingPromises = files.map(file => {
-			const jobId = uuidv4();
-			console.log(`[Job ${jobId}] Disparando worker para el archivo: ${file.key}`);
+		// La URL de la API de GitHub para disparar el evento
+		const dispatchUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/dispatches`;
+		
+		// Disparamos un workflow por cada archivo
+		const dispatchPromises = files.map(file => {
+			console.log(`Disparando evento de GitHub Actions para el archivo: ${file.key}`);
 
-			return fetch(WORKER_URL, {
+			return fetch(dispatchUrl, {
 				method: 'POST',
 				headers: {
+					'Accept': 'application/vnd.github.v3+json',
+					'Authorization': `token ${GITHUB_TOKEN}`,
 					'Content-Type': 'application/json',
 				},
 				body: JSON.stringify({
-					key: file.key,
-					jobId: jobId,
-					table: file.table,
+					event_type: 'process-file-event', // El tipo de evento que escucha nuestro workflow
+					client_payload: {
+						file_key: file.key,
+						table_name: file.table,
+					},
 				}),
 			});
 		});
 
-		// Esperamos a que todas las llamadas al worker se completen.
-		// No esperamos el resultado del procesamiento, solo que la llamada inicial sea exitosa.
-		await Promise.all(processingPromises);
+		// Esperamos a que todas las llamadas a la API de GitHub se completen
+		const responses = await Promise.all(dispatchPromises);
 
-		// Devolvemos una respuesta 202 (Accepted) para que el frontend
-		// sepa que la tarea fue aceptada y se está procesando en background.
+		// Verificamos si alguna de las llamadas falló
+		for (const res of responses) {
+			if (!res.ok) {
+				const errorBody = await res.text();
+				console.error(`Error al disparar el workflow de GitHub: ${res.status} ${res.statusText}`, errorBody);
+				throw new Error('No se pudo iniciar el proceso de carga de archivos.');
+			}
+		}
+
+		// Devolvemos una respuesta 202 (Accepted) para indicar que la tarea fue aceptada
 		return NextResponse.json(
 			{
-				message: 'Las tareas de procesamiento de archivos han sido aceptadas y se están ejecutando en background.',
+				message: 'El proceso de carga de archivos ha sido iniciado. La carga puede tardar varios minutos en completarse.',
 			},
 			{ status: 202 }
 		);
 	} catch (error) {
-		console.error('Error al disparar el Cloudflare Worker:', error);
+		console.error('Error en el endpoint de disparo de workflow:', error);
 		const errorMessage = error instanceof Error ? error.message : 'Error desconocido.';
-		return NextResponse.json({ error: 'Error interno del servidor al contactar el servicio de procesamiento.', details: errorMessage }, { status: 500 });
+		return NextResponse.json({ error: 'Error interno del servidor.', details: errorMessage }, { status: 500 });
 	}
 }
 
