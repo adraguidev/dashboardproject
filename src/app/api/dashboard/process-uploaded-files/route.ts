@@ -54,8 +54,9 @@ const canonicalSchema = {
 const WORKER_URL = 'https://worker-processor.aaguirreb16.workers.dev';
 
 /**
- * Este endpoint ahora dispara el workflow para UN SOLO archivo
- * y devuelve un jobId único para él.
+ * Este endpoint ahora actúa como un "disparador" para el workflow de GitHub Actions.
+ * Su única responsabilidad es recibir la información del archivo y enviar un
+ * evento "repository_dispatch" a la API de GitHub.
  */
 export async function POST(request: NextRequest) {
 	// Obtener las credenciales de GitHub desde las variables de entorno de Heroku
@@ -69,47 +70,54 @@ export async function POST(request: NextRequest) {
 	}
 
 	try {
-		// Ahora esperamos un solo objeto 'file'
-		const file: { key: string; table: string } = await request.json();
+		const { files }: { files: { key: string; table: string }[] } = await request.json();
 
-		if (!file || !file.key || !file.table) {
-			return NextResponse.json({ error: 'Faltan datos del archivo.' }, { status: 400 });
+		if (!files || !Array.isArray(files) || files.length === 0) {
+			return NextResponse.json({ error: 'No se proporcionaron archivos para procesar.' }, { status: 400 });
 		}
 
-		// Generar un ID de trabajo único para este archivo
+		// Generar un único ID de trabajo para todo el lote de subida
 		const jobId = crypto.randomUUID();
+
 		const dispatchUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/dispatches`;
 		
-		console.log(`Disparando evento para el archivo: ${file.key} con JobID: ${jobId}`);
-
-		const response = await fetch(dispatchUrl, {
-			method: 'POST',
-			headers: {
-				'Accept': 'application/vnd.github.v3+json',
-				'Authorization': `token ${GITHUB_TOKEN}`,
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({
-				event_type: 'process-file-event',
-				client_payload: {
-					file_key: file.key,
-					table_name: file.table,
-					job_id: jobId,
+		const dispatchPromises = files.map(file => {
+			console.log(`Disparando evento para el archivo: ${file.key} con JobID: ${jobId}`);
+			return fetch(dispatchUrl, {
+				method: 'POST',
+				headers: {
+					'Accept': 'application/vnd.github.v3+json',
+					'Authorization': `token ${GITHUB_TOKEN}`,
+					'Content-Type': 'application/json',
 				},
-			}),
+				body: JSON.stringify({
+					event_type: 'process-file-event',
+					client_payload: {
+						file_key: file.key,
+						table_name: file.table,
+						job_id: jobId, // Pasamos el ID del job
+					},
+				}),
+			});
 		});
 
-		if (!response.ok) {
-			const errorBody = await response.text();
-			console.error(`Error al disparar el workflow: ${response.status}`, errorBody);
-			throw new Error('No se pudo iniciar el proceso de carga.');
+		// Esperamos a que todas las llamadas a la API de GitHub se completen
+		const responses = await Promise.all(dispatchPromises);
+
+		// Verificamos si alguna de las llamadas falló
+		for (const res of responses) {
+			if (!res.ok) {
+				const errorBody = await res.text();
+				console.error(`Error al disparar el workflow de GitHub: ${res.status} ${res.statusText}`, errorBody);
+				throw new Error('No se pudo iniciar el proceso de carga de archivos.');
+			}
 		}
 
 		// Devolvemos el ID del job al frontend
 		return NextResponse.json(
 			{
-				message: 'El proceso ha sido iniciado.',
-				jobId: jobId,
+				message: 'El proceso de carga ha sido iniciado.',
+				jobId: jobId, // Clave para que el frontend pueda consultar el estado
 			},
 			{ status: 202 }
 		);

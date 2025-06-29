@@ -15,8 +15,7 @@ interface UploadProgress {
   fileName: string
   progress: number
   status: 'pending' | 'uploading' | 'uploaded' | 'processing' | 'completed' | 'error'
-  jobId?: string
-  statusMessage?: string
+  message?: string
 }
 
 interface JobStatus {
@@ -48,40 +47,42 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
   }, [])
 
   useEffect(() => {
+    if (!jobId || !isUploading) return;
+
     const interval = setInterval(async () => {
-      const filesToPoll = uploadProgress.filter(p => p.jobId && (p.status === 'processing' || p.status === 'uploaded'));
-      if (filesToPoll.length === 0) return;
-
-      for (const file of filesToPoll) {
-        try {
-          const response = await fetch(`/api/dashboard/upload-status?jobId=${file.jobId}`);
-          if (!response.ok) continue;
-
-          const data: JobStatus = await response.json();
-          
-          setUploadProgress(prev => prev.map(p => 
-            p.jobId === file.jobId 
-              ? { ...p, status: data.status, statusMessage: `${data.progress}%: ${data.message}` } 
-              : p
-          ));
-
-          if (data.status === 'completed' || data.status === 'error') {
-            setUploadProgress(prev => prev.map(p => 
-              p.jobId === file.jobId ? { ...p, jobId: undefined } : p
-            ));
+      try {
+        const response = await fetch(`/api/dashboard/upload-status?jobId=${jobId}`);
+        if (!response.ok) {
+          if (response.status === 404) {
+            console.log(`Job ${jobId} aún no encontrado, reintentando...`);
+            return;
           }
-        } catch (error) {
-          console.error('Error en el polling:', error);
-          setOverallStatus('Error al verificar el estado.');
+          throw new Error('Error al obtener el estado del job');
+        }
+
+        const data: JobStatus = await response.json();
+        
+        setOverallStatus(`${data.status} - ${data.progress}%: ${data.message}`);
+
+        if (data.status === 'completed' || data.status === 'error') {
           setIsUploading(false);
           setJobId(null);
           clearInterval(interval);
+          if (data.status === 'completed' && onUploadComplete) {
+            onUploadComplete();
+          }
         }
+      } catch (error) {
+        console.error('Error en el polling:', error);
+        setOverallStatus('Error al verificar el estado.');
+        setIsUploading(false);
+        setJobId(null);
+        clearInterval(interval);
       }
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [uploadProgress]);
+  }, [jobId, isUploading, onUploadComplete]);
 
   if (!isOpen || !mounted) return null
 
@@ -148,44 +149,42 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
       const urlResult: UploadUrlResponse = await urlResponse.json();
       const { uploadUrls } = urlResult;
 
-      // Paso 2: Subir cada archivo y LUEGO disparar su propio workflow
-      for (let i = 0; i < selectedFiles.length; i++) {
-        const file = selectedFiles[i];
+      // Paso 2: Subir archivos a R2
+      setOverallStatus('📤 Subiendo archivos a R2...')
+      const uploadPromises = selectedFiles.map((file, i) => {
         const uploadInfo = uploadUrls.find(u => u.fileName === file.name);
-        
         if (!uploadInfo) {
           throw new Error(`No se encontró URL de subida para ${file.name}`);
         }
-
-        try {
-          // Subir a R2
-          await uploadFileToR2(file, uploadInfo.uploadUrl, (progress) => {
-            setUploadProgress(prev => prev.map((p, index) => index === i ? { ...p, progress, status: progress === 100 ? 'uploaded' : 'uploading' } : p));
-          });
-          setUploadProgress(prev => prev.map((p, index) => index === i ? { ...p, status: 'uploaded' } : p));
-
-          // Disparar workflow para ESTE archivo
-          const processResponse = await fetch('/api/dashboard/process-uploaded-files', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key: uploadInfo.key, table: uploadInfo.table }),
-          });
-          const processData: { jobId: string } = await processResponse.json();
-          
-          // Asignar el jobId a este archivo para que el polling comience
+        return uploadFileToR2(file, uploadInfo.uploadUrl, (progress) => {
           setUploadProgress(prev => prev.map((p, index) => 
-            index === i ? { ...p, status: 'processing', jobId: processData.jobId, statusMessage: 'En cola...' } : p
+            index === i ? { ...p, progress, status: progress === 100 ? 'uploaded' : 'uploading' } : p
           ));
+        });
+      });
+      await Promise.all(uploadPromises);
+      setOverallStatus('✅ Archivos subidos a R2. Disparando procesamiento...');
 
-        } catch (error) {
-          console.error('Error en el proceso de subida:', error);
-          const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
-          setOverallStatus(`❌ Error: ${errorMessage}`);
-          setIsUploading(false); // Detener el estado de carga en caso de error
-        }
+      // Paso 3: Disparar el workflow
+      const filesToProcess = uploadUrls.map(u => ({
+        key: u.key,
+        table: u.fileName.toLowerCase().includes('ccm') ? 'table_ccm' : 'table_prr'
+      }));
+      
+      const processResponse = await fetch('/api/dashboard/process-uploaded-files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: filesToProcess }),
+      });
+
+      if (!processResponse.ok) {
+        const errorData: { error?: string } = await processResponse.json();
+        throw new Error(errorData.error || 'Error al iniciar el procesamiento.');
       }
-
-      setOverallStatus('Todos los trabajos de procesamiento han sido enviados.');
+      
+      const processData: ProcessResponse = await processResponse.json();
+      setJobId(processData.jobId); // Inicia el polling
+      setOverallStatus('Proceso iniciado, esperando actualización de estado...');
 
     } catch (error) {
       console.error('Error en el proceso de subida:', error);
@@ -266,8 +265,8 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
                         />
                       </div>
                     )}
-                    {progress.statusMessage && (
-                      <p className="text-xs text-blue-500 mt-1">{progress.statusMessage}</p>
+                    {progress.message && (
+                      <p className="text-xs text-red-500 mt-1">{progress.message}</p>
                     )}
                   </div>
                 ))}
