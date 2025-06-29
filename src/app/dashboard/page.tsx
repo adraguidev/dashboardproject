@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { useDashboardUnified, useDashboardCache } from '@/hooks/use-dashboard-unified'
+import { useDashboardUnified } from '@/hooks/use-dashboard-unified'
 import { DashboardHeader } from '@/components/dashboard/dashboard-header'
 import { ProcessModules } from '@/components/dashboard/process-modules'
 import { ErrorDisplay } from '@/components/ui/error-boundary'
@@ -20,14 +20,10 @@ export default function DashboardPage() {
     isLoading, 
     error, 
     invalidateAndRefresh, 
-    invalidateAll,
     hasPartialErrors,
     lastUpdated,
     isDataAvailable 
   } = useDashboardUnified(proceso)
-
-  // Hook para operaciones de cache
-  const { clearAllCache } = useDashboardCache()
 
   const handleProcessChange = (process: 'ccm' | 'prr') => {
     setSelectedProcess(process)
@@ -40,45 +36,28 @@ export default function DashboardPage() {
   const handleFullRefresh = async () => {
     setIsRefreshing(true);
     try {
-      console.log('🔄 Iniciando limpieza completa de caché...');
+      console.log('🔄 Iniciando actualización...');
       
-      // 1. Limpiar caché del servidor
+      // 1. Limpiar caché del servidor (importante para obtener datos frescos de la DB)
       await fetch('/api/cache/clear', { method: 'POST' });
       console.log('✅ Caché del servidor limpiado');
       
-      // 2. Limpiar caché de TanStack Query
-      clearAllCache();
-      console.log('✅ Caché de TanStack Query limpiado');
-      
-      // 3. Limpiar caché del frontend (localStorage)
-      if (typeof window !== 'undefined') {
-        const keysToRemove = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && key.startsWith('ufsm_cache_')) {
-            keysToRemove.push(key);
-          }
-        }
-        keysToRemove.forEach(key => localStorage.removeItem(key));
-        console.log(`✅ Frontend cache limpiado: ${keysToRemove.length} elementos`);
-      }
-      
-      // 4. Invalidar y refrescar datos del hook unificado
+      // 2. Invalidar y refrescar los datos del cliente usando la función del hook
+      // Esto le dice a TanStack Query que los datos actuales son "stale" y debe recargarlos.
       await invalidateAndRefresh();
-      console.log('✅ Datos unificados invalidados y refrescados');
+      console.log('✅ Datos del cliente invalidados y en proceso de refresco');
       
-      // 5. Refrescar el módulo activo en pantalla (¡La clave para Pendientes!)
+      // 3. Refrescar el módulo activo en pantalla (ej. la tabla de pendientes)
       if (moduleRefreshRef.current) {
         console.log('🔄 Refrescando módulo activo específico...');
         await moduleRefreshRef.current();
         console.log('✅ Módulo activo refrescado');
       }
       
-      console.log('🎉 Actualización completa exitosa');
+      console.log('🎉 Actualización completa iniciada');
       
     } catch (err) {
       console.error("❌ Error al refrescar los datos:", err);
-      // alert('No se pudo actualizar la información. Por favor, inténtelo de nuevo.');
     } finally {
       setIsRefreshing(false);
     }
