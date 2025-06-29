@@ -22,316 +22,204 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [uploadProgress, setUploadProgress] = useState<UploadProgress[]>([])
   const [isUploading, setIsUploading] = useState(false)
-  const [jobId, setJobId] = useState<string | null>(null)
   const [overallStatus, setOverallStatus] = useState<string>('')
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     setMounted(true)
+    return () => setMounted(false)
   }, [])
 
-  if (!isOpen || !mounted) return null
-
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || [])
-    setSelectedFiles(files)
-    setUploadProgress(files.map(file => ({
-      fileName: file.name,
-      progress: 0,
-      status: 'pending'
-    })))
-  }
-
-  const uploadFileToR2 = async (file: File, uploadUrl: string, onProgress: (progress: number) => void): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest()
-      
-      xhr.upload.addEventListener('progress', (event) => {
-        if (event.lengthComputable) {
-          const progress = (event.loaded / event.total) * 100
-          onProgress(progress)
-        }
-      })
-      
-      xhr.addEventListener('load', () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve()
-        } else {
-          reject(new Error(`HTTP ${xhr.status}: ${xhr.statusText}`))
-        }
-      })
-      
-      xhr.addEventListener('error', () => {
-        reject(new Error('Error de red durante la subida'))
-      })
-      
-      xhr.open('PUT', uploadUrl)
-      xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
-      xhr.send(file)
-    })
-  }
-
-  const checkProcessingStatus = async (jobId: string): Promise<void> => {
-    const maxAttempts = 120 // 10 minutos máximo (5s * 120 = 600s)
-    let attempts = 0
-    
-    const checkStatus = async (): Promise<void> => {
-      try {
-        const response = await fetch(`/api/dashboard/upload-status?jobId=${jobId}`)
-        const result = await response.json()
-        
-        if (result.status === 'completed') {
-          setOverallStatus('✅ Procesamiento completado exitosamente')
-          setUploadProgress(prev => prev.map(p => ({ ...p, status: 'completed' as const })))
-          setTimeout(() => {
-            onUploadComplete?.()
-            onClose()
-          }, 2000)
-          return
-        }
-        
-        if (result.status === 'error') {
-          setOverallStatus(`❌ Error: ${result.error || 'Error desconocido'}`)
-          setUploadProgress(prev => prev.map(p => ({ ...p, status: 'error' as const })))
-          return
-        }
-        
-        if (result.status === 'in_progress') {
-          const progressPercent = result.progress || 0
-          setOverallStatus(`🔄 ${result.message || 'Procesando...'} (${Math.round(progressPercent)}%)`)
-        }
-        
-        attempts++
-        if (attempts < maxAttempts) {
-          setTimeout(checkStatus, 5000) // Verificar cada 5 segundos
-        } else {
-          setOverallStatus('⏱️ Timeout: El procesamiento está tardando más de lo esperado')
-        }
-        
-      } catch (error) {
-        console.error('Error verificando estado:', error)
-        setOverallStatus('❌ Error verificando el estado del procesamiento')
-      }
-    }
-    
-    // Empezar a verificar después de 2 segundos
-    setTimeout(checkStatus, 2000)
-  }
-
-  const handleUpload = async () => {
-    if (selectedFiles.length === 0) return
-
-    setIsUploading(true)
-    setOverallStatus('🚀 Iniciando proceso de subida...')
-
-    try {
-      // Paso 1: Obtener URLs pre-firmadas
-      setOverallStatus('📋 Generando URLs de subida...')
-      const filesInfo = selectedFiles.map(file => ({
-        name: file.name,
-        type: file.type,
-        size: file.size
-      }))
-
-      const urlResponse = await fetch('/api/dashboard/upload-files', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files: filesInfo })
-      })
-
-      if (!urlResponse.ok) {
-        throw new Error(`Error obteniendo URLs: ${urlResponse.status}`)
-      }
-
-      const urlResult = await urlResponse.json()
-      const { uploadUrls, jobId: newJobId } = urlResult
-      setJobId(newJobId)
-
-      // Paso 2: Subir archivos a R2 usando las URLs pre-firmadas
-      setOverallStatus('📤 Subiendo archivos a R2...')
-      
-      for (let i = 0; i < selectedFiles.length; i++) {
-        const file = selectedFiles[i]
-        const uploadInfo = uploadUrls[i]
-        
-        setUploadProgress(prev => prev.map((p, index) => 
-          index === i ? { ...p, status: 'uploading' } : p
-        ))
-
-        try {
-          await uploadFileToR2(file, uploadInfo.uploadUrl, (progress) => {
-            setUploadProgress(prev => prev.map((p, index) => 
-              index === i ? { ...p, progress } : p
-            ))
-          })
-
-          setUploadProgress(prev => prev.map((p, index) => 
-            index === i ? { ...p, status: 'uploaded', progress: 100 } : p
-          ))
-
-        } catch (error) {
-          console.error(`Error subiendo ${file.name}:`, error)
-          setUploadProgress(prev => prev.map((p, index) => 
-            index === i ? { ...p, status: 'error', message: `Error: ${error}` } : p
-          ))
-          throw error
-        }
-      }
-
-      // Paso 3: Iniciar procesamiento en background
-      setOverallStatus('🔄 Iniciando procesamiento en background...')
-      
-      const processResponse = await fetch('/api/dashboard/process-uploaded-files', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          files: uploadUrls.map((u: { fileName: string; key: string; table: string }) => ({ fileName: u.fileName, key: u.key, table: u.table })),
-          jobId: newJobId
-        })
-      })
-
-      if (!processResponse.ok) {
-        throw new Error(`Error iniciando procesamiento: ${processResponse.status}`)
-      }
-
-      const processResult = await processResponse.json()
-      
-      if (processResult.status === 'processing_started') {
-        setOverallStatus('⏳ Procesamiento iniciado. Estimado: 3-8 minutos...')
-        setUploadProgress(prev => prev.map(p => ({ ...p, status: 'processing' })))
-        
-        // Iniciar verificación del estado
-        await checkProcessingStatus(newJobId)
-      } else {
-        throw new Error('Respuesta inesperada del servidor')
-      }
-
-    } catch (error) {
-      console.error('Error en el proceso de subida:', error)
-      setOverallStatus(`❌ Error: ${error instanceof Error ? error.message : 'Error desconocido'}`)
-      setUploadProgress(prev => prev.map(p => ({ ...p, status: 'error' })))
-    } finally {
-      setIsUploading(false)
-    }
+  const handleClose = () => {
+    if (isUploading) return
+    resetModal()
+    onClose()
   }
 
   const resetModal = () => {
     setSelectedFiles([])
     setUploadProgress([])
     setIsUploading(false)
-    setJobId(null)
     setOverallStatus('')
   }
 
-  const handleClose = () => {
-    if (!isUploading) {
-      resetModal()
-      onClose()
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files) {
+      setSelectedFiles(Array.from(event.target.files))
     }
   }
 
-  const modalContent = (
+  const handleUpload = async () => {
+    if (selectedFiles.length === 0) return
+    setIsUploading(true)
+    setOverallStatus('🚀 Iniciando proceso de subida...')
+    
+    try {
+      // Paso 1: Obtener URLs pre-firmadas
+      const urlResponse = await fetch('/api/dashboard/generate-upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: selectedFiles.map(f => f.name) }),
+      })
+      if (!urlResponse.ok) throw new Error('Error generando URLs de subida.')
+      const { uploadUrls }: { uploadUrls: { key: string; url: string; table: string }[] } = await urlResponse.json()
+
+      setUploadProgress(selectedFiles.map(file => ({ fileName: file.name, progress: 0, status: 'pending' })))
+
+      // Paso 2: Subir archivos a R2
+      setOverallStatus('📤 Subiendo archivos a R2...')
+      await Promise.all(
+        selectedFiles.map((file, i) => {
+          return uploadFileToR2(file, uploadUrls[i].url, (progress) => {
+            setUploadProgress(prev => prev.map((p, index) => (index === i ? { ...p, progress } : p)))
+          }).then(() => {
+            setUploadProgress(prev => prev.map((p, index) => (index === i ? { ...p, status: 'uploaded' } : p)))
+          })
+        })
+      )
+
+      // Paso 3: Disparar el workflow de GitHub
+      setOverallStatus('⏳ Disparando proceso en background...')
+      const processRes = await fetch('/api/dashboard/process-uploaded-files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: uploadUrls.map(u => ({ key: u.key, table: u.table })) }),
+      })
+      if (!processRes.ok) throw new Error('Error al iniciar el procesamiento en background.')
+
+      const { repo }: { repo: string } = await processRes.json()
+      
+      // Paso 4: Monitorear el estado
+      setOverallStatus('⚙️ Procesamiento en curso... (Esto puede tardar varios minutos)')
+      pollJobStatus(repo, uploadUrls.map(u => u.key))
+
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error desconocido'
+      setOverallStatus(`❌ Error: ${message}`)
+      setIsUploading(false)
+    }
+  }
+
+  const pollJobStatus = (repo: string, fileKeys: string[]) => {
+    // Por simplicidad, rastreamos el primer archivo. En una implementación más compleja
+    // se podría rastrear cada archivo individualmente.
+    const primaryFileKey = fileKeys[0]
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/dashboard/job-status?repo=${repo}&fileKey=${primaryFileKey}`)
+        if (!res.ok) return // Seguir intentando en el próximo intervalo
+
+        const data: { status: string; conclusion: string | null } = await res.json()
+        
+        if (data.status === 'completed') {
+          clearInterval(interval)
+          if (data.conclusion === 'success') {
+            setOverallStatus('✅ ¡Proceso completado exitosamente!')
+            setUploadProgress(prev => prev.map(p => ({ ...p, status: 'completed' })))
+            setIsUploading(false)
+            onUploadComplete?.()
+          } else {
+            setOverallStatus(`❌ Error en el procesamiento: ${data.conclusion || 'desconocido'}.`)
+            setUploadProgress(prev => prev.map(p => ({ ...p, status: 'error' })))
+            setIsUploading(false)
+          }
+        }
+      } catch (error) {
+        console.error("Error en polling:", error)
+      }
+    }, 5000) // Consultar cada 5 segundos
+  }
+
+  async function uploadFileToR2(file: File, url: string, onProgress: (progress: number) => void) {
+    return new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('PUT', url, true)
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const progress = Math.round((event.loaded / event.total) * 100)
+          onProgress(progress)
+        }
+      }
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          onProgress(100)
+          resolve()
+        } else {
+          reject(new Error(`Error en la subida: ${xhr.statusText}`))
+        }
+      }
+      xhr.onerror = () => reject(new Error('Error de red durante la subida.'))
+      xhr.send(file)
+    })
+  }
+
+  if (!isOpen || !mounted) return null
+
+  return createPortal(
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
-      <Card className="w-full max-w-2xl mx-4 p-6 relative z-[10000] bg-white shadow-2xl">
+      <Card className="w-full max-w-2xl mx-4 p-6 bg-white dark:bg-gray-800 shadow-2xl relative z-[10000]">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold">Subir Archivos de Datos</h3>
           {!isUploading && (
-            <Button variant="outline" size="sm" onClick={handleClose}>
-              ✕
-            </Button>
+            <Button variant="outline" size="sm" onClick={handleClose}>✕</Button>
           )}
         </div>
 
         <div className="space-y-4">
           {!isUploading && selectedFiles.length === 0 && (
             <div>
-              <label className="block text-sm font-medium mb-2">
+              <label htmlFor="file-upload" className="block text-sm font-medium mb-2">
                 Seleccionar archivos Excel (.xlsx) o CSV
               </label>
               <input
+                id="file-upload"
                 type="file"
                 multiple
                 accept=".xlsx,.xls,.csv"
-                onChange={handleFileSelect}
+                onChange={handleFileChange}
                 className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
               />
-              <p className="text-xs text-gray-500 mt-1">
-                Archivos CCM y PRR en formato Excel o CSV (separado por punto y coma)
-              </p>
             </div>
           )}
 
-          {selectedFiles.length > 0 && (
-            <div>
-              <h4 className="font-medium mb-2">Archivos seleccionados:</h4>
-              <div className="space-y-2">
-                {uploadProgress.map((progress, index) => (
-                  <div key={index} className="border rounded p-3">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-sm font-medium">{progress.fileName}</span>
-                      <span className="text-xs text-gray-500">
-                        {progress.status === 'pending' && '⏳ Pendiente'}
-                        {progress.status === 'uploading' && '📤 Subiendo'}
-                        {progress.status === 'uploaded' && '✅ Subido'}
-                        {progress.status === 'processing' && '🔄 Procesando'}
-                        {progress.status === 'completed' && '✅ Completado'}
-                        {progress.status === 'error' && '❌ Error'}
-                      </span>
-                    </div>
-                    {(progress.status === 'uploading' || progress.status === 'uploaded') && (
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${progress.progress}%` }}
-                        />
-                      </div>
-                    )}
-                    {progress.message && (
-                      <p className="text-xs text-red-500 mt-1">{progress.message}</p>
-                    )}
-                  </div>
+          {selectedFiles.length > 0 && !isUploading && (
+            <div className="space-y-2">
+              <h4 className="font-semibold">Archivos Seleccionados:</h4>
+              <ul className="list-disc list-inside bg-gray-50 p-3 rounded-md">
+                {selectedFiles.map((file, i) => (
+                  <li key={i} className="text-sm">{file.name}</li>
                 ))}
-              </div>
+              </ul>
             </div>
           )}
-
-          {overallStatus && (
-            <div className="bg-blue-50 border border-blue-200 rounded p-3">
-              <p className="text-sm text-blue-700">{overallStatus}</p>
-              {jobId && (
-                <p className="text-xs text-blue-500 mt-1">Job ID: {jobId}</p>
-              )}
+          
+          {isUploading && (
+            <div className="space-y-4">
+              <h4 className="font-semibold text-center">{overallStatus}</h4>
+              {uploadProgress.map((p, i) => (
+                <div key={i}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span>{p.fileName}</span>
+                    <span>{p.status}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${p.progress}%` }}></div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
+        </div>
 
-          <div className="flex justify-end space-x-2 pt-4">
-            {!isUploading && selectedFiles.length === 0 && (
-              <Button variant="outline" onClick={handleClose}>
-                Cancelar
-              </Button>
-            )}
-            
-            {!isUploading && selectedFiles.length > 0 && (
-              <>
-                <Button variant="outline" onClick={resetModal}>
-                  Limpiar
-                </Button>
-                <Button onClick={handleUpload}>
-                  Subir Archivos
-                </Button>
-              </>
-            )}
-            
-            {isUploading && (
-              <div className="text-sm text-gray-500">
-                ⏳ Procesamiento en curso... No cierre esta ventana.
-              </div>
-            )}
-          </div>
+        <div className="mt-6 flex justify-end space-x-3">
+          <Button variant="outline" onClick={handleClose} disabled={isUploading}>Cancelar</Button>
+          <Button onClick={handleUpload} disabled={selectedFiles.length === 0 || isUploading}>
+            {isUploading ? 'Procesando...' : 'Subir y Procesar'}
+          </Button>
         </div>
       </Card>
-    </div>
+    </div>,
+    document.body
   )
-
-  return createPortal(modalContent, document.body)
 } 

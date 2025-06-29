@@ -112,10 +112,13 @@ export async function POST(request: NextRequest) {
 			}
 		}
 
-		// Devolvemos una respuesta 202 (Accepted) para indicar que la tarea fue aceptada
+		// Devolvemos el nombre del repo para que el frontend pueda consultar los workflows
 		return NextResponse.json(
 			{
-				message: 'El proceso de carga de archivos ha sido iniciado. La carga puede tardar varios minutos en completarse.',
+				message: 'El proceso de carga de archivos ha sido iniciado.',
+				repo: `${GITHUB_USER}/${GITHUB_REPO}`,
+				// No podemos obtener el run_id directamente, pero el frontend
+				// puede buscar el último run para el evento.
 			},
 			{ status: 202 }
 		);
