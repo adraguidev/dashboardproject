@@ -96,7 +96,7 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
     })))
   }
 
-  const uploadFileToR2 = async (file: File, uploadUrl: string, onProgress: (progress: number) => void): Promise<void> => {
+  const uploadFileToR2 = async (file: File, url: string, onProgress: (progress: number) => void): Promise<void> => {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()
       
@@ -119,7 +119,7 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
         reject(new Error('Error de red durante la subida'))
       })
       
-      xhr.open('PUT', uploadUrl)
+      xhr.open('PUT', url)
       xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
       xhr.send(file)
     })
@@ -147,30 +147,25 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
       }
 
       const urlResult: UploadUrlResponse = await urlResponse.json();
-      const { uploadUrls, jobId: newJobId } = urlResult;
-      setJobId(newJobId);
+      const { uploadUrls } = urlResult;
 
       // Paso 2: Subir archivos a R2
       setOverallStatus('📤 Subiendo archivos a R2...')
       const uploadPromises = selectedFiles.map((file, i) => {
         const uploadInfo = uploadUrls.find(u => u.fileName === file.name);
         if (!uploadInfo) {
-          console.error(`No se encontró URL de subida para el archivo: ${file.name}`);
-          setUploadProgress(prev => prev.map((p, index) => 
-            index === i ? { ...p, status: 'error', message: 'No se encontró URL' } : p
-          ));
-          return Promise.reject(`No se encontró URL para ${file.name}`);
+          throw new Error(`No se encontró URL de subida para ${file.name}`);
         }
         return uploadFileToR2(file, uploadInfo.url, (progress) => {
           setUploadProgress(prev => prev.map((p, index) => 
-            index === i ? { ...p, progress } : p
+            index === i ? { ...p, progress, status: progress === 100 ? 'uploaded' : 'uploading' } : p
           ));
         });
       });
       await Promise.all(uploadPromises);
+      setOverallStatus('✅ Archivos subidos a R2. Disparando procesamiento...');
 
       // Paso 3: Disparar el workflow
-      setOverallStatus('🚀 Disparando proceso en background...')
       const filesToProcess = uploadUrls.map(u => ({
         key: u.key,
         table: u.fileName.toLowerCase().includes('ccm') ? 'table_ccm' : 'table_prr'
@@ -181,22 +176,21 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files: filesToProcess }),
       });
-      const processData: ProcessResponse = await processResponse.json()
 
       if (!processResponse.ok) {
-        throw new Error(processData.error || 'Error al iniciar el procesamiento.')
+        const errorData: { error?: string } = await processResponse.json();
+        throw new Error(errorData.error || 'Error al iniciar el procesamiento.');
       }
       
-      // Guardar el jobId para empezar el polling
-      setJobId(processData.jobId)
-      setOverallStatus('Proceso iniciado, esperando actualización de estado...')
+      const processData: ProcessResponse = await processResponse.json();
+      setJobId(processData.jobId); // Inicia el polling
+      setOverallStatus('Proceso iniciado, esperando actualización de estado...');
 
     } catch (error) {
-      console.error('Error en el proceso de subida:', error)
-      setOverallStatus(`❌ Error: ${error instanceof Error ? error.message : 'Error desconocido'}`)
-      setUploadProgress(prev => prev.map(p => ({ ...p, status: 'error' })))
-    } finally {
-      setIsUploading(false)
+      console.error('Error en el proceso de subida:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      setOverallStatus(`❌ Error: ${errorMessage}`);
+      setIsUploading(false); // Detener el estado de carga en caso de error
     }
   }
 
