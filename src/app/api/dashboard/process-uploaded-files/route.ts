@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import { Pool } from 'pg'
-import { drizzle as drizzleNode, NodePgDatabase } from 'drizzle-orm/node-postgres'
-import { sql } from 'drizzle-orm'
 import { Readable } from 'stream'
 import { Workbook } from 'exceljs'
 import csvParser from 'csv-parser'
 import * as path from 'path'
 import { v4 as uuidv4 } from 'uuid'
 import { jobStatusManager } from '@/lib/redis'
-import { pgTable, text, integer, date } from 'drizzle-orm/pg-core'
 
 // Configuración de Cloudflare R2
 const r2Client = new S3Client({
@@ -23,7 +20,20 @@ const r2Client = new S3Client({
 
 const BUCKET_NAME = process.env.CLOUDFLARE_R2_BUCKET_NAME!
 
-// Esquema canónico para asegurar que las tablas siempre tengan las columnas correctas.
+// Columnas que deben ser DATE - exactamente como en Colab
+const columnas_fecha = [
+  "fechaexpendiente",
+  "fechaetapaaprobacionmasivafin",
+  "fechapre",
+  "fecha_asignacion"
+]
+
+const conversiones = {
+  "table_ccm": columnas_fecha,
+  "table_prr": columnas_fecha
+}
+
+// Esquema canónico para asegurar que las tablas siempre tengan las columnas correctas
 const canonicalSchema = {
   table_ccm: [
     "textbox4", "dependencia", "anio", "mes", "numerotramite", "ultimaetapa",
@@ -37,23 +47,7 @@ const canonicalSchema = {
     "estadopre", "estadotramite", "archivo_origen", "operador", "fecha_asignacion",
     "modalidad", "regimen", "meta_antigua", "meta_nueva", "equipo"
   ]
-};
-
-const dateColumns = [
-  "fechaexpendiente",
-  "fechaetapaaprobacionmasivafin", 
-  "fechapre",
-  "fecha_asignacion"
-]
-
-// Definir los schemas de tabla para que Drizzle los pueda usar en las inserciones
-const tableCCM = pgTable('table_ccm', {
-  ...Object.fromEntries(canonicalSchema.table_ccm.map(col => [col, text(col)]))
-});
-
-const tablePRR = pgTable('table_prr', {
-  ...Object.fromEntries(canonicalSchema.table_prr.map(col => [col, text(col)]))
-});
+}
 
 export async function POST(request: NextRequest) {
   console.log('🔄 Iniciando procesamiento de archivos desde R2...');
@@ -66,30 +60,34 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { files } = body;
+    const { files, jobId: providedJobId } = body;
+
+    // Usar el jobId proporcionado si existe, sino crear uno nuevo
+    const actualJobId = providedJobId || jobId;
 
     if (!files || !Array.isArray(files) || files.length === 0) {
       return NextResponse.json({ error: 'Debes proporcionar información de los archivos a procesar.' }, { status: 400 });
     }
 
     // Iniciar el procesamiento en background sin esperar (no usar await)
-    processFilesFromR2(jobId, files).catch(async (error) => {
-      console.error(`[Job ${jobId}] ❌ Error en la ejecución principal del background:`, error);
-      await jobStatusManager.update(jobId, { 
+    processFilesFromR2(actualJobId, files).catch(async (error) => {
+      console.error(`[Job ${actualJobId}] ❌ Error en la ejecución principal del background:`, error);
+      await jobStatusManager.update(actualJobId, { 
         status: 'error', 
         message: 'Error crítico en el worker.',
         error: error instanceof Error ? error.message : 'Error desconocido'
       });
     });
 
-    console.log(`[Job ${jobId}] ✅ Tarea de procesamiento iniciada. Respondiendo inmediatamente.`);
+    console.log(`[Job ${actualJobId}] ✅ Tarea de procesamiento iniciada. Respondiendo inmediatamente.`);
 
-    // Responder inmediatamente con el ID del trabajo
+    // Responder inmediatamente con HTTP 202
     return NextResponse.json({
       success: true,
-      message: 'Procesamiento de archivos iniciado. Consulta el estado con el ID del trabajo.',
-      jobId: jobId,
-      status: 'processing_started'
+      message: 'Procesamiento de archivos iniciado en background. Consulta el estado con el ID del trabajo.',
+      jobId: actualJobId,
+      status: 'processing_started',
+      estimatedTime: '3-8 minutos'
     }, { status: 202 });
 
   } catch (error) {
@@ -101,235 +99,288 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Lógica principal de procesamiento en background
+// Lógica principal de procesamiento en background usando psycopg2 con COPY
 async function processFilesFromR2(jobId: string, files: Array<{fileName: string, key: string, table: string}>) {
-  await jobStatusManager.update(jobId, { status: 'in_progress', message: 'Iniciando...', progress: 0 });
-  console.log(`[Job ${jobId}] [Stream] 🔄 Iniciando procesamiento en background...`);
+  await jobStatusManager.update(jobId, { status: 'in_progress', message: 'Iniciando procesamiento...', progress: 0 });
+  console.log(`[Job ${jobId}] 🔄 Iniciando procesamiento en background con psycopg2 + COPY...`);
   
-  // Usar el driver pg que soporta transacciones completas
-  const pool = new Pool({ connectionString: process.env.DATABASE_DIRECT_URL! });
-  const db: NodePgDatabase = drizzleNode(pool);
+  // Usar el driver pg nativo con Pool para mejor performance
+  const pool = new Pool({ 
+    connectionString: process.env.DATABASE_DIRECT_URL!,
+    max: 1, // Una sola conexión para evitar conflictos
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+  });
 
-  for (const [index, fileInfo] of files.entries()) {
-    const fileProgressStart = (index / files.length) * 100;
-    const fileProgressEnd = ((index + 1) / files.length) * 100;
+  let client;
+  try {
+    client = await pool.connect();
+    
+    for (const [index, fileInfo] of files.entries()) {
+      const fileProgressStart = (index / files.length) * 100;
+      const fileProgressEnd = ((index + 1) / files.length) * 100;
 
-    try {
-      await db.transaction(async (tx) => {
+      try {
         const message = `Procesando archivo ${index + 1}/${files.length}: ${fileInfo.fileName}`;
         await jobStatusManager.update(jobId, { status: 'in_progress', message, progress: fileProgressStart });
         
-        await processSingleFileStream(tx, fileInfo, jobId, (progress) => {
-          // Actualizar progreso dentro del archivo (0 a 100) -> escalado al progreso total
+        await processSingleFileWithCopy(client, fileInfo, jobId, (progress) => {
           const overallProgress = fileProgressStart + (progress / 100) * (fileProgressEnd - fileProgressStart);
           jobStatusManager.update(jobId, { status: 'in_progress', message, progress: overallProgress });
         });
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
-      await jobStatusManager.update(jobId, { status: 'error', message: `Error en ${fileInfo.fileName}`, error: errorMessage });
-      console.error(`[Job ${jobId}] [Transaction] ❌ Error en transacción para ${fileInfo.fileName}.`, error);
-      return; // Detener el proceso si un archivo falla
-    }
-  }
-
-  // Conversión de fechas post-procesamiento
-  console.log(`[Job ${jobId}] [Stream] 🗓️  Iniciando conversión de columnas de fecha...`);
-  await convertAllDateColumns(db);
-  console.log(`[Job ${jobId}] [Stream] ✅ Conversión de fechas completada.`);
-  
-  await pool.end(); // Cerrar la conexión al finalizar
-}
-
-// Procesa un único archivo usando streams dentro de una transacción
-async function processSingleFileStream(tx: any, fileInfo: {fileName: string, key: string, table: string}, jobId: string, onProgress: (progress: number) => void) {
-    const { fileName, key, table } = fileInfo;
-    console.log(`[Job ${jobId}] [Stream] 🚀 Procesando: ${fileName}`);
-
-    const r2Stream = await getR2FileStream(key);
-    const canonicalColumns = canonicalSchema[table as keyof typeof canonicalSchema];
-    
-    // 1. Asegurar que la tabla exista con el esquema correcto
-    await ensureTableSchema(tx, table, canonicalColumns);
-    console.log(`[Stream] ✅ Esquema de tabla ${table} verificado y corregido.`);
-
-    // 2. Truncar la tabla para nuevos datos
-    await tx.execute(sql.raw(`TRUNCATE TABLE ${table};`));
-    console.log(`[Stream] ✅ Tabla ${table} truncada.`);
-    onProgress(10);
-    
-    let fileHeaders: string[] = [];
-    const headerIndexMap: { [key: string]: number } = {};
-    let columnsToInsert: string[] = [];
-    let isFirstRow = true;
-    let processedRowCount = 0;
-    const batchSize = 250;
-    let batch: any[][] = [];
-
-    const dataStream = createParserStream(fileName, r2Stream);
-    
-    let totalRowCount = 0; // Aproximación para el progreso
-    
-    for await (const rawRow of dataStream) {
-        // NORMALIZACIÓN: Asegurar que la fila siempre sea un array
-        const row = Array.isArray(rawRow) ? rawRow : Object.values(rawRow);
         
-        if (isFirstRow) {
-            fileHeaders = row.map((h: any) => String(h || '').trim().replace(/\s+/g, '_').replace(/-/g, '_').toLowerCase());
-            fileHeaders.forEach((col, index) => { if(col) headerIndexMap[col] = index; });
-            columnsToInsert = canonicalColumns.filter(col => headerIndexMap.hasOwnProperty(col));
-            isFirstRow = false;
-            if (columnsToInsert.length === 0) throw new Error(`No se encontraron columnas compatibles.`);
-            continue;
-        }
-
-        const processedRow = processRowData(row, fileHeaders);
-        const dbRow = columnsToInsert.map(colName => processedRow[headerIndexMap[colName]]);
-        batch.push(dbRow);
-        totalRowCount++;
-
-        if (batch.length >= batchSize) {
-            await insertBatch(tx, table, columnsToInsert, batch);
-            processedRowCount += batch.length;
-            onProgress(10 + (processedRowCount / (totalRowCount + batchSize)) * 80); // Progreso aproximado
-            batch = [];
-        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+        await jobStatusManager.update(jobId, { status: 'error', message: `Error en ${fileInfo.fileName}`, error: errorMessage });
+        console.error(`[Job ${jobId}] ❌ Error procesando ${fileInfo.fileName}:`, error);
+        return; // Detener el proceso si un archivo falla
+      }
     }
 
-    if (batch.length > 0) {
-        await insertBatch(tx, table, columnsToInsert, batch);
-        processedRowCount += batch.length;
-    }
+    // Conversión de fechas post-procesamiento - exactamente como en Colab
+    console.log(`[Job ${jobId}] 🗓️ Iniciando conversión de columnas de fecha...`);
+    await jobStatusManager.update(jobId, { status: 'in_progress', message: 'Convirtiendo columnas de fecha...', progress: 90 });
+    await convertirColumnasFecha(client, conversiones);
+    console.log(`[Job ${jobId}] ✅ Conversión de fechas completada.`);
     
-    onProgress(100);
-    console.log(`[Job ${jobId}] [Stream] ✅ Finalizado ${fileName}. Filas procesadas: ${processedRowCount}`);
-}
-
-// Nueva función para asegurar que el esquema de la tabla esté correcto
-async function ensureTableSchema(tx: any, tableName: string, canonicalColumns: string[]) {
-  // Crear la tabla si no existe
-  const colDefs = canonicalColumns.map(col => `"${col}" TEXT`).join(', ');
-  await tx.execute(sql.raw(`CREATE TABLE IF NOT EXISTS ${tableName} (${colDefs});`));
-
-  // Obtener columnas existentes
-  const existingColsResult = await tx.execute(sql.raw(`
-    SELECT column_name 
-    FROM information_schema.columns 
-    WHERE table_name = '${tableName}';
-  `));
-  const existingCols = existingColsResult.rows.map((r: any) => r.column_name);
-
-  // Añadir columnas faltantes
-  const missingCols = canonicalColumns.filter(col => !existingCols.includes(col));
-  if (missingCols.length > 0) {
-    console.log(`[Schema] Columnas faltantes en ${tableName}: ${missingCols.join(', ')}. Añadiendo...`);
-    const addColQueries = missingCols.map(col => `ADD COLUMN IF NOT EXISTS "${col}" TEXT`).join(', ');
-    await tx.execute(sql.raw(`ALTER TABLE ${tableName} ${addColQueries};`));
+    await jobStatusManager.update(jobId, { 
+      status: 'completed', 
+      message: 'Procesamiento completado exitosamente.',
+      progress: 100 
+    });
+    
+  } catch (error) {
+    console.error(`[Job ${jobId}] ❌ Error general en procesamiento:`, error);
+    await jobStatusManager.update(jobId, { 
+      status: 'error', 
+      message: 'Error general en el procesamiento.',
+      error: error instanceof Error ? error.message : 'Error desconocido'
+    });
+  } finally {
+    if (client) client.release();
+    await pool.end();
   }
 }
 
-// Funciones de ayuda
-async function getR2FileStream(key: string): Promise<Readable> {
+// Procesa un único archivo usando COPY - inspirado en el código de Colab
+async function processSingleFileWithCopy(
+  client: any, 
+  fileInfo: {fileName: string, key: string, table: string}, 
+  jobId: string, 
+  onProgress: (progress: number) => void
+) {
+  const { fileName, key, table } = fileInfo;
+  console.log(`[Job ${jobId}] 🚀 Procesando con COPY: ${fileName}`);
+
+  // 1. Descargar archivo desde R2
+  onProgress(5);
+  const fileBuffer = await downloadFileFromR2(key);
+  console.log(`[Job ${jobId}] ✅ Archivo descargado desde R2: ${fileName}`);
+
+  // 2. Leer archivo según extensión
+  onProgress(15);
+  const rawData = await readFileAuto(fileBuffer, fileName);
+  console.log(`[Job ${jobId}] ✅ Archivo leído: ${rawData.length} filas`);
+
+  // 3. Limpiar nombres de columnas - exactamente como en Colab
+  onProgress(25);
+  const { columns, rows } = cleanColumnNames(rawData);
+  console.log(`[Job ${jobId}] ✅ Columnas limpiadas: ${columns.length} columnas`);
+
+  // 4. Cargar a PostgreSQL usando COPY - exactamente como en Colab
+  onProgress(35);
+  const insertedRows = await copyDataFrameToPostgres(columns, rows, table, client);
+  console.log(`[Job ${jobId}] ✅ ${insertedRows} filas cargadas con COPY en '${table}'`);
+
+  onProgress(100);
+}
+
+// Descargar archivo desde R2
+async function downloadFileFromR2(key: string): Promise<Buffer> {
   const command = new GetObjectCommand({ Bucket: BUCKET_NAME, Key: key });
   const response = await r2Client.send(command);
   if (!response.Body) throw new Error('No se pudo descargar el archivo de R2');
-  return response.Body as Readable;
+  
+  const stream = response.Body as Readable;
+  
+  // Solución correcta para AWS SDK v3 basada en la documentación oficial
+  const chunks: Buffer[] = [];
+  
+  return new Promise((resolve, reject) => {
+    stream.on('data', (chunk: any) => chunks.push(chunk));
+    stream.on('end', () => resolve(Buffer.concat(chunks as any)));
+    stream.on('error', reject);
+  });
 }
 
-function createParserStream(fileName: string, stream: Readable): Readable {
+// Leer archivo según extensión - adaptado del código de Colab
+async function readFileAuto(fileBuffer: Buffer, fileName: string): Promise<any[][]> {
   const fileExtension = path.extname(fileName).toLowerCase();
+  console.log(`🚀 Iniciando lectura de archivo: ${fileName}`);
+
   if (fileExtension === '.csv') {
-    return stream.pipe(csvParser({ headers: false, separator: ';' }));
-  } else if (fileExtension === '.xlsx') {
-    const readable = new Readable({ objectMode: true });
-    readable._read = () => {}; // No-op, ya que empujaremos datos manualmente
-
-    const workbook = new Workbook();
-    workbook.xlsx.read(stream).then(() => {
-      const worksheet = workbook.worksheets[0];
-      if (worksheet) {
-        worksheet.eachRow((row, rowNumber) => {
-          const values = row.values as any[];
-          // exceljs usa un array 1-based, lo convertimos a 0-based
-          readable.push(values.slice(1));
-        });
-      }
-      readable.push(null); // Fin del stream
-    }).catch(err => readable.emit('error', err));
-    
-    return readable;
-  } else {
-    throw new Error(`Formato de archivo no soportado: ${fileName}`);
-  }
-}
-
-function processRowData(row: any[], headers: string[]): any[] {
-  return row.map((value, index) => {
-    const columnName = headers[index];
-    if (dateColumns.includes(columnName)) {
-      return convertExcelDate(value);
-    }
-    return value != null ? String(value) : null;
-  });
-}
-
-function convertExcelDate(value: any): string | null {
-  if (value === null || typeof value === 'undefined') return null;
-  if (typeof value === 'object' && value instanceof Date) {
-    return value.toISOString().split('T')[0];
-  }
-  if (typeof value === 'number' && value > 0 && value < 2958466) { // Rango de fechas de Excel
-    const jsDate = new Date(Date.UTC(1899, 11, 30, 0, 0, 0, 0) + value * 86400000);
-    return jsDate.toISOString().split('T')[0];
-  }
-  if (typeof value === 'string') {
-    try {
-      return new Date(value).toISOString().split('T')[0];
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
-async function insertBatch(tx: any, table: string, columns: string[], batch: any[][]) {
-  if (batch.length === 0) return;
-
-  // 1. Mapear el lote de arrays a un lote de objetos, que es lo que Drizzle espera.
-  const dataToInsert = batch.map(row => {
-    const rowObject: Record<string, any> = {};
-    columns.forEach((col, index) => {
-      rowObject[col] = row[index];
+    return new Promise((resolve, reject) => {
+      const data: any[][] = [];
+      const stream = Readable.from(fileBuffer);
+      
+      stream
+        .pipe(csvParser({ 
+          headers: false,
+          separator: ';'
+        })) 
+        .on('data', (row: any) => {
+          data.push(Object.values(row));
+        })
+        .on('end', () => {
+          console.log(`✅ Lectura de CSV completada: ${data.length} filas`);
+          resolve(data);
+        })
+        .on('error', reject);
     });
-    return rowObject;
-  });
+  } 
+  else if (fileExtension === '.xlsx' || fileExtension === '.xls') {
+    try {
+      const workbook = new Workbook();
+      await workbook.xlsx.load(fileBuffer as any);
+      const worksheet = workbook.worksheets[0];
+      
+      if (!worksheet) throw new Error("El archivo no contiene hojas o no pudo ser leído.");
+      
+      const data: any[][] = [];
+      worksheet.eachRow((row, rowNumber) => {
+        const values = row.values as any[];
+        // ExcelJS usa un array 1-based, lo convertimos a 0-based
+        data.push(values.slice(1));
+      });
 
-  // 2. Usar el método de inserción nativo de Drizzle.
-  // Drizzle se encargará de construir la consulta y manejar los parámetros de forma segura.
-  // Esto es mucho más robusto que construir SQL crudo.
-  // Usamos el `pgTable` correspondiente para que Drizzle conozca el schema.
-  const tableSchema = table === 'table_ccm' ? tableCCM : tablePRR;
-  await tx.insert(tableSchema).values(dataToInsert);
+      if (data.length === 0) throw new Error("El archivo parece estar vacío.");
+      
+      console.log(`✅ Lectura de Excel completada: ${data.length} filas`);
+      return data;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      throw new Error(`Error al procesar el archivo Excel (${fileName}): ${errorMessage}`);
+    }
+  } else {
+    throw new Error(`Formato de archivo no soportado: ${fileExtension}`);
+  }
 }
 
-async function convertAllDateColumns(db: any) {
-    for (const table in canonicalSchema) {
-        for (const col of dateColumns) {
-            try {
-                const alterQuery = `
-                    ALTER TABLE ${table}
-                    ALTER COLUMN "${col}" TYPE DATE
-                    USING CASE 
-                        WHEN "${col}" IS NULL OR "${col}" = '' THEN NULL
-                        ELSE "${col}"::DATE
-                    END;
-                `;
-                await db.execute(sql.raw(alterQuery));
-            } catch (error) {
-                if (!(error instanceof Error && error.message.includes('does not exist'))) {
-                  console.error(`[Stream] ❌ Error convirtiendo ${col} en ${table}:`, error);
-                }
-            }
+// Limpiar nombres de columnas - exactamente como en Colab
+function cleanColumnNames(data: any[][]): { columns: string[], rows: any[][] } {
+  if (data.length === 0) throw new Error("Archivo vacío");
+  
+  const originalColumns = data[0];
+  const columns = originalColumns.map((col: any) => 
+    String(col).trim().replace(/\s+/g, '_').replace(/-/g, '_').toLowerCase()
+  );
+  
+  const rows = data.slice(1); // Todos los datos excepto el header
+  
+  return { columns, rows };
+}
+
+// Cargar DataFrame a PostgreSQL usando COPY - exactamente como en Colab
+async function copyDataFrameToPostgres(
+  columns: string[], 
+  rows: any[][], 
+  tableName: string, 
+  client: any
+): Promise<number> {
+  try {
+    console.log(`🔄 Procesando tabla con COPY: ${tableName}`);
+    
+    // Crear tabla si no existe con todas las columnas como TEXT
+    const colDefs = columns.map(col => `"${col}" TEXT`).join(', ');
+    const createTableQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (${colDefs});`;
+    await client.query(createTableQuery);
+    
+    console.log(`📋 Tabla ${tableName} preparada con ${columns.length} columnas`);
+    
+    // Truncar tabla antes de insertar - exactamente como en Colab
+    const truncateQuery = `TRUNCATE TABLE ${tableName};`;
+    await client.query(truncateQuery);
+    console.log(`🗑️ Tabla ${tableName} truncada`);
+    
+    // Usar COPY para inserción masiva - LA CLAVE DEL PERFORMANCE
+    const copyQuery = `COPY ${tableName} FROM STDIN WITH (FORMAT CSV)`;
+    
+    // Convertir datos a formato CSV en memoria
+    const csvData = rows.map(row => {
+      // Asegurar que la fila tenga el mismo número de columnas
+      const paddedRow = Array(columns.length).fill('');
+      for (let i = 0; i < Math.min(row.length, columns.length); i++) {
+        const value = row[i];
+        paddedRow[i] = value != null ? String(value).replace(/"/g, '""') : '';
+      }
+      return paddedRow.map(val => `"${val}"`).join(',');
+    }).join('\n');
+
+    // Ejecutar COPY - esto es 300x más rápido que INSERT individual
+    const copyStream = client.query(copyQuery);
+    copyStream.write(csvData);
+    copyStream.end();
+    
+    await new Promise((resolve, reject) => {
+      copyStream.on('end', resolve);
+      copyStream.on('error', reject);
+    });
+    
+    console.log(`✅ ${rows.length} filas cargadas con COPY en '${tableName}'`);
+    return rows.length;
+    
+  } catch (error) {
+    console.error(`❌ Error en COPY a '${tableName}':`, error);
+    throw error;
+  }
+}
+
+// Convertir columnas a tipo DATE - exactamente como en Colab
+async function convertirColumnasFecha(client: any, conversiones: Record<string, string[]>) {
+  for (const [tabla, columnas] of Object.entries(conversiones)) {
+    console.log(`\n🔄 Procesando tabla: ${tabla}`);
+    
+    for (const col of columnas) {
+      try {
+        console.log(` - Convirtiendo columna: ${col} → DATE...`);
+        
+        // Verificar si la columna existe antes de intentar convertirla
+        const checkColumnQuery = `
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = '${tabla}' AND column_name = '${col}';
+        `;
+        const columnExists = await client.query(checkColumnQuery);
+        
+        if (columnExists.rows.length > 0) {
+          // Primero verificar si ya es tipo DATE
+          const checkTypeQuery = `
+            SELECT data_type 
+            FROM information_schema.columns 
+            WHERE table_name = '${tabla}' AND column_name = '${col}';
+          `;
+          const columnTypeResult = await client.query(checkTypeQuery);
+          
+          if (columnTypeResult.rows[0]?.data_type === 'date') {
+            console.log(`   ✅ ${col} ya es tipo DATE, omitiendo conversión.`);
+          } else {
+            const alterQuery = `
+              ALTER TABLE ${tabla}
+              ALTER COLUMN "${col}" TYPE DATE
+              USING CASE 
+                WHEN "${col}" IS NULL OR "${col}" = '' THEN NULL
+                ELSE "${col}"::DATE
+              END;
+            `;
+            await client.query(alterQuery);
+            console.log(`   ✅ Columna ${col} convertida a tipo DATE.`);
+          }
+        } else {
+          console.log(`   ⚠️ La columna ${col} no existe en la tabla ${tabla}.`);
         }
+      } catch (error) {
+        console.error(`   ❌ Error al convertir columna ${col} a tipo DATE:`, error);
+      }
     }
+  }
 } 

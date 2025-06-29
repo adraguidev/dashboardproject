@@ -1,28 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { neon } from '@neondatabase/serverless'
 import { jobStatusManager } from '@/lib/redis'
 
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
-  const jobId = searchParams.get('jobId')
-
-  if (!jobId) {
-    return NextResponse.json({ error: 'Falta el ID del trabajo (jobId).' }, { status: 400 })
-  }
-
   try {
-    const status = await jobStatusManager.get(jobId)
-    
-    if (!status) {
-      return NextResponse.json({ jobId, status: 'not_found', message: 'El trabajo no se encontró o ha expirado.' }, { status: 404 })
+    const { searchParams } = new URL(request.url)
+    const jobId = searchParams.get('jobId')
+
+    if (!jobId) {
+      return NextResponse.json({ error: 'jobId es requerido' }, { status: 400 })
     }
 
-    return NextResponse.json({ jobId, ...status })
+    const status = await jobStatusManager.get(jobId)
+
+    if (!status) {
+      return NextResponse.json({ error: 'Job no encontrado' }, { status: 404 })
+    }
+
+    return NextResponse.json(status, { status: 200 })
 
   } catch (error) {
-    console.error(`[Status] Error obteniendo el estado para el trabajo ${jobId}:`, error)
-    return NextResponse.json({ error: 'Error interno al obtener el estado del trabajo.' }, { status: 500 })
+    console.error('Error obteniendo estado del job:', error)
+    return NextResponse.json(
+      { 
+        error: 'Error interno del servidor',
+        details: error instanceof Error ? error.message : 'Error desconocido'
+      },
+      { status: 500 }
+    )
   }
 } 

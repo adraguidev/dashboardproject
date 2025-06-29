@@ -7,6 +7,8 @@ import { Readable } from 'stream'
 import { getJsDateFromExcel } from 'excel-date-to-js'
 import * as path from 'path'
 import csvParser from 'csv-parser'
+import { v4 as uuidv4 } from 'uuid'
+import { jobStatusManager } from '@/lib/redis'
 
 // Configuración optimizada de Cloudflare R2 con timeouts
 const r2Client = new S3Client({
@@ -334,8 +336,10 @@ async function convertirColumnasFecha(sql: any, conversiones: Record<string, str
 }
 
 export async function POST(request: NextRequest) {
-  console.log('🚀 Generando URLs de subida directa...');
+  console.log('🚀 Iniciando proceso de subida de archivos...');
   
+  const jobId = uuidv4();
+
   try {
     // Verificar variables de entorno básicas
     if (!process.env.CLOUDFLARE_R2_ENDPOINT || !process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || 
@@ -353,7 +357,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('📋 Generando URLs pre-firmadas para subida directa a R2...');
+    console.log(`[Job ${jobId}] 📋 Generando URLs pre-firmadas para subida directa a R2...`);
 
     // Generar URLs pre-firmadas para cada archivo
     const uploadUrls = [];
@@ -379,20 +383,35 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    console.log(`✅ ${uploadUrls.length} URLs generadas. Respondiendo inmediatamente.`);
+    // Inicializar el estado del trabajo en Redis
+    await jobStatusManager.update(jobId, { 
+      status: 'urls_ready', 
+      message: 'URLs generadas. Esperando subida de archivos.',
+      progress: 0,
+      uploadUrls: uploadUrls.map(u => ({ fileName: u.fileName, key: u.key, table: u.table }))
+    });
 
-    // Responder inmediatamente con las URLs
+    console.log(`[Job ${jobId}] ✅ ${uploadUrls.length} URLs generadas. Respondiendo inmediatamente.`);
+
+    // Responder inmediatamente con las URLs y el jobId
     return NextResponse.json({
       success: true,
       message: 'URLs de subida generadas. Use estas URLs para subir directamente a R2.',
       uploadUrls,
+      jobId,
       status: 'urls_ready',
-      note: 'Suba los archivos usando las URLs y luego llame al endpoint de procesamiento.'
+      note: 'Suba los archivos usando las URLs y luego llame al endpoint de procesamiento con el jobId.'
     }, { status: 200 });
 
   } catch (error) {
-    console.error('❌ Error generando URLs de subida:', error);
+    console.error(`[Job ${jobId}] ❌ Error generando URLs de subida:`, error);
     
+    await jobStatusManager.update(jobId, { 
+      status: 'error', 
+      message: 'Error generando URLs de subida.',
+      error: error instanceof Error ? error.message : 'Error desconocido'
+    });
+
     return NextResponse.json(
       { 
         error: 'Error al generar URLs de subida',
