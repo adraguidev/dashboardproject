@@ -139,7 +139,6 @@ async function processSingleFileStream(tx: any, fileInfo: {fileName: string, key
     const r2Stream = await getR2FileStream(key);
     const canonicalColumns = canonicalSchema[table as keyof typeof canonicalSchema];
     
-    // Preparación de la tabla
     onProgress(5);
     const colDefs = canonicalColumns.map(col => `"${col}" TEXT`).join(', ');
     await tx.execute(sql.raw(`CREATE TABLE IF NOT EXISTS ${table} (${colDefs});`));
@@ -150,20 +149,18 @@ async function processSingleFileStream(tx: any, fileInfo: {fileName: string, key
     const headerIndexMap: { [key: string]: number } = {};
     let columnsToInsert: string[] = [];
     let isFirstRow = true;
-    let rowCount = 0;
     let processedRowCount = 0;
     const batchSize = 250;
     let batch: any[][] = [];
 
     const dataStream = createParserStream(fileName, r2Stream);
     
-    // Obtener el total de filas para el progreso (aproximado para streams)
-    // Para simplificar, asumiremos un número grande y actualizaremos basado en lotes
-    const totalSteps = 10; // Dividir el progreso en 10 partes
-    let stepCounter = 0;
+    let totalRowCount = 0; // Aproximación para el progreso
     
-    for await (const row of dataStream) {
-        rowCount++;
+    for await (const rawRow of dataStream) {
+        // NORMALIZACIÓN: Asegurar que la fila siempre sea un array
+        const row = Array.isArray(rawRow) ? rawRow : Object.values(rawRow);
+        
         if (isFirstRow) {
             fileHeaders = row.map((h: any) => String(h || '').trim().replace(/\s+/g, '_').replace(/-/g, '_').toLowerCase());
             fileHeaders.forEach((col, index) => { if(col) headerIndexMap[col] = index; });
@@ -176,15 +173,13 @@ async function processSingleFileStream(tx: any, fileInfo: {fileName: string, key
         const processedRow = processRowData(row, fileHeaders);
         const dbRow = columnsToInsert.map(colName => processedRow[headerIndexMap[colName]]);
         batch.push(dbRow);
+        totalRowCount++;
 
         if (batch.length >= batchSize) {
             await insertBatch(tx, table, columnsToInsert, batch);
             processedRowCount += batch.length;
+            onProgress(10 + (processedRowCount / (totalRowCount + batchSize)) * 80); // Progreso aproximado
             batch = [];
-            
-            // Actualizar progreso
-            stepCounter++;
-            onProgress(10 + (stepCounter / totalSteps) * 80);
         }
     }
 
