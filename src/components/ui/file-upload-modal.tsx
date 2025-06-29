@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Card } from './card'
 import { Button } from './button'
 
@@ -23,8 +24,13 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
   const [isUploading, setIsUploading] = useState(false)
   const [jobId, setJobId] = useState<string | null>(null)
   const [overallStatus, setOverallStatus] = useState<string>('')
+  const [mounted, setMounted] = useState(false)
 
-  if (!isOpen) return null
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!isOpen || !mounted) return null
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || [])
@@ -224,9 +230,9 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
     }
   }
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <Card className="w-full max-w-2xl mx-4 p-6">
+  const modalContent = (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
+      <Card className="w-full max-w-2xl mx-4 p-6 relative z-[10000] bg-white shadow-2xl">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold">Subir Archivos de Datos</h3>
           {!isUploading && (
@@ -326,4 +332,6 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
       </Card>
     </div>
   )
+
+  return createPortal(modalContent, document.body)
 } 

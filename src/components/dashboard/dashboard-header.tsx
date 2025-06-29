@@ -171,7 +171,7 @@ export function DashboardHeader({
                 </div>
       </div>
 
-      {/* File Upload Modal */}
+      {/* File Upload Modal - Renderizado como portal */}
       <FileUploadModal
         isOpen={showUploadModal}
         onClose={() => setShowUploadModal(false)}
