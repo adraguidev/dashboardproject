@@ -6,26 +6,23 @@ import { PendientesReportTable } from '../ui/pendientes-report-table'
 import { AdvancedPendientesReportTable } from '../ui/advanced-pendientes-report-table'
 import { ProduccionReportTable } from '../ui/produccion-report-table'
 import { IngresosChart } from '../ui/ingresos-chart'
+import AvancePendientesTable from '../ui/avance-pendientes-table'
 import { usePendientesReport } from '@/hooks/use-pendientes-report'
 import { useProduccionReport } from '@/hooks/use-produccion-report'
 import { useIngresos } from '@/hooks/use-ingresos'
 import { useEvaluadores } from '@/hooks/use-evaluadores'
-import { BarChart3, CheckCircle, Clock, TrendingUp, Construction, Factory, TrendingDown } from 'lucide-react'
+import { BarChart3, CheckCircle, Clock, TrendingUp, Construction, Factory, TrendingDown, Activity } from 'lucide-react'
 
 interface ProcessModulesProps {
   selectedProcess: 'ccm' | 'prr'
   selectedModule: string
   onModuleChange: (module: string) => void
-  onRefresh?: () => Promise<void>
-  moduleRefreshRef?: React.MutableRefObject<(() => Promise<void>) | null>
 }
 
 export function ProcessModules({ 
   selectedProcess, 
   selectedModule, 
   onModuleChange,
-  onRefresh,
-  moduleRefreshRef
 }: ProcessModulesProps) {
   const { report: reportData, loading, error, groupBy, changeGrouping, refreshData: refreshPendientes } = usePendientesReport({
     process: selectedProcess,
@@ -58,39 +55,6 @@ export function ProcessModules({
     process: otherProcess
   })
 
-  // Registrar función de refresh específica del módulo activo
-  useEffect(() => {
-    const refreshCurrentModule = async () => {
-      console.log(`🔄 Refrescando módulo activo: ${selectedModule} para ${selectedProcess.toUpperCase()}`);
-      
-      switch (selectedModule) {
-        case 'pendientes':
-          await refreshPendientes();
-          break;
-        case 'ingresos':
-          await refreshIngresos();
-          break;
-        case 'produccion':
-          await refetchProduccion();
-          break;
-        default:
-          console.log(`ℹ️ Módulo ${selectedModule} no requiere refresh`);
-      }
-    };
-    
-    // Configurar la referencia para que el componente padre pueda llamar la función
-    if (moduleRefreshRef) {
-      moduleRefreshRef.current = refreshCurrentModule;
-    }
-    
-    // Cleanup: limpiar la referencia cuando el componente se desmonte o cambie
-    return () => {
-      if (moduleRefreshRef) {
-        moduleRefreshRef.current = null;
-      }
-    };
-  }, [selectedModule, selectedProcess, moduleRefreshRef, refreshPendientes, refreshIngresos, refetchProduccion]);
-
   const modules = [
     {
       id: 'pendientes',
@@ -115,6 +79,14 @@ export function ProcessModules({
       description: 'Expedientes procesados (últimos 20 días)',
       status: 'active',
       color: 'text-green-600'
+    },
+    {
+      id: 'avance-pendientes',
+      name: 'Avance Pendientes',
+      icon: Activity,
+      description: 'Histórico de pendientes por operador',
+      status: 'active',
+      color: 'text-orange-600'
     },
     {
       id: 'resueltos',
@@ -195,6 +167,16 @@ export function ProcessModules({
                 console.log(`🔄 Cambiando filtros: ${days} días, tipo: ${dayType}`)
                 refetchProduccion(days, dayType)
               }}
+            />
+          </div>
+        )
+
+      case 'avance-pendientes':
+        return (
+          <div className="p-6">
+            <AvancePendientesTable 
+              className="w-full" 
+              proceso={selectedProcess.toUpperCase() as 'CCM' | 'PRR'}
             />
           </div>
         )

@@ -1,65 +1,17 @@
 import { neon } from "@neondatabase/serverless";
 import { drizzle, NeonHttpDatabase } from "drizzle-orm/neon-http";
-import { pgTable, text, integer, timestamp, serial, date } from "drizzle-orm/pg-core";
 import { eq, and, isNull, isNotNull, desc, asc, count, gte, lte, inArray, like, or, sql } from "drizzle-orm";
+import * as mainSchema from './schema/main';
+import * as historicosSchema from './schema/historicos';
 
-// Schema para table_ccm
-export const tableCCM = pgTable('table_ccm', {
-  numerotramite: text('numerotramite'),
-  fechaexpendiente: date('fechaexpendiente'),
-  operador: text('operador'),
-  ultimaetapa: text('ultimaetapa'),
-  estadopre: text('estadopre'),
-  estadotramite: text('estadotramite'),
-  anio: integer('anio'),
-  mes: integer('mes'),
-  operadorpre: text('operadorpre'),
-  fechapre: date('fechapre'),
-  // Agregar más campos según sea necesario
-});
-
-// Schema para table_prr
-export const tablePRR = pgTable('table_prr', {
-  numerotramite: text('numerotramite'),
-  fechaexpendiente: date('fechaexpendiente'),
-  operador: text('operador'),
-  ultimaetapa: text('ultimaetapa'),
-  estadopre: text('estadopre'),
-  estadotramite: text('estadotramite'),
-  anio: integer('anio'),
-  mes: integer('mes'),
-  operadorpre: text('operadorpre'),
-  fechapre: date('fechapre'),
-  // Agregar más campos según sea necesario
-});
-
-// Schema para evaluadores
-export const evaluadoresCCM = pgTable('evaluadores_ccm', {
-  id: serial('id').primaryKey(),
-  nombres_apellidos: text('nombres_apellidos'),
-  nombre_en_base: text('nombre_en_base').notNull(),
-  regimen: text('regimen'),
-  turno: text('turno'),
-  modalidad: text('modalidad'),
-  sub_equipo: text('sub_equipo').notNull(),
-});
-
-export const evaluadoresPRR = pgTable('evaluadores_prr', {
-  id: serial('id').primaryKey(),
-  nombres_apellidos: text('nombres_apellidos'),
-  nombre_en_base: text('nombre_en_base').notNull(),
-  regimen: text('regimen'),
-  turno: text('turno'),
-  modalidad: text('modalidad'),
-  sub_equipo: text('sub_equipo').notNull(),
-});
-
-export const schema = {
-  tableCCM,
-  tablePRR,
-  evaluadoresCCM,
-  evaluadoresPRR,
+const schema = {
+  ...mainSchema,
+  ...historicosSchema,
 };
+
+// Reexportamos los esquemas individuales para que sigan estando disponibles donde se necesiten
+export const { tableCCM, tablePRR, evaluadoresCCM, evaluadoresPRR, fileProcessingJobs } = mainSchema;
+export const { historicoPendientesOperador, historicoSinAsignar } = historicosSchema;
 
 // Función para obtener conexión a la base de datos (POOLED o DIRECTA)
 export async function getDrizzleDB(options: { type: 'pooled' | 'direct' } = { type: 'pooled' }) {

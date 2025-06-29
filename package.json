@@ -7,10 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "heroku-postbuild": "next build && rm -rf ./node_modules && rm -rf ./.next/cache"
+    "heroku-postbuild": "next build && rm -rf ./node_modules && rm -rf ./.next/cache",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.837.0",
+    "@aws-sdk/client-s3": "^3.702.0",
     "@aws-sdk/lib-storage": "^3.837.0",
     "@aws-sdk/s3-request-presigner": "^3.837.0",
     "@neondatabase/serverless": "^1.0.1",
@@ -28,6 +31,7 @@
     "clsx": "^2.1.1",
     "csv-parser": "^3.2.0",
     "date-fns": "^4.1.0",
+    "date-fns-tz": "^3.2.0",
     "drizzle-kit": "^0.31.2",
     "drizzle-orm": "^0.44.2",
     "excel-date-to-js": "^1.1.5",
@@ -55,9 +59,12 @@
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",
     "autoprefixer": "^10.4.21",
+    "csv-parse": "^5.6.0",
+    "dotenv": "^17.0.0",
     "eslint": "^9",
     "eslint-config-next": "15.3.4",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.20.3",
     "typescript": "^5",
     "wrangler": "^4.22.0"
   }

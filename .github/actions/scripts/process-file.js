@@ -160,8 +160,39 @@ async function main() {
 			console.log(`Lote insertado. Progreso: ${progress}%`);
 		}
 
-		await updateJobStatus('completed', 100, '¡Éxito! Todos los datos han sido cargados.');
 		console.log('¡ÉXITO! Todas las filas han sido insertadas.');
+
+		// **NUEVO PASO: Disparar el snapshot del histórico**
+		console.log('Disparando la creación del snapshot de histórico...');
+		await updateJobStatus('processing', 99, 'Creando snapshot histórico...');
+
+		const { API_URL, INTERNAL_API_SECRET } = process.env;
+		if (API_URL && INTERNAL_API_SECRET) {
+			try {
+				const snapshotResponse = await fetch(`${API_URL}/api/historico/snapshot`, {
+					method: 'POST',
+					headers: {
+						'Authorization': `Bearer ${INTERNAL_API_SECRET}`
+					}
+				});
+
+				if (!snapshotResponse.ok) {
+					const errorText = await snapshotResponse.text();
+					throw new Error(`Error al crear snapshot: ${snapshotResponse.status} - ${errorText}`);
+				}
+
+				console.log('Snapshot de histórico creado exitosamente.');
+			} catch (snapshotError) {
+				console.error('Error al disparar el snapshot, pero la carga principal fue exitosa.', snapshotError);
+				// No se considera un error fatal para el job, pero se registra.
+			}
+		} else {
+			console.warn('API_URL o INTERNAL_API_SECRET no configuradas. Omitiendo snapshot.');
+		}
+
+		await updateJobStatus('completed', 100, '¡Éxito! Todos los datos han sido cargados.');
+		console.log('Proceso finalizado con éxito.');
+
 	} catch (error) {
 		const errorMessage = error.message || 'Error desconocido';
 		await updateJobStatus('error', 0, `Error crítico: ${errorMessage}`);
