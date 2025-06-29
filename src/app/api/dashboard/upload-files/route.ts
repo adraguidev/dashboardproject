@@ -336,32 +336,17 @@ async function convertirColumnasFecha(sql: any, conversiones: Record<string, str
 }
 
 export async function POST(request: NextRequest) {
-  console.log('🚀 Iniciando proceso de subida de archivos...');
-  
-  const jobId = uuidv4();
-
   try {
-    // Verificar variables de entorno básicas
-    if (!process.env.CLOUDFLARE_R2_ENDPOINT || !process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || 
-        !process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || !process.env.CLOUDFLARE_R2_BUCKET_NAME) {
-      throw new Error('Variables de entorno de Cloudflare R2 no configuradas');
-    }
-
-    const body = await request.json();
+    const body: { files: { name: string; type: string; size: number }[] } = await request.json();
     const { files } = body;
 
     if (!files || !Array.isArray(files) || files.length === 0) {
-      return NextResponse.json(
-        { error: 'Debes proporcionar información de los archivos a subir.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Debes proporcionar archivos.' }, { status: 400 });
     }
 
-    console.log(`[Job ${jobId}] 📋 Generando URLs pre-firmadas para subida directa a R2...`);
+    console.log(`📋 Generando ${files.length} URLs pre-firmadas...`);
 
-    // Generar URLs pre-firmadas para cada archivo
-    const uploadUrls = [];
-    for (const fileInfo of files) {
+    const uploadUrls = await Promise.all(files.map(async (fileInfo) => {
       const { name, type, size } = fileInfo;
       const key = `uploads/${Date.now()}-${name}`;
       
@@ -372,51 +357,26 @@ export async function POST(request: NextRequest) {
         ContentLength: size,
       });
 
-      // Generar URL pre-firmada con 10 minutos de expiración
       const uploadUrl = await getSignedUrl(r2Client, command, { expiresIn: 600 });
       
-      uploadUrls.push({
+      return {
         fileName: name,
         uploadUrl,
         key,
-        table: name.toLowerCase().includes('ccm') ? 'table_ccm' : 'table_prr'
-      });
-    }
+      };
+    }));
 
-    // Inicializar el estado del trabajo en Redis
-    await jobStatusManager.update(jobId, { 
-      status: 'urls_ready', 
-      message: 'URLs generadas. Esperando subida de archivos.',
-      progress: 0,
-      uploadUrls: uploadUrls.map(u => ({ fileName: u.fileName, key: u.key, table: u.table }))
-    });
+    console.log(`✅ ${uploadUrls.length} URLs generadas.`);
 
-    console.log(`[Job ${jobId}] ✅ ${uploadUrls.length} URLs generadas. Respondiendo inmediatamente.`);
-
-    // Responder inmediatamente con las URLs y el jobId
     return NextResponse.json({
       success: true,
-      message: 'URLs de subida generadas. Use estas URLs para subir directamente a R2.',
       uploadUrls,
-      jobId,
-      status: 'urls_ready',
-      note: 'Suba los archivos usando las URLs y luego llame al endpoint de procesamiento con el jobId.'
     }, { status: 200 });
 
   } catch (error) {
-    console.error(`[Job ${jobId}] ❌ Error generando URLs de subida:`, error);
-    
-    await jobStatusManager.update(jobId, { 
-      status: 'error', 
-      message: 'Error generando URLs de subida.',
-      error: error instanceof Error ? error.message : 'Error desconocido'
-    });
-
+    console.error(`❌ Error generando URLs de subida:`, error);
     return NextResponse.json(
-      { 
-        error: 'Error al generar URLs de subida',
-        details: error instanceof Error ? error.message : 'Error desconocido'
-      },
+      { error: 'Error al generar URLs de subida', details: error instanceof Error ? error.message : 'Error desconocido' },
       { status: 500 }
     );
   }
