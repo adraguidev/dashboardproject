@@ -200,13 +200,11 @@ async function processFileInChunks(
 ) {
   console.log(`[Job ${jobId}] 🔄 Procesando archivo por chunks para optimizar memoria`);
   
-  // Preparar tabla
+  // Preparar tabla - USAR SOLO LAS COLUMNAS QUE EXISTEN EN EL SCHEMA
   onProgress(20);
   const tempColumns = [
-    "textbox4", "dependencia", "anio", "mes", "numerotramite", "ultimaetapa",
-    "fechaexpendiente", "fechaetapaaprobacionmasivafin", "fechapre", "operadorpre",
-    "estadopre", "estadotramite", "archivo_origen", "operador", "fecha_asignacion",
-    "modalidad", "regimen", "meta_antigua", "meta_nueva", "equipo"
+    "numerotramite", "fechaexpendiente", "operador", "ultimaetapa", 
+    "estadopre", "estadotramite", "anio", "mes", "operadorpre", "fechapre"
   ];
   
   // Crear tabla si no existe
@@ -253,7 +251,7 @@ async function processCSVInChunks(
     
     let rowCount = 0;
     let batch: any[] = [];
-    const batchSize = 1000;
+    const batchSize = 100; // Lotes pequeños para Heroku
     let isFirstRow = true;
     let actualColumns: string[] = [];
     
@@ -298,6 +296,15 @@ async function processCSVInChunks(
           // Actualizar progreso (30% base + 60% del procesamiento)
           const progressPercent = 30 + (rowCount / 600000) * 60; // Estimamos máximo 600k filas
           onProgress(Math.min(progressPercent, 90));
+          
+          // Liberar memoria cada 10 lotes
+          if (Math.floor(rowCount / batchSize) % 10 === 0) {
+            if (global.gc) {
+              global.gc();
+            }
+            // Pequeña pausa para Heroku
+            await new Promise(resolve => setTimeout(resolve, 10));
+          }
           
           batch = []; // Limpiar lote
           stream.resume(); // Reanudar el stream
@@ -459,8 +466,8 @@ async function copyDataFrameToPostgres(
     await client.query(truncateQuery);
     console.log(`🗑️ Tabla ${tableName} truncada`);
     
-    // Usar INSERT en lotes grandes para optimizar memoria y performance
-    const batchSize = 1000; // Lotes de 1000 filas para evitar problemas de memoria
+    // Usar INSERT en lotes pequeños para evitar problemas de memoria en Heroku
+    const batchSize = 100; // Lotes de 100 filas para mantener memoria bajo 512MB
     let insertedRows = 0;
     
     console.log(`📊 Insertando ${rows.length} filas en lotes de ${batchSize}...`);
@@ -501,6 +508,14 @@ async function copyDataFrameToPostgres(
       // Log progreso cada 10 lotes
       if ((Math.floor(i / batchSize) + 1) % 10 === 0) {
         console.log(`📊 Procesado lote ${Math.floor(i / batchSize) + 1}, total: ${insertedRows} filas`);
+        
+        // Forzar garbage collection cada 10 lotes para liberar memoria
+        if (global.gc) {
+          global.gc();
+        }
+        
+        // Pequeña pausa para evitar saturar Heroku
+        await new Promise(resolve => setTimeout(resolve, 10));
       }
       
       // Liberar memoria del lote procesado
