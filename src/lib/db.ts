@@ -624,6 +624,41 @@ export class DirectDatabaseAPI {
 
     return query.limit(limit).offset(offset);
   }
+
+  // =========== MÉTODOS PARA HISTÓRICOS ===========
+
+  async upsertHistoricoPendientesOperador(data: (typeof historicoPendientesOperador.$inferInsert)[]) {
+    if (data.length === 0) return;
+    return this.db.insert(historicoPendientesOperador)
+      .values(data)
+      .onConflictDoUpdate({
+        target: [
+          historicoPendientesOperador.fecha,
+          historicoPendientesOperador.proceso,
+          historicoPendientesOperador.operador,
+          historicoPendientesOperador.anioExpediente,
+        ],
+        set: {
+          pendientes: sql`excluded.pendientes`,
+        },
+      });
+  }
+
+  async upsertHistoricoSinAsignar(data: (typeof historicoSinAsignar.$inferInsert)[]) {
+    if (data.length === 0) return;
+    return this.db.insert(historicoSinAsignar)
+      .values(data)
+      .onConflictDoUpdate({
+        target: [
+          historicoSinAsignar.fecha,
+          historicoSinAsignar.proceso,
+          historicoSinAsignar.anioExpediente,
+        ],
+        set: {
+          sinAsignar: sql`excluded.sin_asignar`,
+        },
+      });
+  }
 }
 
 // Función helper para crear una instancia de la API

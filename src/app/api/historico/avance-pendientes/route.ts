@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     const anio = searchParams.get('anio')
     
     // Construir condiciones de filtro
-    let whereConditions = [eq(historicoPendientesOperador.proceso, proceso as 'CCM' | 'PRR')]
+    const whereConditions = [eq(historicoPendientesOperador.proceso, proceso as 'CCM' | 'PRR')]
     
     if (anio) {
       whereConditions.push(eq(historicoPendientesOperador.anioExpediente, parseInt(anio)))
@@ -45,11 +45,11 @@ export async function GET(request: Request) {
 
     // Estructurar datos para la tabla
     const datosTabla = operadoresUnicos.map(operador => {
-      const filaOperador: any = { operador }
+      const filaOperador: { [key: string]: string | number } = { operador }
       
       fechasUnicas.forEach(fecha => {
         const registrosFecha = historicos.filter(h => h.operador === operador && h.fecha === fecha)
-        const totalPendientes = registrosFecha.reduce((sum, r) => sum + r.pendientes, 0)
+        const totalPendientes = registrosFecha.reduce((sum, r) => sum + (r.pendientes || 0), 0)
         filaOperador[fecha] = totalPendientes
       })
       
@@ -66,10 +66,10 @@ export async function GET(request: Request) {
       }
     })
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error obteniendo avance de pendientes:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: (error as Error).message },
       { status: 500 }
     )
   }
