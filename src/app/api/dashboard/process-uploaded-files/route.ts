@@ -200,16 +200,35 @@ async function processFileInChunks(
 ) {
   console.log(`[Job ${jobId}] 🔄 Procesando archivo por chunks para optimizar memoria`);
   
-  // Preparar tabla - USAR SOLO LAS COLUMNAS QUE EXISTEN EN EL SCHEMA
+  // Primero leer headers del CSV para crear tabla dinámicamente
   onProgress(20);
-  const tempColumns = [
-    "numerotramite", "fechaexpendiente", "operador", "ultimaetapa", 
-    "estadopre", "estadotramite", "anio", "mes", "operadorpre", "fechapre"
-  ];
+  console.log(`[Job ${jobId}] 🔍 Leyendo headers del CSV para crear tabla dinámicamente...`);
   
-  // Crear tabla si no existe
-  const colDefs = tempColumns.map(col => `"${col}" TEXT`).join(', ');
+  let csvHeaders: string[] = [];
+  
+  // Leer solo la primera línea para obtener headers
+  if (fileName.toLowerCase().endsWith('.csv')) {
+    const firstLine = fileBuffer.toString('utf8').split('\n')[0];
+    csvHeaders = firstLine.split(';').map(header => 
+      header.trim().replace(/"/g, '').replace(/\s+/g, '_').replace(/-/g, '_').toLowerCase()
+    );
+  } else {
+    // Para Excel, usar headers predeterminados que coinciden con la imagen
+    csvHeaders = [
+      'textbox4', 'dependencia', 'anio', 'mes', 'numerotramite', 'ultimaetapa',
+      'fechaexpendiente', 'fechaetapaaprobacionmasivafin', 'fechapre', 'operadorpre',
+      'estadopre', 'estadotramite', 'archivo_origen', 'operador', 'fecha_asignacion',
+      'modalidad', 'regimen', 'meta_antigua', 'meta_nueva', 'equipo'
+    ];
+  }
+  
+  console.log(`[Job ${jobId}] 📋 Headers detectados: ${csvHeaders.join(', ')}`);
+  
+  // Crear tabla dinámicamente con todas las columnas como TEXT
+  const colDefs = csvHeaders.map(col => `"${col}" TEXT`).join(', ');
   const createTableQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (${colDefs});`;
+  
+  console.log(`[Job ${jobId}] 🏗️ Creando tabla: ${createTableQuery}`);
   await client.query(createTableQuery);
   
   // Truncar tabla
@@ -223,7 +242,7 @@ async function processFileInChunks(
   const fileExtension = fileName.toLowerCase().endsWith('.csv') ? 'csv' : 'excel';
   
   if (fileExtension === 'csv') {
-    await processCSVInChunks(fileBuffer, tableName, tempColumns, client, jobId, onProgress);
+    await processCSVInChunks(fileBuffer, tableName, csvHeaders, client, jobId, onProgress);
   } else {
     // Para Excel, tenemos que cargar en memoria pero optimizamos el procesamiento
     const rawData = await readFileAuto(fileBuffer, fileName);
