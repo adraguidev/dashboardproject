@@ -81,7 +81,11 @@ async function main() {
 	console.log(`Descargando archivo desde R2...`);
 	const command = new GetObjectCommand({ Bucket: R2_BUCKET_NAME, Key: FILE_KEY });
 	const response = await r2Client.send(command);
-	const fileBuffer = await response.Body.transformToByteArray();
+	const fileUint8Array = await response.Body.transformToByteArray();
+	
+	// Convertir el Uint8Array a un Buffer de Node.js
+	const fileBuffer = Buffer.from(fileUint8Array);
+
 	console.log(`Archivo descargado (${(fileBuffer.length / 1024 / 1024).toFixed(2)} MB).`);
 
 	// 4. Parsear el archivo
