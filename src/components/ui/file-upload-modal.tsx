@@ -134,18 +134,21 @@ export function FileUploadModal({ isOpen, onClose, onUploadComplete }: FileUploa
     try {
       // Paso 1: Obtener URLs pre-firmadas
       setOverallStatus('📋 Generando URLs de subida...')
-      const presignResponse = await fetch('/api/dashboard/generate-upload-url', {
+      const urlResponse = await fetch('/api/dashboard/upload-files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files: selectedFiles.map(f => ({ name: f.name, type: f.type })) }),
+        body: JSON.stringify({
+          files: selectedFiles.map(f => ({ name: f.name, type: f.type, size: f.size }))
+        })
       });
 
-      if (!presignResponse.ok) {
+      if (!urlResponse.ok) {
         throw new Error('Error al obtener las URLs de subida.');
       }
 
-      const { uploadUrls, jobId: newJobId }: UploadUrlResponse = await presignResponse.json();
-      setJobId(newJobId)
+      const urlResult: UploadUrlResponse = await urlResponse.json();
+      const { uploadUrls, jobId: newJobId } = urlResult;
+      setJobId(newJobId);
 
       // Paso 2: Subir archivos a R2
       setOverallStatus('📤 Subiendo archivos a R2...')
