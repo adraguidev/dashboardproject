@@ -37,16 +37,19 @@ jobs:
       # Este es el paso clave. Ejecuta nuestro script de Node.js
       - name: Run file processing script
         run: node .github/actions/scripts/process-file.js
-        # Pasa los secretos y la información del evento al script como variables de entorno
         env:
-          # Secretos que debes configurar en tu repositorio de GitHub
-          # (Settings -> Secrets and variables -> Actions)
+          # Secretos de R2 y DB
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-          # Información del archivo, pasada desde el evento que disparó el workflow
+          # Secretos de Redis para el estado
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+
+          # Información del job, pasada desde el evento
           FILE_KEY: ${{ github.event.client_payload.file_key }}
-          TABLE_NAME: ${{ github.event.client_payload.table_name }} 
+          TABLE_NAME: ${{ github.event.client_payload.table_name }}
+          JOB_ID: ${{ github.event.client_payload.job_id }} 

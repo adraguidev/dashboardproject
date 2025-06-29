@@ -3,6 +3,7 @@
  *
  * Este script se encarga de procesar un archivo desde R2 y cargarlo a PostgreSQL.
  * Recibe toda la información necesaria a través de variables de entorno.
+ * Reporta su progreso a Redis para seguimiento en tiempo real.
  */
 
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
@@ -10,6 +11,7 @@ const postgres = require('postgres');
 const { Workbook } = require('exceljs');
 const { Readable } = require('stream');
 const csv = require('csv-parser');
+const { Redis } = require('@upstash/redis');
 
 // Helpers para normalizar headers (igual que en el worker)
 function normalizeHeader(header) {
@@ -49,67 +51,84 @@ async function parseCsv(buffer) {
 
 // Función principal de ejecución
 async function main() {
-	// 1. Obtener configuración de las variables de entorno
 	const {
 		R2_ENDPOINT,
 		R2_ACCESS_KEY_ID,
 		R2_SECRET_ACCESS_KEY,
 		R2_BUCKET_NAME,
 		DATABASE_URL,
-		FILE_KEY, // Nombre del archivo en R2
-		TABLE_NAME, // Nombre de la tabla destino
+		UPSTASH_REDIS_REST_URL,
+		UPSTASH_REDIS_REST_TOKEN,
+		FILE_KEY,
+		TABLE_NAME,
+		JOB_ID, // Pasado desde el workflow
 	} = process.env;
 
-	if (!FILE_KEY || !TABLE_NAME) {
-		throw new Error('Las variables FILE_KEY y TABLE_NAME son requeridas.');
+	if (!FILE_KEY || !TABLE_NAME || !JOB_ID) {
+		throw new Error('Variables de entorno FILE_KEY, TABLE_NAME, y JOB_ID son requeridas.');
 	}
 
-	console.log(`Iniciando procesamiento para el archivo: ${FILE_KEY}`);
-	console.log(`Tabla destino: ${TABLE_NAME}`);
-
-	// 2. Conectar a R2
-	const r2Client = new S3Client({
-		region: 'auto',
-		endpoint: R2_ENDPOINT,
-		credentials: {
-			accessKeyId: R2_ACCESS_KEY_ID,
-			secretAccessKey: R2_SECRET_ACCESS_KEY,
-		},
+	// Conectar a Redis
+	const redis = new Redis({
+		url: UPSTASH_REDIS_REST_URL,
+		token: UPSTASH_REDIS_REST_TOKEN,
 	});
 
-	// 3. Descargar el archivo
-	console.log(`Descargando archivo desde R2...`);
-	const command = new GetObjectCommand({ Bucket: R2_BUCKET_NAME, Key: FILE_KEY });
-	const response = await r2Client.send(command);
-	const fileUint8Array = await response.Body.transformToByteArray();
-	
-	// Convertir el Uint8Array a un Buffer de Node.js
-	const fileBuffer = Buffer.from(fileUint8Array);
+	const updateJobStatus = async (status, progress, message) => {
+		const jobData = { status, progress, message, updatedAt: Date.now() };
+		await redis.set(`job:${JOB_ID}`, JSON.stringify(jobData), { ex: 3600 });
+	};
 
-	console.log(`Archivo descargado (${(fileBuffer.length / 1024 / 1024).toFixed(2)} MB).`);
-
-	// 4. Parsear el archivo
-	const fileExtension = FILE_KEY.split('.').pop()?.toLowerCase();
-	let headers, rows;
-
-	if (fileExtension === 'csv') {
-		({ headers, rows } = await parseCsv(fileBuffer));
-	} else if (['xlsx', 'xls'].includes(fileExtension)) {
-		({ headers, rows } = await parseExcel(fileBuffer));
-	} else {
-		throw new Error(`Formato de archivo no soportado: ${fileExtension}`);
-	}
-
-	if (!headers || !rows || headers.length === 0 || rows.length === 0) {
-		console.log('El archivo está vacío o no tiene headers. Proceso finalizado.');
-		return;
-	}
-	console.log(`Archivo parseado. ${rows.length} filas y ${headers.length} columnas.`);
-
-	// 5. Conectar a la base de datos
-	const sql = postgres(DATABASE_URL, { max: 1 });
-
+	let sql;
 	try {
+		await updateJobStatus('processing', 5, 'Iniciando proceso en GitHub Actions...');
+		
+		// 1. Obtener configuración de las variables de entorno
+		console.log(`Iniciando procesamiento para el archivo: ${FILE_KEY}`);
+		console.log(`Tabla destino: ${TABLE_NAME}`);
+
+		// 2. Conectar a R2
+		const r2Client = new S3Client({
+			region: 'auto',
+			endpoint: R2_ENDPOINT,
+			credentials: {
+				accessKeyId: R2_ACCESS_KEY_ID,
+				secretAccessKey: R2_SECRET_ACCESS_KEY,
+			},
+		});
+
+		// 3. Descargar el archivo
+		console.log(`Descargando archivo desde R2...`);
+		const command = new GetObjectCommand({ Bucket: R2_BUCKET_NAME, Key: FILE_KEY });
+		const response = await r2Client.send(command);
+		const fileUint8Array = await response.Body.transformToByteArray();
+		
+		// Convertir el Uint8Array a un Buffer de Node.js
+		const fileBuffer = Buffer.from(fileUint8Array);
+
+		console.log(`Archivo descargado (${(fileBuffer.length / 1024 / 1024).toFixed(2)} MB).`);
+
+		// 4. Parsear el archivo
+		const fileExtension = FILE_KEY.split('.').pop()?.toLowerCase();
+		let headers, rows;
+
+		if (fileExtension === 'csv') {
+			({ headers, rows } = await parseCsv(fileBuffer));
+		} else if (['xlsx', 'xls'].includes(fileExtension)) {
+			({ headers, rows } = await parseExcel(fileBuffer));
+		} else {
+			throw new Error(`Formato de archivo no soportado: ${fileExtension}`);
+		}
+
+		if (!headers || !rows || headers.length === 0 || rows.length === 0) {
+			console.log('El archivo está vacío o no tiene headers. Proceso finalizado.');
+			return;
+		}
+		console.log(`Archivo parseado. ${rows.length} filas y ${headers.length} columnas.`);
+
+		// Conectar a la base de datos
+		sql = postgres(DATABASE_URL, { max: 1 });
+
 		// 6. Borrar y recrear tabla
 		console.log(`Borrando y recreando la tabla: ${TABLE_NAME}...`);
 		await sql.unsafe(`DROP TABLE IF EXISTS ${TABLE_NAME}`);
@@ -117,8 +136,8 @@ async function main() {
 		await sql.unsafe(`CREATE TABLE ${TABLE_NAME} (${columnDefs})`);
 		console.log('Tabla creada exitosamente.');
 
-		// 7. Insertar en lotes
-		const BATCH_SIZE = 10000; // Lotes grandes, estamos en un entorno potente
+		// Insertar en lotes y reportar progreso
+		const BATCH_SIZE = 10000;
 		console.log(`Iniciando inserción en lotes de ${BATCH_SIZE}...`);
 
 		for (let i = 0; i < rows.length; i += BATCH_SIZE) {
@@ -136,17 +155,27 @@ async function main() {
 				 VALUES ${objects.map(obj => `(${headers.map(h => `'${String(obj[h] || '').replace(/'/g, "''")}'`).join(',')})`).join(',')}`
 			);
 
-			console.log(`Lote de ${batch.length} filas insertado. Total: ${i + batch.length}`);
+			const progress = Math.round(((i + batch.length) / rows.length) * 100);
+			await updateJobStatus('processing', progress, `Procesando... ${i + batch.length} de ${rows.length} filas.`);
+			console.log(`Lote insertado. Progreso: ${progress}%`);
 		}
 
+		await updateJobStatus('completed', 100, '¡Éxito! Todos los datos han sido cargados.');
 		console.log('¡ÉXITO! Todas las filas han sido insertadas.');
+	} catch (error) {
+		const errorMessage = error.message || 'Error desconocido';
+		await updateJobStatus('error', 0, `Error crítico: ${errorMessage}`);
+		console.error('Error CRÍTICO en el script:', error);
+		process.exit(1);
 	} finally {
-		await sql.end();
-		console.log('Conexión a la base de datos cerrada.');
+		if (sql) {
+			await sql.end();
+			console.log('Conexión a la base de datos cerrada.');
+		}
 	}
 }
 
 main().catch(error => {
-	console.error('Error CRÍTICO en el script:', error);
+	console.error('Error no controlado en main:', error);
 	process.exit(1);
 }); 

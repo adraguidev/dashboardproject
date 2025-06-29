@@ -76,13 +76,13 @@ export async function POST(request: NextRequest) {
 			return NextResponse.json({ error: 'No se proporcionaron archivos para procesar.' }, { status: 400 });
 		}
 
-		// La URL de la API de GitHub para disparar el evento
+		// Generar un único ID de trabajo para todo el lote de subida
+		const jobId = crypto.randomUUID();
+
 		const dispatchUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/dispatches`;
 		
-		// Disparamos un workflow por cada archivo
 		const dispatchPromises = files.map(file => {
-			console.log(`Disparando evento de GitHub Actions para el archivo: ${file.key}`);
-
+			console.log(`Disparando evento para el archivo: ${file.key} con JobID: ${jobId}`);
 			return fetch(dispatchUrl, {
 				method: 'POST',
 				headers: {
@@ -91,10 +91,11 @@ export async function POST(request: NextRequest) {
 					'Content-Type': 'application/json',
 				},
 				body: JSON.stringify({
-					event_type: 'process-file-event', // El tipo de evento que escucha nuestro workflow
+					event_type: 'process-file-event',
 					client_payload: {
 						file_key: file.key,
 						table_name: file.table,
+						job_id: jobId, // Pasamos el ID del job
 					},
 				}),
 			});
@@ -112,13 +113,11 @@ export async function POST(request: NextRequest) {
 			}
 		}
 
-		// Devolvemos el nombre del repo para que el frontend pueda consultar los workflows
+		// Devolvemos el ID del job al frontend
 		return NextResponse.json(
 			{
-				message: 'El proceso de carga de archivos ha sido iniciado.',
-				repo: `${GITHUB_USER}/${GITHUB_REPO}`,
-				// No podemos obtener el run_id directamente, pero el frontend
-				// puede buscar el último run para el evento.
+				message: 'El proceso de carga ha sido iniciado.',
+				jobId: jobId, // Clave para que el frontend pueda consultar el estado
 			},
 			{ status: 202 }
 		);
