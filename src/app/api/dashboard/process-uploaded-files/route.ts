@@ -9,6 +9,7 @@ import csvParser from 'csv-parser'
 import * as path from 'path'
 import { v4 as uuidv4 } from 'uuid'
 import { jobStatusManager } from '@/lib/redis'
+import { pgTable, text, integer, date } from 'drizzle-orm/pg-core'
 
 // Configuración de Cloudflare R2
 const r2Client = new S3Client({
@@ -44,6 +45,15 @@ const dateColumns = [
   "fechapre",
   "fecha_asignacion"
 ]
+
+// Definir los schemas de tabla para que Drizzle los pueda usar en las inserciones
+const tableCCM = pgTable('table_ccm', {
+  ...Object.fromEntries(canonicalSchema.table_ccm.map(col => [col, text(col)]))
+});
+
+const tablePRR = pgTable('table_prr', {
+  ...Object.fromEntries(canonicalSchema.table_prr.map(col => [col, text(col)]))
+});
 
 export async function POST(request: NextRequest) {
   console.log('🔄 Iniciando procesamiento de archivos desde R2...');
@@ -284,23 +294,23 @@ function convertExcelDate(value: any): string | null {
 }
 
 async function insertBatch(tx: any, table: string, columns: string[], batch: any[][]) {
-    const valueGroups = [];
-    const allValues = [];
-    let placeholderIndex = 1;
+  if (batch.length === 0) return;
 
-    for (const row of batch) {
-        const placeholders = [];
-        for (const value of row) {
-            placeholders.push(`$${placeholderIndex++}`);
-            allValues.push(value);
-        }
-        valueGroups.push(`(${placeholders.join(', ')})`);
-    }
+  // 1. Mapear el lote de arrays a un lote de objetos, que es lo que Drizzle espera.
+  const dataToInsert = batch.map(row => {
+    const rowObject: Record<string, any> = {};
+    columns.forEach((col, index) => {
+      rowObject[col] = row[index];
+    });
+    return rowObject;
+  });
 
-    const columnNames = columns.map(col => `"${col}"`).join(', ');
-    const query = `INSERT INTO ${table} (${columnNames}) VALUES ${valueGroups.join(', ')}`;
-    
-    await tx.execute(sql.raw(query), allValues);
+  // 2. Usar el método de inserción nativo de Drizzle.
+  // Drizzle se encargará de construir la consulta y manejar los parámetros de forma segura.
+  // Esto es mucho más robusto que construir SQL crudo.
+  // Usamos el `pgTable` correspondiente para que Drizzle conozca el schema.
+  const tableSchema = table === 'table_ccm' ? tableCCM : tablePRR;
+  await tx.insert(tableSchema).values(dataToInsert);
 }
 
 async function convertAllDateColumns(db: any) {
