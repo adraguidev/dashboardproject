@@ -21,4 +21,7 @@ LINTER_ISSUES.md
 npm-debug.log*
 pnpm-debug.log*
 .vscode/
-.idea/ 
+.idea/
+
+# Carpeta del Cloudflare Worker (se despliega por separado)
+/worker-processor 
