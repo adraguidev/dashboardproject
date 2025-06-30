@@ -337,7 +337,7 @@ export async function GET(request: NextRequest) {
     const report = await cachedOperation({
       key: cacheKey,
       ttlSeconds: ttl,
-      fetcher: async () => generateProduccionReport(data, evaluadores, process as 'ccm' | 'prr', days, dayType as 'habiles' | 'calendario')
+      fetcher: async () => generateProduccionReport(data, evaluadores, process as 'ccm' | 'prr', days, dayType)
     });
 
     console.log(`📋 Reporte generado: ${report.data.length} operadores, ${report.fechas.length} días, ${report.grandTotal} total`)
