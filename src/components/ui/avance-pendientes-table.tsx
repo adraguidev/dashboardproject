@@ -5,9 +5,10 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useAvancePendientes } from '@/hooks/use-avance-pendientes'
 import { usePendientesReport } from '@/hooks/use-pendientes-report'
 import { useEvaluadores } from '@/hooks/use-evaluadores'
+import { useHistoricoSinAsignar } from '@/hooks/use-historico-sin-asignar'
 import { format, parseISO, subDays } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Activity, Users, Calendar, TrendingDown, Search, Filter, Download, Save, Loader2, LineChart } from 'lucide-react'
+import { Activity, Users, Calendar, TrendingDown, Search, Filter, Download, Save, Loader2, LineChart, AlertTriangle } from 'lucide-react'
 import { Evaluador } from '@/types/dashboard'
 import { useToast } from '@/components/ui/toast'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Line, ComposedChart } from 'recharts';
@@ -52,6 +53,12 @@ export default function AvancePendientesTable({
 
   const { data, isLoading, error, refetch } = useAvancePendientes(selectedProceso)
   
+  const { 
+    data: sinAsignarData, 
+    isLoading: isSinAsignarLoading, 
+    error: sinAsignarError 
+  } = useHistoricoSinAsignar(selectedProceso, periodoSeleccionado)
+
   // Obtener datos de pendientes actuales para el cruce de operadores
   const { report: reportData } = usePendientesReport({
     process: selectedProceso.toLowerCase() as 'ccm' | 'prr',
@@ -790,6 +797,63 @@ export default function AvancePendientesTable({
           </ResponsiveContainer>
         </div>
       </div>
+
+      {/* NUEVO GRÁFICO: HISTÓRICO SIN ASIGNAR */}
+      <div className="mt-8">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+          <AlertTriangle className="h-5 w-5 mr-2 text-red-600"/>
+          Evolución de Pendientes Sin Asignar (Últimos {periodoSeleccionado} días)
+        </h3>
+        <div className="bg-white p-4 rounded-lg shadow-md border border-gray-200 h-96">
+          {isSinAsignarLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+            </div>
+          ) : sinAsignarError ? (
+            <div className="flex items-center justify-center h-full text-red-500">
+              Error: {sinAsignarError.message}
+            </div>
+          ) : sinAsignarData && sinAsignarData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={sinAsignarData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                <defs>
+                  <linearGradient id="colorSinAsignar" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" vertical={false} />
+                <XAxis dataKey="fecha" tick={{ fontSize: 11 }} angle={-25} textAnchor="end" height={50} />
+                <YAxis tick={{ fontSize: 12 }} domain={['dataMin - 50', 'dataMax + 50']} allowDataOverflow />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                    backdropFilter: 'blur(5px)',
+                    border: '1px solid #e0e0e0',
+                    borderRadius: '0.5rem',
+                  }}
+                  labelStyle={{ fontWeight: 'bold' }}
+                />
+                <Legend verticalAlign="top" height={36} />
+                <Area 
+                  type="monotone" 
+                  dataKey="Sin Asignar" 
+                  stroke="#ef4444"
+                  strokeWidth={2}
+                  fill="url(#colorSinAsignar)"
+                  dot={{ r: 4, stroke: '#ef4444', fill: '#fff', strokeWidth: 2 }}
+                  activeDot={{ r: 6, stroke: '#ef4444', fill: '#fff', strokeWidth: 2 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-full text-gray-500">
+              No hay datos de pendientes sin asignar para este período.
+            </div>
+          )}
+        </div>
+      </div>
+      {/* FIN NUEVO GRÁFICO */}
 
       {/* ANÁLISIS DE EVOLUCIÓN POR OPERADOR */}
       <OperatorMovers data={filteredOperators} fechas={processedData.fechasFiltradas} />
