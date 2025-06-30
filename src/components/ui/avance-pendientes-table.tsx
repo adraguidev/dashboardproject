@@ -262,7 +262,7 @@ export default function AvancePendientesTable({
       const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
       const intercept = (sumY - slope * sumX) / n;
       dataPoints.forEach((point, index) => {
-        // @ts-ignore
+        // @ts-expect-error
         point['Tendencia'] = Math.max(0, slope * index + intercept);
       });
     }
