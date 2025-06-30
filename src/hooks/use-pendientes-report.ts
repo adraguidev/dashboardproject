@@ -2,7 +2,10 @@
 
 import { useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { PendientesReportSummary, GroupingType } from '@/types/dashboard'
+import { PendientesReportSummary } from '@/types/dashboard'
+
+// Tipo local para la agrupación
+type GroupingType = 'year' | 'quarter' | 'month'
 
 interface UsePendientesReportOptions {
   process: 'ccm' | 'prr'
