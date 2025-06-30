@@ -44,9 +44,9 @@ export function SpeProcessMetricsTable({ data }: SpeProcessMetricsTableProps) {
               <tbody className="divide-y divide-gray-200">
                 {data.map((metric) => (
                   <tr key={metric.proceso} className="hover:bg-gray-50 transition-colors duration-150">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{metric.proceso}</div>
-                        <div className="text-xs text-gray-500">
+                      <td className="px-6 py-4">
+                        <div className="text-sm font-medium text-gray-900 max-w-xs break-words">{metric.proceso}</div>
+                        <div className="text-xs text-gray-500 whitespace-nowrap">
                           {metric.firstEntry} a {metric.lastEntry}
                         </div>
                       </td>
