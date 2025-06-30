@@ -38,7 +38,7 @@ export function useIngresos({
       return result.report;
     },
     enabled,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 6 * 60 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });

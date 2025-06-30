@@ -141,7 +141,7 @@ export function ProcessModules({
     // Ingresos con diferentes períodos
     [15, 30, 45, 60, 90].forEach(d => {
       queue.push({
-        key: ['ingresos', selectedProcess, d],
+        key: ['ingresosReport', selectedProcess, d],
         url: `/api/dashboard/ingresos?process=${selectedProcess}&days=${d}`
       });
     });
@@ -181,7 +181,7 @@ export function ProcessModules({
         case 'pendientes':
           return moduleId !== 'pendientesReport';
         case 'ingresos':
-          return moduleId !== 'ingresos';
+          return moduleId !== 'ingresosReport';
         case 'produccion':
           return moduleId !== 'produccionReport';
         case 'avance-pendientes':
