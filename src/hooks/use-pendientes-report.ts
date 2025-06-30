@@ -2,55 +2,47 @@
 
 import { useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { PendientesReportSummary } from '@/types/dashboard'
+import { PendientesReportData, GroupingType } from '@/types/dashboard'
 
 interface UsePendientesReportOptions {
   process: 'ccm' | 'prr'
-  groupBy?: 'year' | 'quarter' | 'month'
   enabled?: boolean
 }
 
 export function usePendientesReport({
   process,
-  groupBy: initialGroupBy = 'year',
   enabled = true,
 }: UsePendientesReportOptions) {
-  const [groupBy, setGroupBy] = useState(initialGroupBy);
-
+  const [groupBy, setGroupBy] = useState<GroupingType>('year')
+  
+  // La clave de la query ahora incluye el 'groupBy' para que se actualice
   const queryKey = ['pendientesReport', process, groupBy];
 
-  const {
-    data: report,
-    isLoading: loading,
-    error: queryError,
-    refetch,
-  } = useQuery<PendientesReportSummary, Error>({
+  const { data: report, isLoading: loading, error: queryError } = useQuery<PendientesReportData, Error>({
     queryKey,
     queryFn: async () => {
+      console.log(`🚀 Fetching pendientes-report: process=${process}, groupBy=${groupBy}`);
       const response = await fetch(`/api/dashboard/pendientes-report?process=${process}&groupBy=${groupBy}`);
       if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
+        throw new Error(`Error en el reporte de pendientes: ${response.statusText}`);
       }
-      const result: { success: boolean; report: PendientesReportSummary; error?: string } = await response.json();
+      const result = await response.json();
       if (!result.success) {
-        throw new Error(result.error || 'Error desconocido al obtener el reporte de pendientes');
+        throw new Error(result.error || 'Error desconocido en el reporte de pendientes');
       }
       return result.report;
     },
     enabled,
-    staleTime: 5 * 60 * 1000, // 5 minutos
-    gcTime: 10 * 60 * 1000, // 10 minutos
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  const changeGrouping = useCallback((newGroupBy: 'year' | 'quarter' | 'month') => {
+  // Esta función ahora solo actualiza el estado, y react-query se encarga del resto.
+  const changeGrouping = useCallback((newGroupBy: GroupingType) => {
+    console.log(`🔄 Cambiando agrupación de pendientes a: ${newGroupBy}`);
     setGroupBy(newGroupBy);
   }, []);
-
-  const refreshData = useCallback(async () => {
-    console.log(`🔄 Refrescando datos de pendientes-report para: ${process.toUpperCase()}`);
-    await refetch();
-  }, [refetch, process]);
 
   const error = queryError ? queryError.message : null;
 
@@ -58,9 +50,8 @@ export function usePendientesReport({
     report: report ?? null,
     loading,
     error,
-    changeGrouping,
     groupBy,
-    refreshData,
+    changeGrouping,
   };
 } 
  

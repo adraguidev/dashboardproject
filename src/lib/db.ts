@@ -5,6 +5,7 @@ import { subYears, format } from 'date-fns';
 import { logInfo } from './logger';
 import * as mainSchema from './schema/main';
 import * as historicosSchema from './schema/historicos';
+import { es } from 'date-fns/locale';
 
 const schema = {
   ...mainSchema,
@@ -718,74 +719,160 @@ export class DirectDatabaseAPI {
   }
 
   async deleteHistoricoDelDiaSinAsignar(fecha: string, proceso: 'CCM' | 'PRR') {
-    return this.db.delete(historicoSinAsignar).where(
-      and(
-        eq(historicoSinAsignar.fecha, fecha),
-        eq(historicoSinAsignar.proceso, proceso)
-      )
-    );
+    const table = proceso === 'CCM' ? historicoSinAsignar : historicoSinAsignar; // Ajusta si tienes tablas separadas
+    return this.db.delete(table).where(eq(table.fecha, fecha));
   }
 
   /**
-   * Obtiene el análisis de resoluciones agrupado por mes, estado y operador.
-   * @param proceso - El proceso ('ccm' o 'prr') a analizar.
-   * @returns Una promesa que resuelve con los datos del análisis.
+   * REFACTORIZADO: Nuevo método de análisis de resueltos.
+   * Compara el año actual vs. el año anterior.
    */
-  async getResueltosAnalysis(proceso: 'ccm' | 'prr'): Promise<{ mes: string; estadopre: string; operadorpre: string | null; total: number }[]> {
+  async getResueltosAnalysis(proceso: 'ccm' | 'prr') {
     const table = proceso === 'ccm' ? tableCCM : tablePRR;
-    const twoYearsAgo = subYears(new Date(), 2);
 
-    logInfo(`[DB Service] Obteniendo análisis de resueltos para ${proceso} desde ${format(twoYearsAgo, 'yyyy-MM-dd')}`);
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const previousYear = currentYear - 1;
+    
+    // Obtener datos de los últimos 2 años
+    const twoYearsAgo = subYears(now, 2);
+    const twoYearsAgoStr = twoYearsAgo.toISOString().split('T')[0];
 
-    // Obtener todos los datos filtrados y agrupar en JavaScript
     const rawData = await this.db
       .select({
-        fechapre: table.fechapre,
         estadopre: table.estadopre,
         operadorpre: table.operadorpre,
+        fechapre: table.fechapre,
       })
       .from(table)
-      .where(
-        and(
-          isNotNull(table.fechapre),
-          gte(table.fechapre, format(twoYearsAgo, 'yyyy-MM-dd')),
-          isNotNull(table.estadopre),
-          ne(table.estadopre, '')
-        )
-      );
-      
-    logInfo(`[DB Service] Datos crudos obtenidos: ${rawData.length} registros`);
+      .where(and(
+        isNotNull(table.estadopre),
+        ne(table.estadopre, ''),
+        gte(table.fechapre, twoYearsAgoStr)
+      ));
 
-    // Agrupar por mes, estado y operador en JavaScript
-    const groupedData = new Map<string, number>();
+    // -- INICIALIZACIÓN DE ESTRUCTURAS --
+    const getYearlyDataTemplate = () => ({
+      total: 0,
+      byCategory: new Map<string, number>(),
+      byMonth: Array.from({ length: 12 }, (_, i) => ({ month: i + 1, total: 0 })),
+      operators: new Map<string, { total: number; byCategory: Map<string, number> }>()
+    });
+
+    const yearlyData = {
+      [currentYear]: getYearlyDataTemplate(),
+      [previousYear]: getYearlyDataTemplate(),
+    };
     
-    rawData.forEach(row => {
-      if (row.fechapre && row.estadopre) {
-        const fecha = new Date(row.fechapre);
-        const mes = format(fecha, 'yyyy-MM');
-        const key = `${mes}|${row.estadopre}|${row.operadorpre || 'Sin Operador'}`;
-        
-        groupedData.set(key, (groupedData.get(key) || 0) + 1);
-      }
-    });
-
-    // Convertir el mapa a array de resultados
-    const results = Array.from(groupedData.entries()).map(([key, total]) => {
-      const [mes, estadopre, operadorpre] = key.split('|');
-      return {
-        mes,
-        estadopre,
-        operadorpre: operadorpre === 'Sin Operador' ? null : operadorpre,
-        total
-      };
-    }).sort((a, b) => {
-      // Ordenar por mes primero, luego por estado
-      if (a.mes !== b.mes) return a.mes.localeCompare(b.mes);
-      return a.estadopre.localeCompare(b.estadopre);
-    });
+    const allCategories = new Set<string>();
+    
+    // -- PROCESAMIENTO DE DATOS --
+    for (const row of rawData) {
+      if (!row.fechapre) continue;
       
-    logInfo(`[DB Service] Análisis de resueltos procesado: ${results.length} grupos encontrados`);
-    return results;
+      const date = new Date(row.fechapre);
+      const year = date.getUTCFullYear();
+      
+      if (year === currentYear || year === previousYear) {
+        const month = date.getUTCMonth(); // 0-11
+        const category = row.estadopre || 'INDEFINIDO';
+        const operator = row.operadorpre || 'SIN OPERADOR';
+
+        const yearStats = yearlyData[year];
+        
+        // Totales
+        yearStats.total++;
+        yearStats.byMonth[month].total++;
+        
+        // Categorías
+        allCategories.add(category);
+        yearStats.byCategory.set(category, (yearStats.byCategory.get(category) || 0) + 1);
+        
+        // Operadores
+        if (!yearStats.operators.has(operator)) {
+          yearStats.operators.set(operator, { total: 0, byCategory: new Map() });
+        }
+        const opStats = yearStats.operators.get(operator)!;
+        opStats.total++;
+        opStats.byCategory.set(category, (opStats.byCategory.get(category) || 0) + 1);
+      }
+    }
+    
+    const monthNames = Array.from({ length: 12 }, (_, i) => format(new Date(2000, i, 1), 'MMM', { locale: es }));
+    
+    // -- ESTRUCTURACIÓN DE LA RESPUESTA FINAL --
+    
+    const formatSummary = (year: number) => {
+      const data = yearlyData[year];
+      const categories = Array.from(data.byCategory.entries())
+        .map(([name, total]) => ({ name, total }))
+        .sort((a, b) => b.total - a.total);
+
+      return {
+        year,
+        total: data.total,
+        avgMonthly: data.total > 0 ? data.total / 12 : 0,
+        categories,
+      };
+    };
+    
+    const summary = {
+      currentYear: formatSummary(currentYear),
+      previousYear: formatSummary(previousYear),
+    };
+    
+    const monthlyTrends = {
+      comparison: monthNames.map((name, i) => ({
+        month: name,
+        currentYear: yearlyData[currentYear].byMonth[i].total,
+        previousYear: yearlyData[previousYear].byMonth[i].total,
+      })),
+    };
+    
+    const categoryTrendsData = yearlyData[currentYear];
+    const categoryTrends = {
+      categories: Array.from(allCategories),
+      byMonth: monthNames.map((monthName, monthIndex) => {
+        const monthData: { [key: string]: string | number } = { month: monthName };
+        for (const category of allCategories) {
+          monthData[category] = 0;
+        }
+        for (const row of rawData) {
+            if (!row.fechapre) continue;
+            const date = new Date(row.fechapre);
+            if (date.getUTCFullYear() === currentYear && date.getUTCMonth() === monthIndex) {
+               const category = row.estadopre || 'INDEFINIDO';
+               monthData[category] = (monthData[category] as number) + 1;
+            }
+        }
+        return monthData;
+      }),
+    };
+    
+    const operatorsDetails = {
+      categories: Array.from(allCategories),
+      operators: Array.from(yearlyData[currentYear].operators.entries())
+        .map(([operator, data]) => {
+          const byCategory: { [key: string]: number } = {};
+          for (const category of allCategories) {
+            byCategory[category] = data.byCategory.get(category) || 0;
+          }
+          return {
+            operator,
+            total: data.total,
+            ...byCategory,
+          };
+        })
+        .filter(op => op.operator !== 'SIN OPERADOR')
+        .sort((a, b) => b.total - a.total),
+    };
+    
+    return {
+      summary,
+      monthlyTrends,
+      categoryTrends,
+      operatorsDetails,
+    };
   }
 }
 

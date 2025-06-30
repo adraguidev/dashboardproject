@@ -14,6 +14,7 @@ import { useEvaluadores } from '@/hooks/use-evaluadores'
 import { BarChart3, CheckCircle, Clock, TrendingUp, Construction, Factory, TrendingDown, Activity, BrainCircuit } from 'lucide-react'
 import { ThroughputChart } from '../ui/throughput-chart'
 import ResueltosDashboard from '../ui/resueltos-dashboard'
+import { useQueryClient } from '@tanstack/react-query'
 
 interface ProcessModulesProps {
   selectedProcess: 'ccm' | 'prr'
@@ -26,13 +27,25 @@ export function ProcessModules({
   selectedModule, 
   onModuleChange,
 }: ProcessModulesProps) {
-  const { report: reportData, loading, error, groupBy, changeGrouping } = usePendientesReport({
+  const { 
+    report: reportData, 
+    loading, 
+    error, 
+    groupBy, 
+    changeGrouping 
+  } = usePendientesReport({
     process: selectedProcess,
-    groupBy: 'year',
     enabled: selectedModule === 'pendientes',
   })
 
-  const { report: produccionReport, otherProcessEvaluadores: produccionOtherEvaluadores, loading: produccionLoading, error: produccionError, refetch: refetchProduccion } = useProduccionReport({
+  const { 
+    report: produccionReport, 
+    otherProcessEvaluadores: produccionOtherEvaluadores, 
+    loading: produccionLoading, 
+    error: produccionError, 
+    refetch: refetchProduccion,
+    currentFilters: produccionCurrentFilters 
+  } = useProduccionReport({
     process: selectedProcess,
     enabled: selectedModule === 'produccion',
   })
@@ -103,46 +116,112 @@ export function ProcessModules({
       status: 'active',
       color: 'text-emerald-600'
     },
-    {
-      id: 'tiempos',
-      name: 'Tiempos',
-      icon: Clock,
-      description: 'Análisis temporal',
-      status: 'coming-soon',
-      color: 'text-amber-600'
-    },
-    {
-      id: 'productividad',
-      name: 'Productividad',
-      icon: TrendingUp,
-      description: 'Métricas de rendimiento',
-      status: 'coming-soon',
-      color: 'text-purple-600'
-    }
+    // Módulos 'Tiempos' y 'Productividad' removidos a petición del usuario
   ]
+
+  const queryClient = useQueryClient()
+
+  // -------------------------------------------------------------
+  // PRECARGA PASIVA DE DATOS EN SEGUNDO PLANO
+  // -------------------------------------------------------------
+  useEffect(() => {
+    const baseDelay = 10000; // 10s antes de empezar
+    const step = 5000; // 5s entre cada llamada
+
+    const queue: { key: any[]; url: string }[] = [];
+
+    // Pendientes con 3 agrupaciones
+    ['year', 'quarter', 'month'].forEach(g => {
+      queue.push({
+        key: ['pendientesReport', selectedProcess, g],
+        url: `/api/dashboard/pendientes-report?process=${selectedProcess}&groupBy=${g}`
+      });
+    });
+
+    // Ingresos con diferentes períodos
+    [15, 30, 45, 60, 90].forEach(d => {
+      queue.push({
+        key: ['ingresos', selectedProcess, d],
+        url: `/api/dashboard/ingresos?process=${selectedProcess}&days=${d}`
+      });
+    });
+
+    // Producción con combinaciones de filtros más comunes
+    [20, 30, 60].forEach(days => {
+      ['TODOS', 'LABORABLES', 'FIN_DE_SEMANA'].forEach(type => {
+        queue.push({
+          key: ['produccionReport', selectedProcess, days, type],
+          url: `/api/dashboard/produccion-report?process=${selectedProcess}&days=${days}&dayType=${type}`
+        });
+      });
+    });
+
+    // Avance Pendientes snapshot (sin filtros)
+    queue.push({
+      key: ['avancePendientes', selectedProcess],
+      url: `/api/dashboard/avance-pendientes?process=${selectedProcess}`
+    });
+
+    // Throughput / análisis
+    queue.push({
+      key: ['throughputAnalysis', selectedProcess],
+      url: `/api/dashboard/analysis/throughput?process=${selectedProcess}`
+    });
+
+    // Resueltos análisis (ya genera varias vistas en backend)
+    queue.push({
+      key: ['resueltos-analysis', selectedProcess],
+      url: `/api/analysis/resueltos?proceso=${selectedProcess}`
+    });
+
+    // Excluir el módulo activo (su consulta principal ya se dispara de forma normal)
+    const filteredQueue = queue.filter(item => {
+      const moduleId = item.key[0];
+      switch (selectedModule) {
+        case 'pendientes':
+          return moduleId !== 'pendientesReport';
+        case 'ingresos':
+          return moduleId !== 'ingresos';
+        case 'produccion':
+          return moduleId !== 'produccionReport';
+        case 'avance-pendientes':
+          return moduleId !== 'avancePendientes';
+        case 'analisis':
+          return moduleId !== 'throughputAnalysis';
+        case 'resueltos':
+          return moduleId !== 'resueltos-analysis';
+        default:
+          return true;
+      }
+    });
+
+    // Programar prefetch escalonado
+    filteredQueue.forEach((item, idx) => {
+      const t = setTimeout(() => {
+        queryClient.prefetchQuery({
+          queryKey: item.key,
+          queryFn: () => fetch(item.url).then(r => r.json()),
+          staleTime: 6 * 60 * 60 * 1000 // 6h
+        });
+      }, baseDelay + idx * step);
+      // Limpiar en unmount o cambio
+      return () => clearTimeout(t);
+    });
+  }, [selectedProcess, selectedModule, queryClient]);
 
   const renderModuleContent = () => {
     switch (selectedModule) {
       case 'pendientes':
         return (
           <div className="p-6">
-            {reportData ? (
-              <AdvancedPendientesReportTable
-                reportData={reportData}
-                otherProcessEvaluadores={otherProcessEvaluadores}
-                loading={loading}
-                className="w-full"
-                groupBy={groupBy}
-                onGroupingChange={changeGrouping}
-              />
-            ) : (
-              <PendientesReportTable
-                report={reportData}
-                loading={loading}
-                error={error}
-                className="w-full"
-              />
-            )}
+            <AdvancedPendientesReportTable
+              reportData={reportData}
+              otherProcessEvaluadores={otherProcessEvaluadores}
+              loading={loading}
+              className="w-full"
+              groupBy={groupBy}
+              onGroupingChange={changeGrouping}
+            />
           </div>
         )
 
@@ -170,10 +249,8 @@ export function ProcessModules({
               loading={produccionLoading}
               error={produccionError}
               className="w-full"
-              onFiltersChange={(days, dayType) => {
-                console.log(`🔄 Cambiando filtros: ${days} días, tipo: ${dayType}`)
-                refetchProduccion(days, dayType)
-              }}
+              currentFilters={produccionCurrentFilters}
+              onFiltersChange={refetchProduccion}
             />
           </div>
         )

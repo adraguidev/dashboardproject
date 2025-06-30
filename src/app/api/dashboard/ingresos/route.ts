@@ -391,7 +391,7 @@ export async function GET(request: NextRequest) {
     const process = searchParams.get('process') as 'ccm' | 'prr' | null;
     const days = parseInt(searchParams.get('days') || '30');
 
-    const cacheKey = `dashboard:ingresos:${process}:v2`;
+    const cacheKey = `dashboard:ingresos:${process}:${days}:v3`;
     const ttl = 6 * 60 * 60; // 6 horas
 
     if (!['ccm', 'prr'].includes(process || 'ccm')) {

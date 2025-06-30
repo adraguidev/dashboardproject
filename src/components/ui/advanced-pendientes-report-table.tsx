@@ -3,11 +3,13 @@
 import React, { useState, useMemo, useCallback } from 'react'
 import { PendientesReportSummary, Evaluador, PendientesReportData } from '@/types/dashboard'
 import { BarChart, Calendar, Users, FileStack, AlertTriangle, Search, Download, Filter } from 'lucide-react'
+import { Card } from '@/components/ui/card'
 
 interface AdvancedPendientesReportTableProps {
-  reportData: PendientesReportSummary
+  reportData: PendientesReportSummary | null
   otherProcessEvaluadores?: Evaluador[]
   loading?: boolean
+  error?: string | null
   className?: string
   groupBy: 'quarter' | 'month' | 'year'
   onGroupingChange: (newGroupBy: 'quarter' | 'month' | 'year') => void
@@ -19,6 +21,7 @@ export function AdvancedPendientesReportTable({
   reportData, 
   otherProcessEvaluadores = [],
   loading = false, 
+  error = null,
   className = '',
   groupBy,
   onGroupingChange
@@ -57,13 +60,13 @@ export function AdvancedPendientesReportTable({
   }, [externalNombresEnBase]);
 
   // Base data without 'Sin Operador'
-  const baseData = useMemo(() => reportData.data.filter(item => item.operador !== 'Sin Operador'), [reportData.data]);
+  const baseData = useMemo(() => reportData?.data.filter(item => item.operador !== 'Sin Operador') || [], [reportData]);
 
   // Data for 'Sin Asignar' card
   const sinAsignarCount = useMemo(() => {
-    const sinOperadorEntry = reportData.data.find(item => item.operador === 'Sin Operador');
+    const sinOperadorEntry = reportData?.data.find(item => item.operador === 'Sin Operador');
     return sinOperadorEntry ? sinOperadorEntry.total : 0;
-  }, [reportData.data]);
+  }, [reportData]);
 
   // Memoize filtered data based on the active tab
   const filteredOperators = useMemo(() => {
@@ -109,19 +112,19 @@ export function AdvancedPendientesReportTable({
   const totals = useMemo(() => {
     const initialTotals: { [key: string]: number; total: number } = { total: 0 };
 
-    const periodTotals = reportData.years.reduce((acc, period) => {
+    const periodTotals = reportData?.years.reduce((acc, period) => {
       acc[period] = filteredOperators.reduce((sum, item) => sum + (item.years[period] || 0), 0);
       return acc;
-    }, initialTotals);
+    }, initialTotals) || initialTotals;
 
     periodTotals.total = filteredOperators.reduce((sum, item) => sum + item.total, 0);
     return periodTotals;
-  }, [filteredOperators, reportData.years]);
+  }, [filteredOperators, reportData?.years]);
 
   // Determine which period columns to show based on totals
   const visiblePeriods = useMemo(() => {
-    return reportData.years.filter(period => totals[period] > 0);
-  }, [reportData.years, totals]);
+    return reportData?.years.filter(period => totals[period] > 0) || [];
+  }, [reportData?.years, totals]);
 
   // Get unique sub equipos for filter
   const uniqueSubEquipos = useMemo(() => {
@@ -149,6 +152,47 @@ export function AdvancedPendientesReportTable({
       description: 'Operadores del proceso actual que se encontraron en la lista del proceso contrario (CCM/PRR).'
     },
   ]
+
+  // ---------------------------------------------
+  // GUARDIAS DE RENDERIZADO – deben colocarse DESPUÉS
+  // de todos los hooks para mantener el orden de
+  // invocación constante entre renders.
+  // ---------------------------------------------
+  if (loading) {
+    return (
+      <Card className={`p-6 ${className}`}>
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
+          <div className="h-6 bg-gray-200 rounded w-full"></div>
+          <div className="h-6 bg-gray-200 rounded w-5/6"></div>
+          <div className="h-6 bg-gray-200 rounded w-3/4"></div>
+        </div>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card className={`p-6 ${className}`}>
+        <div className="text-center text-red-600">
+          <h3 className="text-lg font-semibold mb-2">Error al Cargar el Reporte</h3>
+          <p>{error}</p>
+        </div>
+      </Card>
+    )
+  }
+
+  if (!reportData || reportData.data.length === 0) {
+    return (
+      <Card className={`p-6 ${className}`}>
+        <div className="text-center text-gray-500">
+          <h3 className="text-lg font-semibold mb-2">No Hay Datos Disponibles</h3>
+          <p>No se encontraron datos de pendientes para este proceso.</p>
+        </div>
+      </Card>
+    )
+  }
+  // ---------------------------------------------
 
   const exportToCSV = () => {
     const headers = ['OPERADOR', 'SUB EQUIPO', ...visiblePeriods, 'TOTAL'];
@@ -189,20 +233,7 @@ export function AdvancedPendientesReportTable({
     );
   };
 
-  if (loading) {
-    return (
-      <div className={`bg-gray-50 p-4 sm:p-6 rounded-lg ${className}`}>
-        <div className="animate-pulse space-y-4">
-          <div className="h-6 bg-gray-200 rounded w-1/3"></div>
-          <div className="space-y-2">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="h-4 bg-gray-200 rounded"></div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const { data, headers, grandTotal, process } = reportData;
 
   return (
     <div className={`bg-gray-50 p-4 sm:p-6 rounded-lg ${className}`}>

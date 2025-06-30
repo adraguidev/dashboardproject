@@ -12,7 +12,8 @@ interface ProduccionReportTableProps {
   loading?: boolean
   error?: string | null
   className?: string
-  onFiltersChange?: (days: number, dayType: 'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA') => void
+  onFiltersChange: (newFilters: { days?: number; dayType?: 'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA' }) => void
+  currentFilters: { days: number, dayType: 'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA' }
 }
 
 type TabType = 'general' | 'otros' | 'por-revisar'
@@ -23,20 +24,10 @@ export function ProduccionReportTable({
   loading = false,
   error = null,
   className = '',
-  onFiltersChange
+  onFiltersChange,
+  currentFilters
 }: ProduccionReportTableProps) {
   const [activeTab, setActiveTab] = useState<TabType>('general')
-  const [daysRange, setDaysRange] = useState<15 | 20 | 30 | 60>(20)
-  const [dayType, setDayType] = useState<'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA'>('TODOS')
-
-  // Función para manejar cambios en los filtros
-  const handleFiltersChange = (newDays: number, newDayType: 'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA') => {
-    setDaysRange(newDays as 15 | 20 | 30 | 60)
-    setDayType(newDayType)
-    if (onFiltersChange) {
-      onFiltersChange(newDays, newDayType)
-    }
-  }
 
   // A simple normalization for comparison: uppercase and alphanumeric.
   const normalizeSimple = (name: string): string => {
@@ -173,6 +164,12 @@ export function ProduccionReportTable({
     },
   ], [baseData, isOperadorInExternos]);
 
+  // -------------------------------------------------
+  // GUARDIAS DE RENDERIZADO – se sitúan después de
+  // todos los hooks para evitar diferencias de conteo
+  // entre renders y el error "Rendered more hooks than
+  // during the previous render".
+  // -------------------------------------------------
   if (loading) {
     return (
       <Card className={`p-6 ${className}`}>
@@ -204,13 +201,12 @@ export function ProduccionReportTable({
       <Card className={`p-6 ${className}`}>
         <div className="text-center">
           <div className="text-gray-600 font-semibold mb-2">Sin datos</div>
-          <p className="text-gray-500 text-sm">No se encontraron registros de producción en los últimos 20 días</p>
+          <p className="text-gray-500 text-sm">No se encontraron registros de producción para los filtros seleccionados.</p>
         </div>
       </Card>
     )
   }
-
-
+  // -------------------------------------------------
 
   return (
     <Card className={`overflow-hidden ${className}`}>
@@ -231,8 +227,8 @@ export function ProduccionReportTable({
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-700">Días:</label>
             <select 
-              value={daysRange} 
-              onChange={(e) => handleFiltersChange(Number(e.target.value), dayType)}
+              value={currentFilters.days} 
+              onChange={(e) => onFiltersChange({ days: Number(e.target.value) })}
               className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value={15}>15 días</option>
@@ -245,8 +241,8 @@ export function ProduccionReportTable({
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-700">Tipo:</label>
             <select 
-              value={dayType} 
-              onChange={(e) => handleFiltersChange(daysRange, e.target.value as 'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA')}
+              value={currentFilters.dayType} 
+              onChange={(e) => onFiltersChange({ dayType: e.target.value as 'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA' })}
               className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="TODOS">Todos</option>
@@ -288,8 +284,6 @@ export function ProduccionReportTable({
           {tabs.find(tab => tab.id === activeTab)?.description}
         </div>
       </div>
-
-
 
       {/* Tabla */}
       <div className="overflow-x-auto">

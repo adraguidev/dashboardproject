@@ -25,44 +25,34 @@ export function formatDate(date: Date | string | undefined): string {
 }
 
 /**
- * Parsea una fecha de manera segura evitando problemas de zona horaria
- * Especialmente útil para fechas en formato ISO YYYY-MM-DD
+ * Parsea una fecha de manera segura forzando UTC para evitar problemas de zona horaria.
+ * Cuando se recibe '2024-07-20', se interpreta como medianoche UTC de ese día.
  */
 export function parseDateSafe(dateStr: string | null | undefined): Date | null {
   if (!dateStr) return null
   
   try {
-    // Si es formato ISO YYYY-MM-DD, parsear manualmente
-    if (dateStr.includes('-') && dateStr.length >= 10) {
-      const parts = dateStr.split('T')[0].split('-') // Tomar solo la parte de fecha
-      if (parts.length === 3) {
-        const year = parseInt(parts[0])
-        const month = parseInt(parts[1]) - 1 // Los meses en JS son 0-indexados
-        const day = parseInt(parts[2])
-        
-        if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
-          return new Date(year, month, day)
-        }
-      }
+    // Regex para YYYY-MM-DD. Evita que JS interprete mal la fecha.
+    const isoDateRegex = /^(\d{4})-(\d{2})-(\d{2})/;
+    const match = dateStr.match(isoDateRegex);
+
+    if (match) {
+      const year = parseInt(match[1], 10);
+      const month = parseInt(match[2], 10) - 1; // Meses en JS son 0-11
+      const day = parseInt(match[3], 10);
+      
+      // Creamos la fecha en UTC para evitar desplazamientos por zona horaria.
+      return new Date(Date.UTC(year, month, day));
     }
     
-    // Si es formato DD/MM/YYYY
-    if (dateStr.includes('/')) {
-      const parts = dateStr.split('/')
-      if (parts.length === 3) {
-        const day = parseInt(parts[0])
-        const month = parseInt(parts[1]) - 1
-        const year = parseInt(parts[2])
-        
-        if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
-          return new Date(year, month, day)
-        }
-      }
+    // Fallback para otros formatos, aunque es menos seguro.
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) {
+      return null;
     }
-    
-    // Fallback para otros formatos
-    const date = new Date(dateStr)
-    return isNaN(date.getTime()) ? null : date
+    // Para el fallback, también lo normalizamos a UTC 
+    return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+
   } catch (error) {
     console.warn('Error parsing date:', dateStr, error)
     return null
@@ -71,7 +61,7 @@ export function parseDateSafe(dateStr: string | null | undefined): Date | null {
 
 /**
  * Formatea una fecha de manera segura con opciones personalizadas
- * Evita problemas de zona horaria
+ * Evita problemas de zona horaria forzando la salida en UTC.
  */
 export function formatDateSafe(dateStr: string | null | undefined, options: Intl.DateTimeFormatOptions): string {
   if (!dateStr) return 'N/A'
@@ -80,7 +70,8 @@ export function formatDateSafe(dateStr: string | null | undefined, options: Intl
   if (!date) return 'Fecha inválida'
   
   try {
-    return date.toLocaleDateString('es-ES', options)
+    // Forzamos la zona horaria a UTC para que no dependa del navegador.
+    return date.toLocaleDateString('es-ES', { ...options, timeZone: 'UTC' })
   } catch (error) {
     console.error('Error formatting date:', dateStr, error)
     return 'Error en fecha'
@@ -88,8 +79,8 @@ export function formatDateSafe(dateStr: string | null | undefined, options: Intl
 }
 
 /**
- * Determina si una fecha es día laborable (lunes a viernes)
- * Evita problemas de zona horaria
+ * Determina si una fecha es día laborable (lunes a viernes) usando UTC.
+ * Esto asegura que el día de la semana sea consistente sin importar el timezone.
  */
 export function isWorkday(dateStr: string | null | undefined): boolean {
   if (!dateStr) return false
@@ -97,8 +88,11 @@ export function isWorkday(dateStr: string | null | undefined): boolean {
   const date = parseDateSafe(dateStr)
   if (!date) return false
   
-  const dayOfWeek = date.getDay() // 0 = domingo, 1 = lunes, ..., 6 = sábado
-  return dayOfWeek >= 1 && dayOfWeek <= 5 // Lunes (1) a Viernes (5)
+  // getUTCDay() devuelve 0 para Domingo, 1 para Lunes, ..., 6 para Sábado.
+  const dayOfWeek = date.getUTCDay()
+  
+  // Lunes (1) a Viernes (5) se consideran días laborables.
+  return dayOfWeek >= 1 && dayOfWeek <= 5
 }
 
 /**
@@ -110,7 +104,9 @@ export function getDayOfWeekSafe(dateStr: string | null | undefined): number {
   const date = parseDateSafe(dateStr)
   if (!date) return -1
   
-  return date.getDay()
+  // Usamos getUTCDay para que el cálculo sea independiente de la zona horaria
+  // y sea consistente con la función isWorkday().
+  return date.getUTCDay()
 }
 
 /**

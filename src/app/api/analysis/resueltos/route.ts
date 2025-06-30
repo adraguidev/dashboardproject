@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const proceso = (searchParams.get('proceso') as 'ccm' | 'prr') || 'ccm';
 
-    const cacheKey = `dashboard:resueltos_analysis:${proceso}`;
+    const cacheKey = `dashboard:resueltos_analysis_v2:${proceso}`;
     const ttl = 6 * 60 * 60; // 6 horas
 
     const analysisData = await cachedOperation({

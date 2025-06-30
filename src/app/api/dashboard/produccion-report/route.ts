@@ -69,21 +69,21 @@ function isWorkday(dateStr: string): boolean {
   return isWorkdayUtil(dateStr);
 }
 
-// Generar lista de días según parámetros basado en datos reales
+// Generar lista de días según parámetros basado en datos reales, todo en UTC
 function generateDays(data: any[], daysCount: number, dayType: 'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA'): string[] {
-  // Extraer todas las fechas reales de los datos
+  // Extraer todas las fechas reales de los datos y asegurarse de que son UTC
   const fechasReales = data
-    .map(record => parseDate(record.fechapre))
-    .filter(date => date !== null)
-    .sort((a, b) => b!.getTime() - a!.getTime()); // Más reciente primero
+    .map(record => parseDateSafe(record.fechapre)) // Usa nuestra función UTC-safe
+    .filter((date): date is Date => date !== null) // Filtra nulos y asegura el tipo Date
+    .sort((a, b) => b.getTime() - a.getTime()); // Más reciente primero
 
   if (fechasReales.length === 0) {
     console.warn('No se encontraron fechas válidas en los datos');
     return [];
   }
 
-  // Usar la fecha más reciente de los datos como punto de partida
-  const fechaMasReciente = fechasReales[0]!;
+  // Usar la fecha más reciente de los datos como punto de partida (ya está en UTC)
+  const fechaMasReciente = fechasReales[0];
   const dates: string[] = [];
   let foundDays = 0;
   let daysBack = 0;
@@ -91,11 +91,15 @@ function generateDays(data: any[], daysCount: number, dayType: 'TODOS' | 'LABORA
   // Buscar hacia atrás desde la fecha más reciente encontrada
   while (foundDays < daysCount && daysBack < 365) { // límite de seguridad de 1 año
     const date = new Date(fechaMasReciente);
-    date.setDate(fechaMasReciente.getDate() - daysBack);
+    // Restamos días en el contexto UTC
+    date.setUTCDate(fechaMasReciente.getUTCDate() - daysBack);
+    
+    // Formatear a 'YYYY-MM-DD' sin conversiones de zona horaria
     const dateStr = date.toISOString().split('T')[0];
     
     let includeDate = false;
     
+    // isWorkday ya funciona en UTC
     switch (dayType) {
       case 'LABORABLES':
         includeDate = isWorkday(dateStr);
@@ -148,7 +152,7 @@ function generateProduccionReport(
   
   // Debug: Verificar algunos días de la semana para asegurar que los filtros funcionen
   if (dayType !== 'TODOS' && targetDays.length > 0) {
-    const sampleDays = targetDays.slice(0, 5).map(fecha => {
+    const sampleDays = targetDays.slice(0, 10).map(fecha => {
       const parts = fecha.split('-');
       const year = parseInt(parts[0]);
       const month = parseInt(parts[1]) - 1;
@@ -156,9 +160,13 @@ function generateProduccionReport(
       const date = new Date(year, month, day);
       const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
       const isLaboral = isWorkday(fecha);
-      return `${fecha} (${dayNames[date.getDay()]}, ${isLaboral ? 'Laborable' : 'Fin de semana'})`;
+      const expected = dayType === 'LABORABLES' ? 'debe ser laborable' : 'debe ser fin de semana';
+      const actual = isLaboral ? 'es laborable' : 'es fin de semana';
+      const correct = (dayType === 'LABORABLES' && isLaboral) || (dayType === 'FIN_DE_SEMANA' && !isLaboral);
+      return `${fecha} (${dayNames[date.getDay()]}) - ${actual} - ${expected} ${correct ? '✅' : '❌'}`;
     });
-    console.log(`📅 Verificación días ${dayType}: ${sampleDays.join(', ')}`);
+    console.log(`📅 Verificación detallada días ${dayType}:`);
+    sampleDays.forEach(line => console.log(`   ${line}`));
   }
   
   // Verificar qué fechas existen en los datos reales
@@ -330,7 +338,8 @@ export async function GET(request: NextRequest) {
 
     console.log(`✅ Datos obtenidos: ${data.length} registros de producción, ${evaluadores.length} evaluadores`)
 
-    const cacheKey = `dashboard:produccion-report:${process}:v2`;
+    // La llave del caché ahora incluye los filtros para que sea única
+    const cacheKey = `dashboard:produccion-report:${process}:${days}:${dayType}:v3`;
     const ttl = 6 * 60 * 60; // 6 horas
     
     // Usar cachedOperation para gestionar el caché y generar datos cuando sea necesario
