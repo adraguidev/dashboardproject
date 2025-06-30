@@ -731,7 +731,7 @@ export class DirectDatabaseAPI {
    * @param proceso - El proceso ('ccm' o 'prr') a analizar.
    * @returns Una promesa que resuelve con los datos del análisis.
    */
-  async getResueltosAnalysis(proceso: 'ccm' | 'prr'): Promise<{ mes: string; estadopre: string; operadorpre: string; total: number }[]> {
+  async getResueltosAnalysis(proceso: 'ccm' | 'prr'): Promise<{ mes: string; estadopre: string; operadorpre: string | null; total: number }[]> {
     const table = proceso === 'ccm' ? tableCCM : tablePRR;
     const twoYearsAgo = subYears(new Date(), 2);
 
