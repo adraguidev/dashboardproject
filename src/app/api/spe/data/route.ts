@@ -43,9 +43,11 @@ function transformDataToPendientes(rows: any[][]): SpePendiente[] {
   logInfo(`Índices de columna resueltos: EVALUADOR=${COL_EVALUADOR}, EXPEDIENTE=${COL_EXPEDIENTE}, ETAPA=${COL_ETAPA}, FECHA_INGRESO=${COL_FECHA_INGRESO}`);
 
   const pendientesAgrupados = dataRows.reduce((acc, row) => {
-    const etapa = row[COL_ETAPA] || '';
-    if (etapa.trim().toUpperCase() !== 'INICIADA') {
-      return acc; // Ignorar si la etapa no es 'INICIADA'
+    const etapaRaw = (row[COL_ETAPA] || '').toString();
+    const etapaClean = etapaRaw.trim().toUpperCase();
+    if (etapaClean !== 'INICIADA' && etapaClean !== '') {
+      // Ignorar si la etapa no es 'INICIADA' ni vacía
+      return acc;
     }
 
     const evaluador = row[COL_EVALUADOR] || 'Sin Asignar';
