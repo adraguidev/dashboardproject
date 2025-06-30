@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react'
 import { BarChart, Users, FileStack, Search, Download, Calendar } from 'lucide-react'
+import { EvaluadorDetailModal } from './evaluador-detail-modal'
 
 interface SpePendienteData {
   evaluador: string;
@@ -20,6 +21,8 @@ interface SpePendientesTableProps {
   }
   loading?: boolean
   className?: string
+  groupBy: GroupBy
+  onGroupingChange: (groupBy: GroupBy) => void
 }
 
 type GroupBy = 'anio' | 'trimestre' | 'mes';
@@ -29,9 +32,11 @@ export function SpePendientesTable({
   periodos,
   loading = false,
   className = '',
+  groupBy,
+  onGroupingChange
 }: SpePendientesTableProps) {
   const [searchTerm, setSearchTerm] = useState('')
-  const [groupBy, setGroupBy] = useState<GroupBy>('anio');
+  const [selectedEvaluador, setSelectedEvaluador] = useState<string | null>(null)
 
   const { visiblePeriods, dataMapKey } = useMemo(() => {
     switch (groupBy) {
@@ -101,7 +106,7 @@ export function SpePendientesTable({
   }
 
   return (
-    <div className={`bg-gray-50 p-4 sm:p-6 rounded-lg ${className}`}>
+    <div className={className}>
       {/* Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6">
         <div className="flex items-center mb-4 lg:mb-0">
@@ -116,19 +121,24 @@ export function SpePendientesTable({
         
         {/* Selector de Agrupación */}
         <div className="flex items-center space-x-1 bg-white p-1.5 rounded-lg shadow-sm border border-gray-200">
-          {(['Año', 'Trimestre', 'Mes'] as const).map((period) => {
-            const periodKey = period.toLowerCase() as GroupBy;
+          {(
+            [
+              { label: 'Año', key: 'anio' },
+              { label: 'Trimestre', key: 'trimestre' },
+              { label: 'Mes', key: 'mes' },
+            ] as const
+          ).map(({ label, key }) => {
             return (
               <button
-                key={periodKey}
-                onClick={() => setGroupBy(periodKey)}
+                key={key}
+                onClick={() => onGroupingChange(key)}
                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                  groupBy === periodKey
+                  groupBy === key
                     ? 'bg-purple-600 text-white shadow-lg'
                     : 'text-gray-600 hover:bg-purple-50'
                 }`}
               >
-                {period}
+                {label}
               </button>
             )
           })}
@@ -178,53 +188,59 @@ export function SpePendientesTable({
         </button>
       </div>
       
-      {/* Table */}
-      <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
+      {/* Table - Aplicando nuevo estilo */}
+      <div className="bg-white rounded-lg shadow-md border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="sticky left-0 z-10 bg-gray-50 w-64 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r">
-                  Evaluador
+            <thead className="bg-slate-50 text-slate-600">
+              <tr className="border-b border-slate-200">
+                <th className="sticky left-0 z-10 bg-slate-50 w-64 px-4 py-3 text-left font-semibold uppercase text-xs tracking-wider border-r border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-slate-400" />
+                    <span>Evaluador</span>
+                  </div>
                 </th>
                 {visiblePeriods.map(periodo => (
-                  <th key={periodo} className="w-28 px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {periodo}
+                  <th key={periodo} className="w-28 px-4 py-3 text-center font-semibold uppercase text-xs tracking-wider">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                      <span>{periodo}</span>
+                    </div>
                   </th>
                 ))}
-                <th className="w-32 px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-100">
+                <th className="w-32 px-4 py-3 text-center font-semibold uppercase text-xs tracking-wider bg-slate-100 border-l border-slate-200">
                   Total
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white divide-y divide-slate-100">
               {filteredData.map((item) => (
-                <tr key={item.evaluador} className="hover:bg-purple-50">
-                  <td className="sticky left-0 bg-white group-hover:bg-purple-50 w-64 px-4 py-3 text-sm font-medium text-gray-900 border-r">
+                <tr key={item.evaluador} className="hover:bg-slate-50 transition-colors">
+                  <td className="sticky left-0 bg-white group-hover:bg-slate-50 w-64 px-4 py-3 text-sm font-medium text-slate-800 border-r border-slate-200 cursor-pointer" onClick={() => setSelectedEvaluador(item.evaluador)}>
                     {item.evaluador}
                   </td>
                   {visiblePeriods.map(periodo => (
-                    <td key={periodo} className="w-28 px-4 py-3 text-center text-sm text-gray-700">
+                    <td key={periodo} className="w-28 px-4 py-3 text-center text-sm font-mono text-slate-600">
                       {item[dataMapKey]?.[periodo] || 0}
                     </td>
                   ))}
-                  <td className="w-32 px-4 py-3 text-center text-sm font-bold text-gray-900 bg-gray-50 group-hover:bg-purple-100">
+                  <td className="w-32 px-4 py-3 text-center text-sm font-bold text-slate-800 bg-slate-100 border-l border-slate-200">
                     {item.totalGeneral}
                   </td>
                 </tr>
               ))}
             </tbody>
-             <tfoot className="bg-gray-100">
-              <tr>
-                <th className="sticky left-0 z-10 bg-gray-100 px-4 py-3 text-left text-sm font-bold text-gray-800 border-r">
+             <tfoot className="bg-slate-100">
+              <tr className="border-t-2 border-slate-200">
+                <th className="sticky left-0 z-10 bg-slate-100 px-4 py-3 text-left text-sm font-bold text-slate-800 border-r border-slate-200">
                   TOTAL
                 </th>
                 {visiblePeriods.map(periodo => (
-                  <th key={periodo} className="w-28 px-4 py-3 text-center text-sm font-bold text-gray-800">
+                  <th key={periodo} className="w-28 px-4 py-3 text-center text-sm font-bold font-mono text-slate-800">
                     {totals[periodo].toLocaleString()}
                   </th>
                 ))}
-                <th className="w-32 px-4 py-3 text-center text-sm font-bold text-gray-800 bg-gray-200">
+                <th className="w-32 px-4 py-3 text-center text-sm font-bold text-slate-800 bg-slate-200 border-l border-slate-300">
                   {totals.grandTotal.toLocaleString()}
                 </th>
               </tr>
@@ -232,6 +248,9 @@ export function SpePendientesTable({
           </table>
         </div>
       </div>
+
+      {/* Modal detalle */}
+      <EvaluadorDetailModal evaluador={selectedEvaluador} onClose={() => setSelectedEvaluador(null)} />
     </div>
   )
 } 

@@ -4,9 +4,11 @@ import React, { useState } from 'react'
 import { useSpeData } from '@/hooks/use-spe-data'
 import { Loader2, AlertTriangle, BarChart3, Construction } from 'lucide-react'
 import { SpePendientesTable } from './spe-pendientes-table'
+import { SpeProcessSummaryTable } from './spe-process-summary-table'
 
 export function SpeModules() {
   const [selectedModule, setSelectedModule] = useState('pendientes')
+  const [groupBy, setGroupBy] = useState<'anio' | 'trimestre' | 'mes'>('anio')
   const { data: apiResponse, isLoading, error } = useSpeData()
 
   const modules = [
@@ -60,11 +62,16 @@ export function SpeModules() {
       case 'pendientes':
         return (
           <div className="p-6">
-            <SpePendientesTable
-              data={apiResponse?.data || []}
-              periodos={apiResponse?.periodos || { anios: [], trimestres: [], meses: [] }}
-              loading={isLoading}
-            />
+            <div className="bg-gray-50 p-4 sm:p-6 rounded-lg">
+              <SpePendientesTable
+                data={apiResponse?.data || []}
+                periodos={apiResponse?.periodos || { anios: [], trimestres: [], meses: [] }}
+                loading={isLoading}
+                groupBy={groupBy}
+                onGroupingChange={setGroupBy}
+              />
+              <SpeProcessSummaryTable groupBy={groupBy} />
+            </div>
           </div>
         )
       default:
