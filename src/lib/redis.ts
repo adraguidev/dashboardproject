@@ -1,6 +1,14 @@
-import Redis from 'ioredis';
+import Redis, { RedisOptions } from 'ioredis';
 
 let redis: Redis;
+
+// Opciones de configuración para hacer la conexión más resiliente
+const redisOptions: RedisOptions = {
+  connectTimeout: 10000, // 10 segundos de tiempo de espera para la conexión
+  maxRetriesPerRequest: 3, // Reintentar un máximo de 3 veces si un comando falla
+  enableReadyCheck: false, // Optimización para entornos serverless
+  showFriendlyErrorStack: true, // Errores más legibles en los logs
+};
 
 // Documentación de Variables de Entorno para Redis (Upstash)
 //
@@ -14,8 +22,17 @@ let redis: Redis;
 // UPSTASH_REDIS_URL="rediss://default:..."
 
 if (process.env.UPSTASH_REDIS_URL) {
-  redis = new Redis(process.env.UPSTASH_REDIS_URL);
-  console.log('✅ Conexión a Redis (Upstash) establecida.');
+  // Aplicar las opciones de configuración al crear la instancia
+  redis = new Redis(process.env.UPSTASH_REDIS_URL, redisOptions);
+  
+  redis.on('error', (err) => {
+    console.error('[Redis] Error de conexión:', err);
+  });
+
+  redis.on('connect', () => {
+    console.log('✅ Conexión a Redis (Upstash) establecida.');
+  });
+
 } else {
   console.warn('⚠️  La variable de entorno UPSTASH_REDIS_URL no está configurada. El monitoreo de progreso no funcionará.');
   // Fallback a un mock si no hay credenciales para evitar que la app crashee
@@ -25,6 +42,8 @@ if (process.env.UPSTASH_REDIS_URL) {
     on: () => {},
   } as any;
 }
+
+export { redis };
 
 export const jobStatusManager = {
   async update(jobId: string, data: Record<string, any>) {
@@ -45,8 +64,4 @@ export const jobStatusManager = {
       return null;
     }
   }
-};
-
-redis.on('error', (err) => {
-  console.error('[Redis] Error de conexión:', err);
-}); 
+}; 

@@ -1,55 +1,7 @@
+import { redis } from '@/lib/redis'; // Importar la instancia de Redis
 import { logInfo, logWarn } from '@/lib/logger';
 
-// Implementación de caché en memoria local para reemplazar Redis
-interface CacheItem<T> {
-  value: T;
-  expiry: number; // timestamp en milisegundos
-}
-
-class MemoryCache {
-  private static instance: MemoryCache;
-  private cache: Map<string, CacheItem<any>> = new Map();
-  
-  private constructor() {}
-  
-  public static getInstance(): MemoryCache {
-    if (!MemoryCache.instance) {
-      MemoryCache.instance = new MemoryCache();
-    }
-    return MemoryCache.instance;
-  }
-  
-  async get<T>(key: string): Promise<T | null> {
-    const item = this.cache.get(key);
-    if (!item) return null;
-    
-    // Comprobar si el ítem ha expirado
-    if (Date.now() > item.expiry) {
-      this.cache.delete(key);
-      return null;
-    }
-    
-    return item.value as T;
-  }
-  
-  async set<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
-    this.cache.set(key, {
-      value,
-      expiry: Date.now() + (ttlSeconds * 1000)
-    });
-  }
-  
-  async del(key: string): Promise<void> {
-    this.cache.delete(key);
-  }
-  
-  async flushAll(): Promise<void> {
-    this.cache.clear();
-  }
-}
-
-// Singleton para acceso global al caché
-const memoryCache = MemoryCache.getInstance();
+// ELIMINADO: Se borra toda la clase MemoryCache y su instancia.
 
 interface CacheOptions<T> {
   /** Clave única para esta operación de cache. */
@@ -108,12 +60,8 @@ const smartValidator = (data: AIOptimizedDashboardData): boolean => {
  * Validador por defecto para retrocompatibilidad
  */
 const defaultValidator = (data: any): boolean => {
-  if (data === null || data === undefined) {
-    return false;
-  }
-  if (Array.isArray(data) && data.length === 0) {
-    return false;
-  }
+  if (data === null || data === undefined) return false;
+  if (Array.isArray(data) && data.length === 0) return false;
   return true;
 };
 
@@ -124,18 +72,18 @@ const defaultValidator = (data: any): boolean => {
 export async function cachedOperation<T>({
   key,
   fetcher,
-  ttlSeconds = 2 * 60 * 60, // 2 horas por defecto (REDUCIDO de 18 horas)
+  ttlSeconds = 2 * 60 * 60, // 2 horas
   validator = defaultValidator,
 }: CacheOptions<T>): Promise<T> {
-  // 1. Intentar obtener desde cache en memoria
+  // 1. Intentar obtener desde el caché de REDIS
   try {
-    const cachedData = await memoryCache.get<T>(key);
-    if (cachedData !== null) {
-      logInfo(`[Cache HIT] 📦 Datos obtenidos desde caché en memoria: ${key}`);
-      return cachedData;
+    const cachedDataString = await redis.get(key);
+    if (cachedDataString) {
+      logInfo(`[Redis Cache HIT] 📦 Datos obtenidos desde Redis: ${key}`);
+      return JSON.parse(cachedDataString);
     }
   } catch (error) {
-    logWarn(`[Cache ERROR] ❌ No se pudo leer del caché en memoria: ${key}`, error);
+    logWarn(`[Redis Cache ERROR] ❌ No se pudo leer de Redis: ${key}`, error);
   }
 
   // 2. Si no está en cache, obtener datos frescos
@@ -144,11 +92,13 @@ export async function cachedOperation<T>({
 
   // 3. Validar los datos antes de cachear
   if (validator(freshData)) {
-    logInfo(`[Cache SET] ✅ Guardando datos válidos en caché: ${key} (TTL: ${ttlSeconds}s)`);
-    // Guardar en segundo plano para no retrasar la respuesta
-    memoryCache.set(key, freshData, ttlSeconds).catch(err => {
-      logWarn(`[Cache SET FAILED] ❌ Error al guardar en caché: ${key}`, err);
-    });
+    logInfo(`[Redis Cache SET] ✅ Guardando datos válidos en Redis: ${key} (TTL: ${ttlSeconds}s)`);
+    try {
+      // Usar SETEX para guardar con expiración atómica.
+      await redis.setex(key, ttlSeconds, JSON.stringify(freshData));
+    } catch (err) {
+      logWarn(`[Redis Cache SET FAILED] ❌ Error al guardar en Redis: ${key}`, err);
+    }
   } else {
     logWarn(`[Cache SKIP] ⚠️ Datos inválidos, no se cachearán: ${key}`);
   }

@@ -41,7 +41,6 @@ export default function AvancePendientesTable({
     process: selectedProceso.toLowerCase() as 'ccm' | 'prr',
     groupBy: 'year',
     enabled: true,
-    backgroundFetch: true
   })
 
   // Obtener evaluadores del otro proceso para comparación
@@ -57,70 +56,32 @@ export default function AvancePendientesTable({
     }
   }, [propProceso, selectedProceso])
 
-  // Normalización mejorada para comparación
-  const normalizeSimple = (name: string): string => {
+  // Normalización definitiva para nombres de operadores
+  const normalizeName = useCallback((name: string): string => {
     if (!name) return '';
     return name
-      .toUpperCase()
-      .replace(/[ÁÀÄÂ]/g, 'A')
-      .replace(/[ÉÈËÊ]/g, 'E')
-      .replace(/[ÍÌÏÎ]/g, 'I')
-      .replace(/[ÓÒÖÔ]/g, 'O')
-      .replace(/[ÚÙÜÛ]/g, 'U')
-      .replace(/Ñ/g, 'N')
-      .replace(/[^A-Z0-9]/g, '')
-      .trim();
-  };
+      .normalize('NFD') // Separa acentos de las letras (e.g., 'á' -> 'a' + '´')
+      .replace(/[\u0300-\u036f]/g, '') // Elimina los acentos
+      .toUpperCase() // Convierte a mayúsculas
+      .replace(/\s+/g, ' ') // Reemplaza múltiples espacios por uno solo
+      .trim(); // Elimina espacios al inicio y final
+  }, []);
 
   // Crear set de nombres normalizados del otro proceso
-  const externalNombresEnBase = useMemo(() => {
-    const nombres = (otherProcessEvaluadores || [])
-      .filter(e => e && e.nombre_en_base) 
-      .map(e => {
-        const normalized = normalizeSimple(e.nombre_en_base);
-        return normalized;
-      });
-    
-    // Debug logs removidos para mejorar rendimiento
-    
-    return new Set(nombres);
-  }, [otherProcessEvaluadores, otherProcess]);
+  const externalNombresEnBase = useMemo(() =>
+    new Set(
+      (otherProcessEvaluadores || [])
+        .filter(e => e && e.nombre_en_base) 
+        .map(e => normalizeName(e.nombre_en_base))
+    )
+  , [otherProcessEvaluadores, normalizeName]);
 
   // Verificar si un operador existe en el proceso externo
   const isOperadorInExternos = useCallback((operador: string) => {
-    const normalizedOperador = normalizeSimple(operador);
+    const normalizedOperador = normalizeName(operador);
     if (!normalizedOperador) return false;
-
-    // Buscar coincidencia exacta primero
-    if (externalNombresEnBase.has(normalizedOperador)) {
-      return true;
-    }
-
-    // Buscar coincidencias parciales (nombres truncados o variaciones)
-    for (const externalName of externalNombresEnBase) {
-      // Coincidencia si uno es prefijo del otro (mínimo 5 caracteres para evitar falsos positivos)
-      if (normalizedOperador.length >= 5 && externalName.length >= 5) {
-        if (externalName.startsWith(normalizedOperador) || normalizedOperador.startsWith(externalName)) {
-          return true;
-        }
-      }
-      
-      // Coincidencia por similitud de palabras (al menos 2 palabras de 3+ caracteres en común)
-      const operadorWords = normalizedOperador.split(/\s+/).filter(w => w.length >= 3);
-      const externalWords = externalName.split(/\s+/).filter(w => w.length >= 3);
-      
-      if (operadorWords.length >= 2 && externalWords.length >= 2) {
-        const commonWords = operadorWords.filter(word => 
-          externalWords.some(extWord => extWord.includes(word) || word.includes(extWord))
-        );
-        if (commonWords.length >= 2) {
-          return true;
-        }
-      }
-    }
-    
-    return false;
-  }, [externalNombresEnBase]);
+    return externalNombresEnBase.has(normalizedOperador);
+  }, [externalNombresEnBase, normalizeName]);
 
   // Procesar datos históricos
   const processedData = useMemo(() => {
@@ -143,12 +104,13 @@ export default function AvancePendientesTable({
       })
       .sort((a, b) => a.parsed.getTime() - b.parsed.getTime())
 
-    // Crear mapa de operadores de pendientes actuales para obtener subEquipo y color
-    const operadoresMap = new Map()
+    // Crear mapa de operadores con CLAVE NORMALIZADA
+    const operadoresMap = new Map<string, { subEquipo: string; colorClass: string }>()
     if (reportData.data) {
       reportData.data.forEach(item => {
         if (item.operador !== 'Sin Operador') {
-          operadoresMap.set(item.operador, {
+          const normalizedKey = normalizeName(item.operador);
+          operadoresMap.set(normalizedKey, {
             subEquipo: item.subEquipo || 'NO_ENCONTRADO',
             colorClass: item.colorClass || ''
           })
@@ -158,7 +120,9 @@ export default function AvancePendientesTable({
 
     // Procesar operadores históricos
     const operadoresHistoricos: OperadorHistorico[] = operadores.map(op => {
-      const operadorInfo = operadoresMap.get(op.operador) || {
+      // Buscar en el mapa usando el NOMBRE NORMALIZADO
+      const normalizedKey = normalizeName(op.operador);
+      const operadorInfo = operadoresMap.get(normalizedKey) || {
         subEquipo: 'NO_ENCONTRADO',
         colorClass: ''
       }

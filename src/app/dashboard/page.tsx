@@ -6,6 +6,7 @@ import { useDashboardUnified } from '@/hooks/use-dashboard-unified'
 import { DashboardHeader } from '@/components/dashboard/dashboard-header'
 import { ProcessModules } from '@/components/dashboard/process-modules'
 import { ErrorDisplay } from '@/components/ui/error-boundary'
+import { clearAllCache as clearLocalStorageCache } from '@/lib/frontend-cache'
 
 export default function DashboardPage() {
   const queryClient = useQueryClient()
@@ -32,23 +33,23 @@ export default function DashboardPage() {
 
   const handleFullRefresh = async () => {
     try {
-      console.log('🔄 [START] Global Refresh Initiated.');
+      console.log('🔄 [HARD RESET] Iniciando... Limpiando todos los niveles de caché.');
 
-      // 1. Limpiar el caché del servidor.
+      // 1. Limpiar caché del NAVEGADOR (localStorage)
+      clearLocalStorageCache();
+      console.log('✅ Nivel 1/3: Caché del navegador (localStorage) limpiado.');
+
+      // 2. Limpiar caché del SERVIDOR (Redis)
       await fetch('/api/cache/clear', { method: 'POST' });
-      console.log('✅ Server-side cache API call complete.');
+      console.log('✅ Nivel 2/3: Caché del servidor (Redis) limpiado.');
 
-      // 2. Pausa intencionada para evitar la condición de carrera del servidor.
-      // Esto asegura que el servidor haya procesado la limpieza antes de que volvamos a pedir datos.
-      await new Promise(resolve => setTimeout(resolve, 300));
-
-      // 3. Invalidar y forzar la recarga de TODAS las queries (activas e inactivas).
-      // Este es el método correcto para una actualización global completa.
-      await queryClient.invalidateQueries({ refetchType: 'all' });
-      console.log('✅ [COMPLETE] All client queries invalidated. Refetch triggered.');
+      // 3. Resetear el caché del CLIENTE (TanStack Query)
+      // Este es el método correcto. Ignora staleTime y fuerza una recarga inmediata.
+      await queryClient.resetQueries();
+      console.log('✅ Nivel 3/3: Caché del cliente (TanStack) reseteado. Recarga en curso...');
 
     } catch (err) {
-      console.error("❌ Error during global refresh:", err);
+      console.error("❌ Error durante el Hard Reset:", err);
     }
   };
 
@@ -63,7 +64,7 @@ export default function DashboardPage() {
         />
         <div className="max-w-6xl mx-auto px-6 py-8">
           <ErrorDisplay 
-            error={(error as any)?.message || (error as any)?.details || 'Error desconocido'} 
+            error={(error as any).message || (error as any).details || 'Error desconocido'} 
             onRetry={handleFullRefresh} 
           />
         </div>
