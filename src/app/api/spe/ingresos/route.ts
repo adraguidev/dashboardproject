@@ -38,16 +38,46 @@ interface ProcessMetrics {
 
 function safeParseDate(dateInput: any): Date | null {
     if (!dateInput) return null
-    if (typeof dateInput === 'number' && dateInput > 20000) {
-        const excelEpoch = new Date(1899, 11, 30)
-        const date = new Date(excelEpoch.getTime() + dateInput * 24 * 60 * 60 * 1000)
-        return isValid(date) ? endOfDay(date) : null
+
+    let date: Date | null = null;
+
+    if (typeof dateInput === 'number' && dateInput > 36526) { // Num Excel para ~año 2000
+        const excelEpoch = new Date(1899, 11, 30);
+        const d = new Date(excelEpoch.getTime() + dateInput * 24 * 60 * 60 * 1000);
+        if (isValid(d)) {
+            date = endOfDay(d);
+        }
+    } else if (typeof dateInput === 'string') {
+        const trimmedDate = dateInput.trim();
+        let parsedDate: Date | null = null;
+        
+        if (trimmedDate.includes('/')) {
+            // Intenta parsear formatos como d/M/yyyy, dd/MM/yyyy etc.
+            parsedDate = parse(trimmedDate, 'd/M/yyyy', new Date());
+        } else if (trimmedDate.match(/^\d{4}-\d{2}-\d{2}/)) {
+            // Intenta parsear formato ISO YYYY-MM-DD
+            const d = new Date(trimmedDate);
+            if(isValid(d)) parsedDate = d;
+        }
+        
+        if (parsedDate && isValid(parsedDate)) {
+            date = endOfDay(parsedDate);
+        }
     }
-    if (typeof dateInput === 'string' && dateInput.includes('/')) {
-        const parsedDate = parse(dateInput.trim(), 'd/M/yyyy', new Date())
-        return isValid(parsedDate) ? endOfDay(parsedDate) : null
+
+    // --- Validación final de la fecha ---
+    if (date) {
+        const year = date.getFullYear();
+        const currentYear = new Date().getFullYear();
+        // El año debe ser razonable, por ejemplo, entre 2010 y el próximo año.
+        // Ajusta el 2010 si tienes datos legítimos más antiguos.
+        if (year < 2010 || year > currentYear + 1) {
+            logInfo(`Fecha descartada por año inválido: ${year} (Input: ${dateInput})`)
+            return null;
+        }
     }
-    return null
+    
+    return date;
 }
 
 function generateDateRange(startDate: Date, endDate: Date): string[] {
