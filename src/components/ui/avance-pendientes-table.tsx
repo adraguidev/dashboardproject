@@ -261,10 +261,12 @@ export default function AvancePendientesTable({
       });
       const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
       const intercept = (sumY - slope * sumX) / n;
-      dataPoints.forEach((point, index) => {
-        // @ts-expect-error
-        point['Tendencia'] = Math.max(0, slope * index + intercept);
-      });
+      
+      // Mapear a un nuevo array con la propiedad de tendencia, eliminando el error de tipo.
+      return dataPoints.map((point, index) => ({
+        ...point,
+        Tendencia: Math.max(0, slope * index + intercept),
+      }));
     }
 
     return dataPoints;
