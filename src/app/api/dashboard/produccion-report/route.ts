@@ -330,7 +330,7 @@ export async function GET(request: NextRequest) {
 
     console.log(`✅ Datos obtenidos: ${data.length} registros de producción, ${evaluadores.length} evaluadores`)
 
-    const cacheKey = `produccion_${process}_${days}_${dayType}`;
+    const cacheKey = `dashboard:produccion_${process}_${days}_${dayType}`;
     
     // Usar cachedOperation para gestionar el caché y generar datos cuando sea necesario
     const report = await cachedOperation({

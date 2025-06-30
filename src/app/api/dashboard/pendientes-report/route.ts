@@ -215,7 +215,7 @@ export async function GET(request: NextRequest) {
     const process = searchParams.get('process') as 'ccm' | 'prr' | null;
     const groupBy = (searchParams.get('groupBy') || 'quarter') as 'year' | 'quarter' | 'month';
 
-    const cacheKey = `pendientes_${process}_${groupBy}`;
+    const cacheKey = `dashboard:pendientes_${process}_${groupBy}`;
 
     console.log(`🔍 Generando reporte de pendientes para proceso: ${process}, agrupado por: ${groupBy}`);
 

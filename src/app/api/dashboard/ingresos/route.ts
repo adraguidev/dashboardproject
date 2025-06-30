@@ -391,7 +391,7 @@ export async function GET(request: NextRequest) {
     const process = searchParams.get('process') as 'ccm' | 'prr' | null;
     const days = parseInt(searchParams.get('days') || '30');
 
-    const cacheKey = `ingresos_${process}_${days}`;
+    const cacheKey = `dashboard:ingresos_${process}_${days}`;
 
     if (!['ccm', 'prr'].includes(process || 'ccm')) {
       return NextResponse.json({ 
