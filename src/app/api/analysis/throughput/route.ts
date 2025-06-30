@@ -23,7 +23,11 @@ export async function GET(request: NextRequest) {
           dbAPI.getDailyProduccion(proceso, days)
         ]);
 
-        const ingresosMap = new Map<string, number>(ingresosData.map(i => [i.fecha, i.total]));
+        const ingresosMap = new Map<string, number>(
+          ingresosData
+            .filter(i => i.fecha !== null)
+            .map(i => [i.fecha!, i.total])
+        );
         const produccionEvaluadoresMap = new Map<string, number>();
         const aprobacionAutomaticaMap = new Map<string, number>();
 
