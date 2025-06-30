@@ -7,7 +7,7 @@ const CACHE_PREFIX = 'dashboard:*'; // Prefijo para las claves de caché del das
 /**
  * Endpoint para limpiar completamente el caché del dashboard en Redis.
  */
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   try {
     logInfo(`🧹 Iniciando limpieza de caché en Redis (patrón: ${CACHE_PREFIX})`);
     

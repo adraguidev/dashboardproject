@@ -24,17 +24,15 @@ export function ProcessModules({
   selectedModule, 
   onModuleChange,
 }: ProcessModulesProps) {
-  const { report: reportData, loading, error, groupBy, changeGrouping, refreshData: refreshPendientes } = usePendientesReport({
+  const { report: reportData, loading, error, groupBy, changeGrouping } = usePendientesReport({
     process: selectedProcess,
     groupBy: 'year',
     enabled: selectedModule === 'pendientes',
-    backgroundFetch: true
   })
 
   const { report: produccionReport, otherProcessEvaluadores: produccionOtherEvaluadores, loading: produccionLoading, error: produccionError, refetch: refetchProduccion } = useProduccionReport({
     process: selectedProcess,
     enabled: selectedModule === 'produccion',
-    backgroundFetch: true
   })
 
   const { 
@@ -46,7 +44,6 @@ export function ProcessModules({
   } = useIngresos({
     process: selectedProcess,
     enabled: selectedModule === 'ingresos',
-    backgroundFetch: true
   })
 
   // Obtener evaluadores del otro proceso para comparación
