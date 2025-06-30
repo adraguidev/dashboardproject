@@ -4,6 +4,7 @@ import React, { useState, useMemo, useCallback } from 'react'
 import { PendientesReportSummary, Evaluador, PendientesReportData } from '@/types/dashboard'
 import { BarChart, Calendar, Users, FileStack, AlertTriangle, Search, Download, Filter } from 'lucide-react'
 import { Card } from '@/components/ui/card'
+import ExcelJS from 'exceljs'
 
 interface AdvancedPendientesReportTableProps {
   reportData: PendientesReportSummary | null
@@ -194,24 +195,49 @@ export function AdvancedPendientesReportTable({
   }
   // ---------------------------------------------
 
-  const exportToCSV = () => {
-    const headers = ['OPERADOR', 'SUB EQUIPO', ...visiblePeriods, 'TOTAL'];
-    const csvData = [
-      headers.join(','),
-      ...filteredOperators.map(item => [
-        `"${item.operador}"`,
-        `"${item.subEquipo === 'NO_ENCONTRADO' ? 'N/A' : item.subEquipo}"`,
-        ...visiblePeriods.map(period => item.years[period] || 0),
-        item.total
-      ].join(','))
-    ];
+  const exportToExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet(`Pendientes-${activeTab}-${groupBy}`);
     
-    const blob = new Blob([csvData.join('\n')], { type: 'text/csv' });
+    // Headers
+    worksheet.columns = [
+      { header: 'Operador', key: 'operador', width: 35 },
+      { header: 'Sub Equipo', key: 'subEquipo', width: 20 },
+      ...visiblePeriods.map(p => ({ header: p, key: p, width: 15 })),
+      { header: 'Total', key: 'total', width: 15 }
+    ];
+    worksheet.getRow(1).font = { bold: true };
+
+    // Rows
+    filteredOperators.forEach(item => {
+      const rowData: any = {
+        operador: item.operador,
+        subEquipo: item.subEquipo === 'NO_ENCONTRADO' ? 'N/A' : item.subEquipo,
+        total: item.total,
+      };
+      visiblePeriods.forEach(p => {
+        rowData[p] = item.years[p] || 0;
+      });
+      worksheet.addRow(rowData);
+    });
+
+    // Total row
+    const totalRowData: any = { operador: 'TOTAL', total: totals.total };
+    visiblePeriods.forEach(p => {
+      totalRowData[p] = totals[p] || 0;
+    });
+    const totalRow = worksheet.addRow(totalRowData);
+    totalRow.font = { bold: true };
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `pendientes-${activeTab}-${groupBy}.csv`;
+    a.download = `pendientes-${activeTab}-${groupBy}.xlsx`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
@@ -354,11 +380,11 @@ export function AdvancedPendientesReportTable({
         </div>
         <div className="flex gap-2">
           <button
-            onClick={exportToCSV}
+            onClick={exportToExcel}
             className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <Download className="w-4 h-4 mr-2" />
-            Exportar CSV
+            Exportar Excel
           </button>
         </div>
       </div>

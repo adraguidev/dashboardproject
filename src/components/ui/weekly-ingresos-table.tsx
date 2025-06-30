@@ -1,10 +1,11 @@
 'use client'
 
 import React, { useState } from 'react'
+import * as ExcelJS from 'exceljs'
 import { Card } from './card'
 import type { WeeklyIngresosData } from '@/types/dashboard'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
-import { CalendarDays, TrendingUp, BarChart3, Filter } from 'lucide-react'
+import { CalendarDays, TrendingUp, BarChart3, Filter, Download } from 'lucide-react'
 
 interface WeeklyIngresosTableProps {
   data: WeeklyIngresosData
@@ -16,6 +17,37 @@ export function WeeklyIngresosTable({ data, loading = false, className = '' }: W
   const [viewMode, setViewMode] = useState<'chart' | 'table'>('chart')
   const [chartType, setChartType] = useState<'line' | 'bar'>('line')
   const [filterMode, setFilterMode] = useState<'all' | 'with-data'>('with-data')
+
+  const exportToExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Ingresos Semanales');
+
+    worksheet.columns = [
+      { header: 'Semana', key: 'weekNumber', width: 15 },
+      { header: 'Período', key: 'weekRange', width: 25 },
+      { header: 'Trámites', key: 'count', width: 15 },
+    ];
+    worksheet.getRow(1).font = { bold: true };
+
+    filteredWeeks.forEach(week => {
+      worksheet.addRow({
+        weekNumber: `Semana ${week.weekNumber}`,
+        weekRange: week.weekRange,
+        count: week.count
+      });
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `ingresos_semanales_${data.year}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   if (loading) {
     return (
@@ -166,6 +198,14 @@ export function WeeklyIngresosTable({ data, loading = false, className = '' }: W
               Todas
             </button>
           </div>
+
+          <button
+            onClick={exportToExcel}
+            className="flex items-center gap-2 px-3 py-1 rounded text-sm font-medium transition-colors bg-white hover:bg-gray-50 border shadow-sm"
+          >
+            <Download className="h-4 w-4" />
+            <span>Exportar</span>
+          </button>
         </div>
       </div>
 

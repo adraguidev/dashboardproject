@@ -1,9 +1,10 @@
 'use client'
 
 import React from 'react'
+import * as ExcelJS from 'exceljs'
 import { Card } from './card'
 import { PendientesReportSummary } from '@/types/dashboard'
-import { BarChart, Calendar, Clock, Tag, Users, FileStack } from 'lucide-react'
+import { BarChart, Calendar, Clock, Tag, Users, FileStack, Download } from 'lucide-react'
 
 interface PendientesReportTableProps {
   report: PendientesReportSummary | null
@@ -18,6 +19,72 @@ export function PendientesReportTable({
   error = null,
   className = ''
 }: PendientesReportTableProps) {
+  const exportToExcel = async () => {
+    if (!report) return
+
+    const workbook = new ExcelJS.Workbook()
+    const worksheet = workbook.addWorksheet('Reporte de Pendientes')
+
+    // Definir columnas
+    const columns = [
+      { header: 'Operador', key: 'operador', width: 30 },
+      { header: 'Sub Equipo', key: 'subEquipo', width: 20 },
+      ...report.years.map(year => ({ header: String(year), key: String(year), width: 15 })),
+      { header: 'Total', key: 'total', width: 15 }
+    ]
+    worksheet.columns = columns
+
+    // Estilo para el encabezado
+    worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
+    worksheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4F46E5' }
+    }
+
+    // Agregar filas de datos
+    report.data.forEach(operadorData => {
+      const rowData: any = {
+        operador: operadorData.operador,
+        subEquipo: operadorData.subEquipo,
+        total: operadorData.total
+      }
+      report.years.forEach(year => {
+        rowData[String(year)] = operadorData.years[year] || 0
+      })
+      worksheet.addRow(rowData)
+    })
+    
+    // Fila de totales
+    const totalRowData: any = {
+      operador: 'TOTAL',
+      total: report.grandTotal,
+    };
+    report.years.forEach(year => {
+        totalRowData[String(year)] = report.totalByYear[year] || 0;
+    });
+
+    const totalRow = worksheet.addRow(totalRowData);
+    totalRow.font = { bold: true };
+    totalRow.fill = {
+        type: 'pattern',
+        pattern:'solid',
+        fgColor:{argb:'FFD1FAE5'}
+    };
+
+    // Generar y descargar el archivo
+    const buffer = await workbook.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `reporte_pendientes_${report.process}.xlsx`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
   if (loading) {
     return (
       <Card className={`p-6 ${className}`}>
@@ -66,9 +133,18 @@ export function PendientesReportTable({
               Reporte de Pendientes por Año - {report.process.toUpperCase()}
             </h3>
           </div>
-          <div className="px-3 py-1.5 bg-blue-100 rounded-full text-blue-800 font-medium flex items-center">
-            <Clock className="h-4 w-4 mr-1.5" />
-            Total: <span className="font-bold ml-1.5">{report.grandTotal.toLocaleString()}</span> pendientes
+          <div className="flex items-center gap-2">
+            <div className="px-3 py-1.5 bg-blue-100 rounded-full text-blue-800 font-medium flex items-center">
+              <Clock className="h-4 w-4 mr-1.5" />
+              Total: <span className="font-bold ml-1.5">{report.grandTotal.toLocaleString()}</span> pendientes
+            </div>
+            <button
+                onClick={exportToExcel}
+                className="p-2 rounded-md border border-gray-300 hover:bg-gray-50 bg-white"
+                title="Exportar a Excel"
+              >
+              <Download className="w-4 h-4 text-gray-600" />
+            </button>
           </div>
         </div>
 

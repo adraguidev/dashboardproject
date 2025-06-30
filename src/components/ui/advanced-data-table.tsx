@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react'
 import { ChevronUp, ChevronDown, Filter, Download, Search, X, MoreVertical } from 'lucide-react'
+import * as ExcelJS from 'exceljs'
 
 export interface Column<T> {
   key: string
@@ -231,6 +232,42 @@ export function AdvancedDataTable<T>({
     document.addEventListener('mouseup', handleMouseUp)
   }
 
+  // Export to Excel
+  const exportToExcel = async () => {
+    const workbook = new ExcelJS.Workbook()
+    const worksheet = workbook.addWorksheet('Datos')
+
+    // Add headers
+    worksheet.columns = columns.map(col => ({
+      header: col.title,
+      key: col.key,
+      width: 20
+    }))
+
+    // Add rows
+    sortedData.forEach(item => {
+      const row: { [key: string]: any } = {}
+      columns.forEach(col => {
+        row[col.key] = col.accessor(item)
+      })
+      worksheet.addRow(row)
+    })
+
+    // Generate buffer
+    const buffer = await workbook.xlsx.writeBuffer()
+
+    // Create a Blob and trigger download
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'table-data.xlsx'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
   // Export functionality
   const exportToCSV = () => {
     const headers = columns.map(col => col.title).join(',')
@@ -290,9 +327,9 @@ export function AdvancedDataTable<T>({
             </button>
             {exportable && (
               <button
-                onClick={exportToCSV}
+                onClick={exportToExcel}
                 className="p-2 rounded-md border border-gray-300 hover:bg-gray-50"
-                title="Exportar a CSV"
+                title="Exportar a Excel"
               >
                 <Download className="w-4 h-4" />
               </button>

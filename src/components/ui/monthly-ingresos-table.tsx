@@ -1,10 +1,11 @@
 'use client'
 
 import React from 'react'
+import * as ExcelJS from 'exceljs'
 import { Card } from './card'
 import type { MonthlyIngresosData } from '@/types/dashboard'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { Calendar, TrendingUp, TrendingDown } from 'lucide-react'
+import { Calendar, TrendingUp, TrendingDown, Download } from 'lucide-react'
 
 interface MonthlyIngresosTableProps {
   data: MonthlyIngresosData
@@ -37,6 +38,53 @@ export function MonthlyIngresosTable({ data, loading = false, className = '' }: 
   const previousYearTotal = data.months.reduce((sum, month) => sum + month.previousYearCount, 0)
   const difference = currentYearTotal - previousYearTotal
   const percentageChange = previousYearTotal > 0 ? (difference / previousYearTotal) * 100 : 0
+
+  const exportToExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Ingresos Mensuales');
+
+    worksheet.columns = [
+      { header: 'Mes', key: 'month', width: 15 },
+      { header: String(data.previousYear), key: 'prevYear', width: 15 },
+      { header: String(data.currentYear), key: 'currYear', width: 15 },
+      { header: 'Diferencia', key: 'diff', width: 15 },
+      { header: '% Cambio', key: 'change', width: 15 },
+    ];
+    worksheet.getRow(1).font = { bold: true };
+
+    data.months.forEach(month => {
+      const diff = month.currentYearCount - month.previousYearCount;
+      const change = month.previousYearCount > 0 ? (diff / month.previousYearCount) * 100 : (month.currentYearCount > 0 ? 100 : 0);
+      worksheet.addRow({
+        month: month.month,
+        prevYear: month.previousYearCount,
+        currYear: month.currentYearCount,
+        diff: diff,
+        change: change.toFixed(1) + '%'
+      });
+    });
+
+    // Total row
+    const totalRow = worksheet.addRow({
+      month: 'TOTAL',
+      prevYear: previousYearTotal,
+      currYear: currentYearTotal,
+      diff: difference,
+      change: percentageChange.toFixed(1) + '%'
+    });
+    totalRow.font = { bold: true };
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `ingresos_mensuales_${data.currentYear}_vs_${data.previousYear}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   // Tooltip personalizado
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -76,17 +124,26 @@ export function MonthlyIngresosTable({ data, loading = false, className = '' }: 
               Comparación {data.previousYear} vs {data.currentYear}
             </p>
           </div>
-          <div className="text-right">
-            <div className="text-2xl font-bold text-green-600">
-              {currentYearTotal.toLocaleString()}
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <div className="text-2xl font-bold text-green-600">
+                {currentYearTotal.toLocaleString()}
+              </div>
+              <div className="text-sm text-gray-500">{data.currentYear}</div>
+              <div className={`flex items-center gap-1 text-sm ${
+                difference >= 0 ? 'text-green-600' : 'text-red-600'
+              }`}>
+                {difference >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                {Math.abs(percentageChange).toFixed(1)}% vs {data.previousYear}
+              </div>
             </div>
-            <div className="text-sm text-gray-500">{data.currentYear}</div>
-            <div className={`flex items-center gap-1 text-sm ${
-              difference >= 0 ? 'text-green-600' : 'text-red-600'
-            }`}>
-              {difference >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-              {Math.abs(percentageChange).toFixed(1)}% vs {data.previousYear}
-            </div>
+            <button
+              onClick={exportToExcel}
+              className="p-2 border rounded-md bg-white hover:bg-gray-100"
+              title="Exportar a Excel"
+            >
+              <Download className="w-5 h-5 text-gray-600" />
+            </button>
           </div>
         </div>
       </div>

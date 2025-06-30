@@ -1,11 +1,13 @@
 'use client'
 
 import React, { useState, useMemo, useCallback } from 'react'
+import * as ExcelJS from 'exceljs'
 import { Card } from './card'
 import { ProduccionReportSummary, Evaluador, ProduccionReportData } from '@/types/dashboard'
 import { ProduccionChart } from './produccion-chart'
 import { formatDateShort } from '@/lib/date-utils'
 import { ProductionOperatorModal } from './production-operator-modal'
+import { Download } from 'lucide-react'
 
 interface ProduccionReportTableProps {
   report: ProduccionReportSummary | null
@@ -30,6 +32,57 @@ export function ProduccionReportTable({
 }: ProduccionReportTableProps) {
   const [activeTab, setActiveTab] = useState<TabType>('general')
   const [modalOperator, setModalOperator] = useState<ProduccionReportData|null>(null)
+
+  const exportToExcel = async () => {
+    if (!report || !filteredOperators) return;
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet(`Produccion - ${activeTab}`);
+
+    // Headers
+    const headers = [
+      { header: 'Operador', key: 'operador', width: 30 },
+      { header: 'Sub Equipo', key: 'subEquipo', width: 20 },
+      ...visibleFechas.map(fecha => ({ header: formatDate(fecha), key: fecha, width: 15 })),
+      { header: 'Total', key: 'total', width: 15 }
+    ];
+    worksheet.columns = headers;
+    worksheet.getRow(1).font = { bold: true };
+
+    // Rows
+    filteredOperators.forEach(operadorData => {
+      const rowData: any = {
+        operador: operadorData.operador,
+        subEquipo: operadorData.subEquipo === 'NO_ENCONTRADO' ? 'N/A' : operadorData.subEquipo,
+        total: visibleFechas.reduce((sum, fecha) => sum + (operadorData.fechas[fecha] || 0), 0)
+      };
+      visibleFechas.forEach(fecha => {
+        rowData[fecha] = operadorData.fechas[fecha] || 0;
+      });
+      worksheet.addRow(rowData);
+    });
+
+    // Total Row
+    const totalRowData: any = { operador: 'TOTAL', subEquipo: '-', total: filteredTotals.total };
+    visibleFechas.forEach(fecha => {
+      totalRowData[fecha] = (filteredTotals as any)[fecha] || 0;
+    });
+    const totalRow = worksheet.addRow(totalRowData);
+    totalRow.font = { bold: true };
+    totalRow.getCell('A').font = { bold: true };
+
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `reporte_produccion_${report.process}_${activeTab}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   // A simple normalization for comparison: uppercase and alphanumeric.
   const normalizeSimple = (name: string): string => {
@@ -252,6 +305,15 @@ export function ProduccionReportTable({
               <option value="FIN_DE_SEMANA">Fin de Semana</option>
             </select>
           </div>
+          
+          <button
+            onClick={exportToExcel}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            title="Exportar a Excel la vista actual"
+          >
+            <Download className="w-4 h-4" />
+            <span>Exportar</span>
+          </button>
           
           <div className="text-sm text-gray-600">
             <span className="font-medium">Mostrando:</span> {visibleFechas.length} días con datos

@@ -1,9 +1,11 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
+import * as ExcelJS from 'exceljs'
 import { Card } from './card'
 import { Badge } from './badge'
 import { TableColumn, ProcessFilters } from '@/types/dashboard'
+import { Download } from 'lucide-react'
 
 interface DynamicTableProps {
   data: any[]
@@ -38,6 +40,33 @@ export function DynamicTable({
   } | null>(null)
 
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({})
+
+  const exportToExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Datos');
+
+    worksheet.columns = columns.map(col => ({
+      header: col.label,
+      key: col.key,
+      width: col.width ? col.width / 7 : 20 // Approximate conversion
+    }));
+    worksheet.getRow(1).font = { bold: true };
+
+    processedData.forEach(item => {
+      worksheet.addRow(item);
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'datos_tabla.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   // Datos filtrados y ordenados
   const processedData = useMemo(() => {
@@ -161,6 +190,14 @@ export function DynamicTable({
             )}
           </div>
           <div className="flex items-center gap-2">
+            <button
+                onClick={exportToExcel}
+                className="flex items-center gap-2 px-3 py-1 text-sm border rounded hover:bg-gray-100"
+                title="Exportar a Excel"
+              >
+                <Download className="w-4 h-4" />
+                <span>Exportar</span>
+            </button>
             <span className="text-sm text-gray-600">Filas por página:</span>
             <select 
               value={pageSize}

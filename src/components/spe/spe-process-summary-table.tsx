@@ -2,9 +2,10 @@
 
 import React, { useState, useMemo } from 'react'
 import { useSpeSummary } from '@/hooks/use-spe-summary'
-import { BarChart as BarChartIcon, ChevronRight, Loader2, Calendar, PieChart } from 'lucide-react'
+import { BarChart as BarChartIcon, ChevronRight, Loader2, Calendar, PieChart, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button';
 import { SpeSunburstModal } from './spe-sunburst-modal';
+import * as ExcelJS from 'exceljs';
 
 type GroupBy = 'anio' | 'trimestre' | 'mes';
 
@@ -20,6 +21,52 @@ export function SpeProcessSummaryTable({ groupBy }: { groupBy: GroupBy }) {
   const { data: flatData, isLoading, error } = useSpeSummary()
   const [expandedProcesses, setExpandedProcesses] = useState<Set<string>>(new Set())
   const [isChartModalOpen, setIsChartModalOpen] = useState(false);
+
+  const exportToExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Resumen SPE');
+
+    // Headers
+    worksheet.columns = [
+      { header: 'Proceso / Estado', key: 'proceso', width: 40 },
+      ...processedData.periods.map(p => ({ header: p, key: p, width: 15 })),
+      { header: 'Total', key: 'total', width: 15 }
+    ];
+    worksheet.getRow(1).font = { bold: true };
+
+    Array.from(processedData.processes.entries()).forEach(([proceso, procData]) => {
+      // Process Row
+      const procRowData: any = { proceso: proceso, total: procData.total };
+      processedData.periods.forEach(p => {
+        procRowData[p] = Array.from(procData.estados.values()).reduce((sum, data) => sum + (data[p] || 0), 0);
+      });
+      const procRow = worksheet.addRow(procRowData);
+      procRow.font = { bold: true };
+
+      // Estado rows
+      Array.from(procData.estados.entries()).forEach(([estado, periodData]) => {
+        const estadoRowData: any = { 
+          proceso: `    ${estado}`, 
+          total: Object.values(periodData).reduce((s,t) => s+t, 0)
+        };
+        processedData.periods.forEach(p => {
+          estadoRowData[p] = periodData[p] || 0;
+        });
+        worksheet.addRow(estadoRowData);
+      });
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `resumen_spe_${groupBy}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   const processedData = useMemo(() => {
     if (!flatData) return { processes: new Map() as ProcessMap, periods: [] };
@@ -144,15 +191,21 @@ export function SpeProcessSummaryTable({ groupBy }: { groupBy: GroupBy }) {
            <BarChartIcon className="w-5 h-5 text-purple-600" />
            <span>Resumen por Proceso y Estado</span>
          </h3>
-         <Button 
-           onClick={() => setIsChartModalOpen(true)}
-           disabled={sunburstData.children.length === 0}
-           variant="outline"
-           size="sm"
-         >
-           <PieChart className="w-4 h-4 mr-2" />
-           Ver Gráfico
-         </Button>
+         <div className="flex items-center gap-2">
+           <Button 
+             onClick={() => setIsChartModalOpen(true)}
+             disabled={sunburstData.children.length === 0}
+             variant="outline"
+             size="sm"
+           >
+             <PieChart className="w-4 h-4 mr-2" />
+             Ver Gráfico
+           </Button>
+           <Button onClick={exportToExcel} variant="outline" size="sm">
+             <Download className="w-4 h-4 mr-2" />
+             Exportar
+           </Button>
+         </div>
        </div>
        
        {/* Tabla primero */}

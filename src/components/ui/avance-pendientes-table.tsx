@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import * as ExcelJS from 'exceljs'
 import { useAvancePendientes } from '@/hooks/use-avance-pendientes'
 import { usePendientesReport } from '@/hooks/use-pendientes-report'
 import { useEvaluadores } from '@/hooks/use-evaluadores'
@@ -329,25 +330,42 @@ export default function AvancePendientesTable({
     )
   }
 
-  // Función para exportar CSV
-  const exportToCSV = () => {
-    const headers = ['OPERADOR', 'SUB EQUIPO', ...processedData.fechasFiltradas.map(f => f.formatted), 'TOTAL']
-    const csvData = [
-      headers.join(','),
-      ...filteredOperators.map(item => [
-        `"${item.operador}"`,
-        `"${item.subEquipo === 'NO_ENCONTRADO' ? 'N/A' : item.subEquipo}"`,
-        ...processedData.fechasFiltradas.map(f => item[f.original] || 0),
-        item.total
-      ].join(','))
+  // Función para exportar Excel
+  const exportToExcel = async () => {
+    const workbook = new ExcelJS.Workbook()
+    const worksheet = workbook.addWorksheet(`Avance ${selectedProceso} - ${activeTab}`)
+
+    // Encabezados
+    worksheet.columns = [
+      { header: 'Operador', key: 'operador', width: 35 },
+      { header: 'Sub Equipo', key: 'subEquipo', width: 20 },
+      ...processedData.fechasFiltradas.map(f => ({ header: f.formatted, key: f.original, width: 15 })),
+      { header: 'Total', key: 'total', width: 15 }
     ]
-    
-    const blob = new Blob([csvData.join('\n')], { type: 'text/csv' })
+    worksheet.getRow(1).font = { bold: true }
+
+    // Filas
+    filteredOperators.forEach(item => {
+      const rowData: any = {
+        operador: item.operador,
+        subEquipo: item.subEquipo === 'NO_ENCONTRADO' ? 'N/A' : item.subEquipo,
+        total: item.total
+      }
+      processedData.fechasFiltradas.forEach(f => {
+        rowData[f.original] = item[f.original] || 0
+      })
+      worksheet.addRow(rowData)
+    })
+
+    const buffer = await workbook.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `avance-pendientes-${activeTab}-${selectedProceso}.csv`
+    a.download = `avance-pendientes-${activeTab}-${selectedProceso}.xlsx`
+    document.body.appendChild(a)
     a.click()
+    document.body.removeChild(a)
     URL.revokeObjectURL(url)
   }
 
@@ -563,11 +581,11 @@ export default function AvancePendientesTable({
             Regrabar Snapshot de Hoy
           </button>
           <button
-            onClick={exportToCSV}
+            onClick={exportToExcel}
             className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500"
           >
             <Download className="w-4 h-4 mr-2" />
-            Exportar CSV
+            Exportar Excel
           </button>
         </div>
       </div>

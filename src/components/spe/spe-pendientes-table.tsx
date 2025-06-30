@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
+import * as ExcelJS from 'exceljs'
 import { BarChart, Users, FileStack, Search, Download, Calendar } from 'lucide-react'
 import { EvaluadorDetailModal } from './evaluador-detail-modal'
 
@@ -67,23 +68,47 @@ export function SpePendientesTable({
     return { ...periodTotals, grandTotal } as { [key: string]: number; grandTotal: number };
   }, [filteredData, visiblePeriods, dataMapKey])
 
-  const exportToCSV = () => {
-    const headers = ['EVALUADOR', ...visiblePeriods, 'TOTAL'];
-    const csvData = [
-      headers.join(','),
-      ...filteredData.map(item => [
-        `"${item.evaluador}"`,
-        ...visiblePeriods.map(period => item[dataMapKey]?.[period] || 0),
-        item.totalGeneral
-      ].join(','))
+  const exportToExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet(`SPE Pendientes - ${groupBy}`);
+
+    const headers = [
+      { header: 'Evaluador', key: 'evaluador', width: 30 },
+      ...visiblePeriods.map(p => ({ header: p, key: p, width: 15 })),
+      { header: 'Total', key: 'total', width: 15 }
     ];
+    worksheet.columns = headers;
+    worksheet.getRow(1).font = { bold: true };
+
+    filteredData.forEach(item => {
+      const rowData: any = {
+        evaluador: item.evaluador,
+        total: item.totalGeneral,
+      };
+      visiblePeriods.forEach(p => {
+        rowData[p] = item[dataMapKey]?.[p] || 0;
+      });
+      worksheet.addRow(rowData);
+    });
     
-    const blob = new Blob([csvData.join('\n')], { type: 'text/csv' });
+    // Total Row
+    const totalRowData: any = { evaluador: 'TOTAL', total: totals.grandTotal };
+    visiblePeriods.forEach(p => {
+        totalRowData[p] = totals[p] || 0;
+    });
+    const totalRow = worksheet.addRow(totalRowData);
+    totalRow.font = { bold: true };
+
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `spe-pendientes-${groupBy}.csv`;
+    a.download = `spe-pendientes-${groupBy}.xlsx`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
   
@@ -180,11 +205,11 @@ export function SpePendientesTable({
           />
         </div>
         <button
-          onClick={exportToCSV}
+          onClick={exportToExcel}
           className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-purple-500"
         >
           <Download className="w-4 h-4 mr-2" />
-          Exportar CSV
+          Exportar Excel
         </button>
       </div>
       
