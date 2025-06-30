@@ -13,6 +13,7 @@ import { useIngresos } from '@/hooks/use-ingresos'
 import { useEvaluadores } from '@/hooks/use-evaluadores'
 import { BarChart3, CheckCircle, Clock, TrendingUp, Construction, Factory, TrendingDown, Activity, BrainCircuit } from 'lucide-react'
 import { ThroughputChart } from '../ui/throughput-chart'
+import ResueltosDashboard from '../ui/resueltos-dashboard'
 
 interface ProcessModulesProps {
   selectedProcess: 'ccm' | 'prr'
@@ -98,8 +99,8 @@ export function ProcessModules({
       id: 'resueltos',
       name: 'Resueltos',
       icon: CheckCircle,
-      description: 'Expedientes completados',
-      status: 'coming-soon',
+      description: 'Análisis de calidad y tendencias en expedientes resueltos.',
+      status: 'active',
       color: 'text-emerald-600'
     },
     {
@@ -194,6 +195,13 @@ export function ProcessModules({
           </div>
         )
       
+      case 'resueltos':
+        return (
+          <div className="p-6">
+            <ResueltosDashboard proceso={selectedProcess} />
+          </div>
+        )
+
       default:
         const module = modules.find(m => m.id === selectedModule)
         const IconComponent = module?.icon || Construction

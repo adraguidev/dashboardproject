@@ -1,6 +1,8 @@
 import { neon } from "@neondatabase/serverless";
 import { drizzle, NeonHttpDatabase } from "drizzle-orm/neon-http";
-import { eq, and, isNull, isNotNull, desc, asc, count, gte, lte, inArray, like, or, sql } from "drizzle-orm";
+import { eq, and, isNull, isNotNull, desc, asc, count, gte, lte, inArray, like, or, sql, ne } from "drizzle-orm";
+import { subYears, format } from 'date-fns';
+import { logInfo } from './logger';
 import * as mainSchema from './schema/main';
 import * as historicosSchema from './schema/historicos';
 
@@ -722,6 +724,68 @@ export class DirectDatabaseAPI {
         eq(historicoSinAsignar.proceso, proceso)
       )
     );
+  }
+
+  /**
+   * Obtiene el análisis de resoluciones agrupado por mes, estado y operador.
+   * @param proceso - El proceso ('ccm' o 'prr') a analizar.
+   * @returns Una promesa que resuelve con los datos del análisis.
+   */
+  async getResueltosAnalysis(proceso: 'ccm' | 'prr'): Promise<{ mes: string; estadopre: string; operadorpre: string; total: number }[]> {
+    const table = proceso === 'ccm' ? tableCCM : tablePRR;
+    const twoYearsAgo = subYears(new Date(), 2);
+
+    logInfo(`[DB Service] Obteniendo análisis de resueltos para ${proceso} desde ${format(twoYearsAgo, 'yyyy-MM-dd')}`);
+
+    // Obtener todos los datos filtrados y agrupar en JavaScript
+    const rawData = await this.db
+      .select({
+        fechapre: table.fechapre,
+        estadopre: table.estadopre,
+        operadorpre: table.operadorpre,
+      })
+      .from(table)
+      .where(
+        and(
+          isNotNull(table.fechapre),
+          gte(table.fechapre, format(twoYearsAgo, 'yyyy-MM-dd')),
+          isNotNull(table.estadopre),
+          ne(table.estadopre, '')
+        )
+      );
+      
+    logInfo(`[DB Service] Datos crudos obtenidos: ${rawData.length} registros`);
+
+    // Agrupar por mes, estado y operador en JavaScript
+    const groupedData = new Map<string, number>();
+    
+    rawData.forEach(row => {
+      if (row.fechapre && row.estadopre) {
+        const fecha = new Date(row.fechapre);
+        const mes = format(fecha, 'yyyy-MM');
+        const key = `${mes}|${row.estadopre}|${row.operadorpre || 'Sin Operador'}`;
+        
+        groupedData.set(key, (groupedData.get(key) || 0) + 1);
+      }
+    });
+
+    // Convertir el mapa a array de resultados
+    const results = Array.from(groupedData.entries()).map(([key, total]) => {
+      const [mes, estadopre, operadorpre] = key.split('|');
+      return {
+        mes,
+        estadopre,
+        operadorpre: operadorpre === 'Sin Operador' ? null : operadorpre,
+        total
+      };
+    }).sort((a, b) => {
+      // Ordenar por mes primero, luego por estado
+      if (a.mes !== b.mes) return a.mes.localeCompare(b.mes);
+      return a.estadopre.localeCompare(b.estadopre);
+    });
+      
+    logInfo(`[DB Service] Análisis de resueltos procesado: ${results.length} grupos encontrados`);
+    return results;
   }
 }
 
