@@ -7,7 +7,7 @@ import { ProduccionReportSummary, Evaluador, ProduccionReportData } from '@/type
 import { ProduccionChart } from './produccion-chart'
 import { formatDateShort } from '@/lib/date-utils'
 import { ProductionOperatorModal } from './production-operator-modal'
-import { Download } from 'lucide-react'
+import { Download, Search, Filter } from 'lucide-react'
 
 interface ProduccionReportTableProps {
   report: ProduccionReportSummary | null
@@ -32,6 +32,8 @@ export function ProduccionReportTable({
 }: ProduccionReportTableProps) {
   const [activeTab, setActiveTab] = useState<TabType>('general')
   const [modalOperator, setModalOperator] = useState<ProduccionReportData|null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [subEquipoFilter, setSubEquipoFilter] = useState('')
 
   const exportToExcel = async () => {
     if (!report || !filteredOperators) return;
@@ -119,25 +121,53 @@ export function ProduccionReportTable({
     return report.data.filter(item => item.operador !== 'Sin Operador');
   }, [report]);
 
+  // Get unique sub-equipos for the filter dropdown, only for the 'general' tab
+  const uniqueSubEquipos = useMemo(() => {
+    const generalData = baseData.filter(item => item.subEquipo !== 'NO_ENCONTRADO');
+    return [...new Set(generalData.map(item => item.subEquipo))].sort();
+  }, [baseData]);
+
   // Memoize filtered data based on the active tab
   const filteredOperators = useMemo(() => {
+    let baseFilteredData;
     switch (activeTab) {
       case 'general':
-        return baseData.filter(item => item.subEquipo !== 'NO_ENCONTRADO');
+        baseFilteredData = baseData.filter(item => item.subEquipo !== 'NO_ENCONTRADO');
+        break;
       case 'otros':
-        return baseData.filter(item => 
+        baseFilteredData = baseData.filter(item => 
           item.subEquipo === 'NO_ENCONTRADO' && 
           !isOperadorInExternos(item.operador)
         );
+        break;
       case 'por-revisar':
-        return baseData.filter(item => 
+        baseFilteredData = baseData.filter(item => 
           item.subEquipo === 'NO_ENCONTRADO' && 
           isOperadorInExternos(item.operador)
         );
+        break;
       default:
-        return baseData;
+        baseFilteredData = baseData;
     }
-  }, [baseData, activeTab, isOperadorInExternos]);
+
+    let finalFilteredData = baseFilteredData;
+
+    // Apply search term filter
+    if (searchTerm) {
+      finalFilteredData = finalFilteredData.filter(item =>
+        item.operador.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Apply sub-equipo filter (only for general tab)
+    if (activeTab === 'general' && subEquipoFilter) {
+      finalFilteredData = finalFilteredData.filter(item =>
+        item.subEquipo === subEquipoFilter
+      );
+    }
+    
+    return finalFilteredData;
+  }, [baseData, activeTab, isOperadorInExternos, searchTerm, subEquipoFilter]);
 
   // Memoize grand total for the filtered data (para las pestañas, usa todas las fechas)
   const totals = useMemo(() => {
@@ -325,14 +355,19 @@ export function ProduccionReportTable({
         </div>
       </div>
 
-      {/* Tabs System */}
+      {/* Tabs System and Filters */}
       <div className="p-4 bg-white border-b">
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-8">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  // Reset filters when changing tabs
+                  setSearchTerm('');
+                  setSubEquipoFilter('');
+                }}
                 className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'border-blue-500 text-blue-600'
@@ -343,6 +378,33 @@ export function ProduccionReportTable({
               </button>
             ))}
           </nav>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-4 items-center">
+            <div className="relative flex-grow">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                    type="text"
+                    placeholder="Buscar operador..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                />
+            </div>
+            {activeTab === 'general' && (
+                <div className="relative flex-grow">
+                    <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <select
+                        value={subEquipoFilter}
+                        onChange={(e) => setSubEquipoFilter(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="">Todos los sub-equipos</option>
+                        {uniqueSubEquipos.map(subEquipo => (
+                            <option key={subEquipo} value={subEquipo}>{subEquipo}</option>
+                        ))}
+                    </select>
+                </div>
+            )}
         </div>
         <div className="mt-2 text-sm text-gray-600">
           {tabs.find(tab => tab.id === activeTab)?.description}
