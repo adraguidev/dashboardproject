@@ -136,12 +136,13 @@ export function ThroughputChart({ proceso }: ChartProps) {
   }
 
   if (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
     return (
       <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200 flex justify-center items-center h-96">
         <div className="text-center text-red-600">
           <AlertCircle className="h-8 w-8 mx-auto mb-2" />
           <p>Error al cargar el análisis:</p>
-          <p className="text-sm">{error.message}</p>
+          <p className="text-sm">{errorMessage}</p>
         </div>
       </div>
     );
@@ -196,7 +197,7 @@ export function ThroughputChart({ proceso }: ChartProps) {
             <div className="flex flex-col items-center justify-center h-full text-red-600">
               <AlertCircle className="h-8 w-8 mb-2"/>
               <p>Error al cargar el análisis:</p>
-              <p className="text-sm">{error.message}</p>
+              <p className="text-sm">{error instanceof Error ? error.message : 'Error desconocido'}</p>
             </div>
           )}
           {!isLoading && !error && data && (
