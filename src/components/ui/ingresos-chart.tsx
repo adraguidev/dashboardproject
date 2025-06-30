@@ -204,16 +204,16 @@ export function IngresosChart({
         </div>
 
         {/* Gráfico */}
-        <div className="p-6">
+        <div className="p-2 sm:p-6">
           <div className="h-96">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
                 data={chartData}
                 margin={{
                   top: 20,
-                  right: 30,
-                  left: 20,
-                  bottom: 60
+                  right: 20,
+                  left: 5,
+                  bottom: 50
                 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -222,13 +222,22 @@ export function IngresosChart({
                   angle={-45}
                   textAnchor="end"
                   height={60}
-                  fontSize={11}
+                  tick={{ fontSize: 10 }}
                   stroke="#666"
-                  interval="preserveStartEnd"
+                  interval={'preserveStartEnd'}
+                  className="hidden sm:block"
                 />
+                 <XAxis 
+                  dataKey="fechaLabel"
+                  tick={{ fontSize: 9 }}
+                  stroke="#666"
+                  interval={3}
+                  className="block sm:hidden"
+                  />
                 <YAxis 
                   stroke="#666"
-                  fontSize={12}
+                  tick={{ fontSize: 10 }}
+                  width={30}
                   tickFormatter={(value) => value.toString()}
                 />
                 <Tooltip content={<CustomTooltip />} />

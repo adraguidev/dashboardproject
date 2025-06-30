@@ -565,8 +565,8 @@ export default function AvancePendientesTable({
         </div>
       </div>
 
-      {/* Table */}
-      <div ref={tableContainerRef} className="bg-white rounded-lg shadow-md border border-gray-200 overflow-x-auto">
+      {/* Table for Desktop */}
+      <div ref={tableContainerRef} className="hidden md:block bg-white rounded-lg shadow-md border border-gray-200 overflow-x-auto">
         <table className="min-w-full">
           <thead className="bg-gray-50">
             <tr>
@@ -654,6 +654,45 @@ export default function AvancePendientesTable({
             </tr>
           </tfoot>
         </table>
+      </div>
+
+      {/* Cards for Mobile */}
+      <div className="block md:hidden space-y-4">
+        {filteredOperators.map(operador => (
+          <div
+            key={operador.operador}
+            className={`bg-white rounded-lg shadow-md border border-gray-200 p-4 ${operador.colorClass || ''}`}
+            onClick={() => setSelectedOperator(operador)}
+          >
+            <div className="flex justify-between items-start">
+              <div className="max-w-[75%]">
+                <h4 className="font-bold text-gray-900 leading-tight" title={operador.operador}>{operador.operador}</h4>
+                {renderSubEquipoBadge(operador.subEquipo)}
+              </div>
+              <div className="text-right flex-shrink-0">
+                <div className="text-xs text-gray-500">Actual</div>
+                <div className="text-lg font-bold text-orange-600">{operador.ultimaFecha.toLocaleString()}</div>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">Toque para ver tendencia histórica.</p>
+          </div>
+        ))}
+        {/* Total Card */}
+        {filteredOperators.length > 0 && (
+          <div className="bg-gray-100 rounded-lg shadow-md border border-gray-300 p-4 mt-4 sticky bottom-4">
+            <div className="flex justify-between items-center">
+              <div>
+                <h4 className="font-bold text-gray-900">PENDIENTES (ACTUAL)</h4>
+                <p className="text-xs text-gray-600">{filteredOperators.length} operadores</p>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <div className="text-2xl font-bold text-orange-600">
+                  {filteredOperators.reduce((sum, op) => sum + op.ultimaFecha, 0).toLocaleString()}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Results info */}

@@ -158,7 +158,8 @@ function OperatorsTable({ data }: { data: ResueltosAnalysisData['operatorsDetail
           Productividad de Operadores (Año Actual)
         </h3>
       </div>
-      <div className="overflow-x-auto">
+      {/* Table for Desktop */}
+      <div className="overflow-x-auto hidden md:block">
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
@@ -182,6 +183,32 @@ function OperatorsTable({ data }: { data: ResueltosAnalysisData['operatorsDetail
           </tbody>
         </table>
       </div>
+
+      {/* Cards for Mobile */}
+      <div className="block md:hidden p-4 space-y-3">
+        {data.operators.slice(0, 15).map(op => (
+          <details key={op.operator} className="bg-white rounded-lg shadow border border-gray-200 open:ring-1 open:ring-blue-500">
+            <summary className="p-3 cursor-pointer list-none flex justify-between items-center">
+              <span className="font-medium text-gray-800">{op.operator}</span>
+              <div className="text-right">
+                <span className="font-bold text-lg text-blue-600">{op.total}</span>
+              </div>
+            </summary>
+            <div className="border-t border-gray-200 px-3 pt-2 pb-3">
+              <h5 className="text-xs text-gray-500 mb-1">Desglose:</h5>
+              <div className="space-y-1 text-sm">
+                {data.categories.map(cat => (
+                  <div key={cat} className="flex justify-between items-center">
+                    <span className="text-gray-600">{cat}</span>
+                    <span className="font-medium text-gray-800">{(op as any)[cat] || 0}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </details>
+        ))}
+      </div>
+
       {data.operators.length > 15 && (
         <div className="p-4 text-center text-xs text-gray-500 bg-gray-50">
           Mostrando los 15 operadores más productivos.

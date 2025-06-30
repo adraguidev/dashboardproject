@@ -211,7 +211,7 @@ export function ProduccionReportTable({
   // -------------------------------------------------
 
   return (
-    <Card className={`overflow-hidden ${className}`}>
+    <Card className={`${className}`}>
       {/* Encabezado */}
       <div className="p-4 bg-gray-50 border-b">
         <div className="flex justify-between items-center mb-4">
@@ -287,8 +287,8 @@ export function ProduccionReportTable({
         </div>
       </div>
 
-      {/* Tabla */}
-      <div className="overflow-x-auto">
+      {/* Tabla para Desktop */}
+      <div className="overflow-x-auto hidden md:block">
         <table className="w-full">
           <thead className="bg-gray-100">
             <tr>
@@ -382,6 +382,59 @@ export function ProduccionReportTable({
             </tr>
           </tbody>
         </table>
+      </div>
+
+      {/* Cards para Mobile */}
+      <div className="block md:hidden p-4 space-y-4">
+        {filteredOperators.map((operadorData) => (
+          <div 
+            key={operadorData.operador}
+            className={`bg-white rounded-lg shadow-md border border-gray-200 p-4 ${operadorData.colorClass || ''}`}
+            onClick={() => setModalOperator(operadorData)}
+          >
+            <div className="flex justify-between items-start mb-3">
+              <div>
+                <h4 className="font-bold text-gray-900 leading-tight truncate max-w-[200px]" title={operadorData.operador}>{operadorData.operador}</h4>
+                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                  operadorData.subEquipo === 'EVALUACION' 
+                    ? 'bg-gray-100 text-gray-800'
+                    : operadorData.subEquipo === 'REASIGNADOS'
+                    ? 'bg-orange-200 text-orange-900'
+                    : operadorData.subEquipo === 'SUSPENDIDA'
+                    ? 'bg-orange-400 text-orange-950'
+                    : operadorData.subEquipo === 'RESPONSABLE'
+                    ? 'bg-green-200 text-green-900'
+                    : 'bg-gray-300 text-gray-700'
+                }`}>
+                  {operadorData.subEquipo === 'NO_ENCONTRADO' ? 'N/A' : operadorData.subEquipo}
+                </span>
+              </div>
+              <div className="text-right flex-shrink-0 ml-2">
+                <div className="text-xs text-gray-500">Total</div>
+                <div className="text-lg font-bold text-blue-800">
+                  {visibleFechas.reduce((sum: number, fecha: string) => sum + (operadorData.fechas[fecha] || 0), 0).toLocaleString()}
+                </div>
+              </div>
+            </div>
+             <p className="text-xs text-gray-500 mt-2">Toque para ver detalle diario.</p>
+          </div>
+        ))}
+        {/* Total Card */}
+        {filteredOperators.length > 0 && (
+            <div className="bg-green-100 rounded-lg shadow-md border border-green-300 p-4 mt-4 sticky bottom-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h4 className="font-bold text-green-900">PRODUCCIÓN TOTAL</h4>
+                  <p className="text-xs text-green-800">{filteredOperators.length} operadores</p>
+                </div>
+                 <div className="text-right flex-shrink-0 ml-2">
+                    <div className="text-2xl font-bold text-green-800">
+                      {filteredTotals.total.toLocaleString()}
+                    </div>
+                  </div>
+              </div>
+            </div>
+        )}
       </div>
 
       {/* Leyenda de colores */}

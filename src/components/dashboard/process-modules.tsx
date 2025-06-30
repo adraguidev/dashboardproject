@@ -224,7 +224,8 @@ export function ProcessModules({
       {/* Modern Tabs */}
       <div className="border-b border-gray-200/80 bg-gray-50/50">
         <div className="px-6 py-1">
-          <nav className="flex space-x-1">
+          {/* Desktop Tabs */}
+          <nav className="hidden md:flex space-x-1">
             {modules.map((module) => {
               const IconComponent = module.icon
               const isActive = selectedModule === module.id
@@ -262,6 +263,21 @@ export function ProcessModules({
               )
             })}
           </nav>
+          {/* Mobile Select */}
+          <div className="block md:hidden py-2">
+            <select
+              id="module-select"
+              value={selectedModule}
+              onChange={(e) => onModuleChange(e.target.value)}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-base font-medium text-gray-700"
+            >
+              {modules.map((module) => (
+                <option key={module.id} value={module.id} disabled={module.status === 'coming-soon'}>
+                  {module.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 

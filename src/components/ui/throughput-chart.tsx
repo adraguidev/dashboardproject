@@ -214,7 +214,8 @@ export function ThroughputChart({ proceso }: ChartProps) {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                <XAxis dataKey="fecha" tick={{ fontSize: 11 }} angle={-30} textAnchor="end" />
+                <XAxis dataKey="fecha" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" className="hidden sm:block" interval="preserveStartEnd" />
+                <XAxis dataKey="fecha" tick={{ fontSize: 9 }} className="block sm:hidden" interval={3} />
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend verticalAlign="top" height={36} />
@@ -291,7 +292,8 @@ export function ThroughputChart({ proceso }: ChartProps) {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* Vista de Tabla para Desktop */}
+          <div className="overflow-x-auto hidden md:block">
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
@@ -463,6 +465,49 @@ export function ThroughputChart({ proceso }: ChartProps) {
                 </tr>
               </tbody>
             </table>
+          </div>
+
+          {/* Vista de Tarjetas para Mobile */}
+          <div className="block md:hidden space-y-4 p-4">
+            {Object.entries({
+              'Total Acumulado': { data: tableStats.totals, icon: Target, isTotal: true },
+              'Promedio Diario': { data: tableStats.averages, icon: Activity, isTotal: false },
+              'Pico Máximo': { data: tableStats.maximums, icon: TrendingUp, isTotal: false },
+              'Tendencia (7d)': { data: tableStats.trends, icon: Calendar, isTotal: false }
+            }).map(([title, { data, icon: Icon, isTotal }]) => (
+              <div key={title} className="bg-white rounded-lg shadow border border-gray-200 p-3">
+                <div className="flex items-center text-gray-700 font-semibold mb-3">
+                  <Icon className="h-4 w-4 mr-2" />
+                  <span>{title}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="bg-blue-50 p-2 rounded-md">
+                    <div className="text-xs text-blue-800">Ingresos</div>
+                    <div className="font-bold text-lg text-blue-900">
+                      {isTotal ? (data as any).totalIngresos.toLocaleString() : isNaN((data as any).trendIngresos) ? (data as any).avgIngresos?.toLocaleString() || (data as any).maxIngresos?.toLocaleString() : <TrendIndicator value={(data as any).trendIngresos} />}
+                    </div>
+                  </div>
+                  <div className="bg-purple-50 p-2 rounded-md">
+                    <div className="text-xs text-purple-800">Total Prod.</div>
+                    <div className="font-bold text-lg text-purple-900">
+                      {isTotal ? (data as any).totalProduccionCombinada.toLocaleString() : isNaN((data as any).trendCombinada) ? (data as any).avgProduccionCombinada?.toLocaleString() || (data as any).maxProduccionCombinada?.toLocaleString() : <TrendIndicator value={(data as any).trendCombinada} />}
+                    </div>
+                  </div>
+                  <div className="bg-green-50 p-2 rounded-md">
+                    <div className="text-xs text-green-800">Prod. Eval.</div>
+                    <div className="font-semibold text-green-900">
+                      {isTotal ? (data as any).totalProduccionEvaluadores.toLocaleString() : isNaN((data as any).trendProduccion) ? (data as any).avgProduccionEvaluadores?.toLocaleString() || (data as any).maxProduccionEvaluadores?.toLocaleString() : <TrendIndicator value={(data as any).trendProduccion} />}
+                    </div>
+                  </div>
+                  <div className="bg-yellow-50 p-2 rounded-md">
+                    <div className="text-xs text-yellow-800">Aprob. Auto.</div>
+                    <div className="font-semibold text-yellow-900">
+                     {isTotal ? (data as any).totalAprobacionAutomatica.toLocaleString() : isNaN((data as any).trendAutomatica) ? (data as any).avgAprobacionAutomatica?.toLocaleString() || (data as any).maxAprobacionAutomatica?.toLocaleString() : <TrendIndicator value={(data as any).trendAutomatica} />}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
 
           {/* Footer con información adicional */}

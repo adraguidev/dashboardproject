@@ -363,8 +363,8 @@ export function AdvancedPendientesReportTable({
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
+      {/* Table for Desktop */}
+      <div className="hidden md:block bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full table-fixed">
             <thead className="bg-gray-50">
@@ -462,6 +462,126 @@ export function AdvancedPendientesReportTable({
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Cards for Mobile */}
+      <div className="block md:hidden space-y-4">
+        {filteredOperators.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            No hay datos de pendientes disponibles para esta vista.
+          </div>
+        ) : (
+          <>
+            {filteredOperators.map((operadorData) => (
+              groupBy === 'year' ? (
+                // Vista de tarjeta simple para "Anual"
+                <div key={operadorData.operador} className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="max-w-[80%]">
+                      <h4 className="font-bold text-gray-900 leading-tight">{operadorData.operador}</h4>
+                      {renderSubEquipoBadge(operadorData.subEquipo || 'NO_ENCONTRADO')}
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-gray-500">Total</div>
+                      <div className="text-lg font-bold text-blue-600">{operadorData.total.toLocaleString()}</div>
+                    </div>
+                  </div>
+                  <div className="border-t border-gray-100 pt-3">
+                    <h5 className="text-xs font-medium text-gray-500 mb-2">Desglose por período:</h5>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      {visiblePeriods.slice(-6).map(period => {
+                        const count = operadorData.years[period] || 0;
+                        return (
+                          <div key={period} className="bg-gray-50 p-2 rounded-md">
+                            <div className="text-xs text-gray-500">{period}</div>
+                            <div className={`font-bold ${count > 0 ? 'text-gray-800' : 'text-gray-400'}`}>{count.toLocaleString()}</div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                // Vista de acordeón para otras agrupaciones
+                <details key={operadorData.operador} className="bg-white rounded-lg shadow-md border border-gray-200 open:ring-2 open:ring-blue-500 open:shadow-lg transition-all">
+                  <summary className="p-4 cursor-pointer list-none flex justify-between items-center">
+                    <div className="max-w-[80%]">
+                      <h4 className="font-bold text-gray-900 leading-tight">{operadorData.operador}</h4>
+                      {renderSubEquipoBadge(operadorData.subEquipo || 'NO_ENCONTRADO')}
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-gray-500">Total</div>
+                      <div className="text-lg font-bold text-blue-600">{operadorData.total.toLocaleString()}</div>
+                    </div>
+                  </summary>
+                  <div className="border-t border-gray-200 px-4 pt-3 pb-4">
+                    <h5 className="text-xs font-medium text-gray-500 mb-2">Desglose completo por período:</h5>
+                    <div className="space-y-2">
+                      {visiblePeriods.map(period => {
+                        const count = operadorData.years[period] || 0;
+                        return (
+                          <div key={period} className="flex justify-between items-center bg-gray-50 p-2 rounded-md text-sm">
+                            <span className="text-gray-600">{period}</span>
+                            <span className={`font-bold ${count > 0 ? 'text-gray-800' : 'text-gray-400'}`}>{count.toLocaleString()}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </details>
+              )
+            ))}
+            {/* Total Card */}
+            {filteredOperators.length > 0 && (
+              groupBy === 'year' ? (
+                // Vista de total simple para "Anual"
+                <div className="bg-gray-100 rounded-lg shadow-md border border-gray-300 p-4 mt-4 sticky bottom-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <div>
+                      <h4 className="text-sm font-bold text-gray-800">TOTAL FILTRADO</h4>
+                      <p className="text-xs text-gray-600">{filteredOperators.length} operadores</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-blue-700">{totals.total.toLocaleString()}</div>
+                    </div>
+                  </div>
+                  <div className="border-t border-gray-200 pt-2 grid grid-cols-3 sm:grid-cols-4 gap-2 text-center">
+                      {visiblePeriods.slice(-6).map(period => (
+                          <div key={period} className="bg-white/50 p-1 rounded-md">
+                            <div className="text-[10px] text-gray-500">{period}</div>
+                            <div className="font-bold text-sm text-gray-800">{totals[period]?.toLocaleString() || '0'}</div>
+                          </div>
+                      ))}
+                  </div>
+                </div>
+              ) : (
+                // Vista de total en acordeón para otras agrupaciones
+                <details className="bg-gray-100 rounded-lg shadow-md border border-gray-300 open:ring-2 open:ring-blue-500 open:shadow-lg transition-all mt-4 sticky bottom-4">
+                  <summary className="p-4 cursor-pointer list-none flex justify-between items-center">
+                    <div>
+                      <h4 className="text-sm font-bold text-gray-800">TOTAL FILTRADO</h4>
+                      <p className="text-xs text-gray-600">{filteredOperators.length} operadores</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-blue-700">{totals.total.toLocaleString()}</div>
+                    </div>
+                  </summary>
+                  <div className="border-t border-gray-300 px-4 pt-3 pb-4">
+                      <h5 className="text-xs font-medium text-gray-500 mb-2">Desglose completo de totales:</h5>
+                      <div className="space-y-2">
+                        {visiblePeriods.map(period => (
+                            <div key={period} className="flex justify-between items-center bg-white/50 p-2 rounded-md text-sm">
+                              <span className="text-gray-600">{period}</span>
+                              <span className="font-bold text-gray-800">{totals[period]?.toLocaleString() || '0'}</span>
+                            </div>
+                        ))}
+                      </div>
+                    </div>
+                </details>
+              )
+            )}
+          </>
+        )}
       </div>
 
       {/* Results info */}
