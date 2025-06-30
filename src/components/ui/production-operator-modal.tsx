@@ -163,11 +163,11 @@ export function ProductionOperatorModal({ operator, orderedDates, onClose }: Mod
                 strokeWidth={2}
                 fill="url(#colorProduccion)"
                 dot={(props) => {
-                  const { cx, cy, payload } = props;
+                  const { cx, cy, payload, key } = props;
                   if (payload.isWeekend) {
-                    return <circle cx={cx} cy={cy} r={5} fill="#f97316" stroke="#fff" strokeWidth={2} />;
+                    return <circle key={key} cx={cx} cy={cy} r={5} fill="#f97316" stroke="#fff" strokeWidth={2} />;
                   }
-                  return <circle cx={cx} cy={cy} r={4} fill="#4f46e5" />;
+                  return <circle key={key} cx={cx} cy={cy} r={4} fill="#4f46e5" />;
                 }}
                 activeDot={{ r: 6 }}
               />
