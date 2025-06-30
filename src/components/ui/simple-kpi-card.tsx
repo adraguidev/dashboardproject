@@ -8,7 +8,7 @@ interface SimpleKPICardProps {
   change?: number
   trend?: 'up' | 'down' | 'neutral'
   description?: string
-  icon?: string
+  icon?: React.ReactNode
   className?: string
 }
 
@@ -47,7 +47,7 @@ export function SimpleKPICard({
     <Card className={`p-6 hover:shadow-lg transition-shadow ${className}`}>
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-medium text-gray-600">{title}</h3>
-        {icon && <span className="text-2xl">{icon}</span>}
+        {icon && <div className="text-2xl text-gray-400">{icon}</div>}
       </div>
       
       <div className="mb-2">

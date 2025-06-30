@@ -2,9 +2,10 @@
 
 import React, { useState } from 'react'
 import { useSpeData } from '@/hooks/use-spe-data'
-import { Loader2, AlertTriangle, BarChart3, Construction } from 'lucide-react'
+import { Loader2, AlertTriangle, BarChart3, Construction, TrendingUp } from 'lucide-react'
 import { SpePendientesTable } from './spe-pendientes-table'
 import { SpeProcessSummaryTable } from './spe-process-summary-table'
+import { SpeIngresosView } from './spe-ingresos-view'
 
 export function SpeModules() {
   const [selectedModule, setSelectedModule] = useState('pendientes')
@@ -23,9 +24,9 @@ export function SpeModules() {
     {
       id: 'ingresos',
       name: 'Ingresos',
-      icon: Construction,
-      status: 'coming-soon',
-      color: 'text-gray-400',
+      icon: TrendingUp,
+      status: 'active',
+      color: 'text-blue-600',
     },
     {
       id: 'produccion',
@@ -74,6 +75,8 @@ export function SpeModules() {
             </div>
           </div>
         )
+      case 'ingresos':
+        return <SpeIngresosView />
       default:
         return (
           <div className="p-16 text-center text-gray-500">

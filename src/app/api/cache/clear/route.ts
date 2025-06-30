@@ -1,55 +1,80 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { redis } from '@/lib/redis'; // Importar la instancia de Redis
-import { logInfo, logError } from '@/lib/logger'
+import { revalidateTag } from 'next/cache'
+import { redis } from '@/lib/redis'
+import { logInfo, logError, logWarn } from '@/lib/logger'
 
-const CACHE_PREFIX = 'dashboard:*'; // Prefijo para las claves de caché del dashboard
+// Prefijo para los módulos antiguos que usan caché manual en Redis
+const LEGACY_CACHE_PREFIX = 'dashboard:*';
+// Tag para los módulos nuevos que usan la caché integrada de Next.js
+const SPE_CACHE_TAG = 'spe-cache';
 
 /**
- * Endpoint para limpiar completamente el caché del dashboard en Redis.
+ * Endpoint para limpiar la caché global, combinando el método legacy (Redis)
+ * y el moderno (Next.js Tags) de forma segura.
  */
-export async function POST(_request: NextRequest) {
-  try {
-    logInfo(`🧹 Iniciando limpieza de caché en Redis (patrón: ${CACHE_PREFIX})`);
-    
-    const stream = redis.scanStream({
-      match: CACHE_PREFIX,
-      count: 100,
-    });
+export async function POST(request: NextRequest) {
+  logInfo(`🧹 Iniciando limpieza de caché GLOBAL (Legacy Redis + Next.js Tags).`);
 
-    let keysFound = 0;
-    const pipeline = redis.pipeline();
+  const results = {
+    legacyKeysDeleted: 0,
+    tagRevalidated: false,
+    errors: [] as string[],
+    warnings: [] as string[],
+  };
 
-    for await (const keys of stream) {
-      if (keys.length) {
-        keysFound += keys.length;
-        pipeline.del(...keys);
+  // --- 1. Limpiar caché Legacy de Redis (si está habilitado) ---
+  if (process.env.UPSTASH_REDIS_URL) {
+    try {
+      const stream = redis.scanStream({ match: LEGACY_CACHE_PREFIX, count: 100 });
+      const pipeline = redis.pipeline();
+      let keysFound = 0;
+      for await (const keys of stream) {
+        if (keys.length) {
+          keysFound += keys.length;
+          pipeline.del(...keys);
+        }
       }
+      if (keysFound > 0) {
+        await pipeline.exec();
+      }
+      results.legacyKeysDeleted = keysFound;
+      logInfo(`✅ Caché Legacy de Redis limpiado. ${results.legacyKeysDeleted} claves eliminadas.`);
+    } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : 'Error desconocido en Redis';
+      logError('❌ Error limpiando caché Legacy de Redis:', e);
+      results.errors.push(`Redis: ${errorMsg}`);
     }
-
-    if (keysFound > 0) {
-      await pipeline.exec();
-    }
-    
-    logInfo(`✅ Caché de Redis limpiado. ${keysFound} claves eliminadas.`);
-
-    return NextResponse.json({ 
-      success: true, 
-      message: 'Cache de Redis limpiado exitosamente',
-      keysDeleted: keysFound
-    });
-
-  } catch (error) {
-    logError('❌ Error limpiando cache de Redis:', error)
-    
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: 'Error interno del servidor al limpiar cache de Redis',
-        details: error instanceof Error ? error.message : 'Error desconocido'
-      },
-      { status: 500 }
-    );
+  } else {
+    const warningMsg = "Redis no está configurado, omitiendo limpieza de caché legacy.";
+    logWarn(warningMsg);
+    results.warnings.push(warningMsg);
   }
+
+  // --- 2. Revalidar Tag de la caché de Next.js (para SPE) ---
+  try {
+    revalidateTag(SPE_CACHE_TAG);
+    results.tagRevalidated = true;
+    logInfo(`✅ Tag de Next.js '${SPE_CACHE_TAG}' revalidado.`);
+  } catch (e) {
+    const errorMsg = e instanceof Error ? e.message : 'Error desconocido en revalidateTag';
+    logError(`❌ Error revalidando el tag '${SPE_CACHE_TAG}':`, e);
+    results.errors.push(`Next.js Cache: ${errorMsg}`);
+  }
+  
+  // --- 3. Enviar respuesta ---
+  if (results.errors.length > 0) {
+    return NextResponse.json({
+      success: false,
+      message: "La limpieza de caché finalizó con errores.",
+      details: results
+    }, { status: 500 });
+  }
+
+  return NextResponse.json({
+    success: true,
+    message: 'Caché global limpiado exitosamente.',
+    details: results
+  });
 }
 
 export const runtime = 'nodejs' 
