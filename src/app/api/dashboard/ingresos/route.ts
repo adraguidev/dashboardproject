@@ -391,7 +391,8 @@ export async function GET(request: NextRequest) {
     const process = searchParams.get('process') as 'ccm' | 'prr' | null;
     const days = parseInt(searchParams.get('days') || '30');
 
-    const cacheKey = `dashboard:ingresos_${process}_${days}`;
+    const cacheKey = `dashboard:ingresos:${process}:v2`;
+    const ttl = 6 * 60 * 60; // 6 horas
 
     if (!['ccm', 'prr'].includes(process || 'ccm')) {
       return NextResponse.json({ 
@@ -443,8 +444,8 @@ export async function GET(request: NextRequest) {
     // Usar cachedOperation para gestionar el caché y generar datos cuando sea necesario
     const report = await cachedOperation({
       key: cacheKey,
-      ttlSeconds: 2 * 60 * 60, // 2 horas de caché para datos persistentes (REDUCIDO para evitar datos obsoletos)
-      fetcher: async () => {
+      ttl: ttl,
+      operation: async () => {
         // Generar reporte con datos separados
         const dailyReport = generateIngresosReport(dailyData, process as 'ccm' | 'prr', days);
         

@@ -11,7 +11,8 @@ import { usePendientesReport } from '@/hooks/use-pendientes-report'
 import { useProduccionReport } from '@/hooks/use-produccion-report'
 import { useIngresos } from '@/hooks/use-ingresos'
 import { useEvaluadores } from '@/hooks/use-evaluadores'
-import { BarChart3, CheckCircle, Clock, TrendingUp, Construction, Factory, TrendingDown, Activity } from 'lucide-react'
+import { BarChart3, CheckCircle, Clock, TrendingUp, Construction, Factory, TrendingDown, Activity, BrainCircuit } from 'lucide-react'
+import { ThroughputChart } from '../ui/throughput-chart'
 
 interface ProcessModulesProps {
   selectedProcess: 'ccm' | 'prr'
@@ -84,6 +85,14 @@ export function ProcessModules({
       description: 'Histórico de pendientes por operador',
       status: 'active',
       color: 'text-orange-600'
+    },
+    {
+      id: 'analisis',
+      name: 'Análisis',
+      icon: BrainCircuit,
+      description: 'Análisis de Throughput y Eficiencia',
+      status: 'active',
+      color: 'text-cyan-600'
     },
     {
       id: 'resueltos',
@@ -175,6 +184,13 @@ export function ProcessModules({
               className="w-full" 
               proceso={selectedProcess.toUpperCase() as 'CCM' | 'PRR'}
             />
+          </div>
+        )
+
+      case 'analisis':
+        return (
+          <div className="p-6">
+            <ThroughputChart proceso={selectedProcess} />
           </div>
         )
       

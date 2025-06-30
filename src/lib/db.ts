@@ -625,6 +625,50 @@ export class DirectDatabaseAPI {
     return query.limit(limit).offset(offset);
   }
 
+  // =========== MÉTODOS DE ANÁLISIS AGREGADOS ===========
+
+  async getDailyIngresos(proceso: 'ccm' | 'prr', daysBack: number) {
+    const table = proceso === 'ccm' ? tableCCM : tablePRR;
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - daysBack);
+    
+    return this.db
+      .select({
+        fecha: table.fechaexpendiente,
+        total: count(table.numerotramite)
+      })
+      .from(table)
+      .where(and(
+        gte(table.fechaexpendiente, startDate.toISOString().split('T')[0]),
+        lte(table.fechaexpendiente, endDate.toISOString().split('T')[0])
+      ))
+      .groupBy(table.fechaexpendiente)
+      .orderBy(desc(table.fechaexpendiente));
+  }
+
+  async getDailyProduccion(proceso: 'ccm' | 'prr', daysBack: number) {
+    const table = proceso === 'ccm' ? tableCCM : tablePRR;
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - daysBack);
+
+    return this.db
+      .select({
+        fecha: table.fechapre,
+        operador: table.operadorpre,
+        total: count(table.numerotramite)
+      })
+      .from(table)
+      .where(and(
+        isNotNull(table.fechapre),
+        gte(table.fechapre, startDate.toISOString().split('T')[0]),
+        lte(table.fechapre, endDate.toISOString().split('T')[0])
+      ))
+      .groupBy(table.fechapre, table.operadorpre)
+      .orderBy(desc(table.fechapre));
+  }
+
   // =========== MÉTODOS PARA HISTÓRICOS ===========
 
   async upsertHistoricoPendientesOperador(data: (typeof historicoPendientesOperador.$inferInsert)[]) {
@@ -658,6 +702,26 @@ export class DirectDatabaseAPI {
           sinAsignar: sql`excluded.sin_asignar`,
         },
       });
+  }
+
+  // =========== MÉTODOS DE BORRADO PARA HISTÓRICOS ===========
+
+  async deleteHistoricoDelDiaOperador(fecha: string, proceso: 'CCM' | 'PRR') {
+    return this.db.delete(historicoPendientesOperador).where(
+      and(
+        eq(historicoPendientesOperador.fecha, fecha),
+        eq(historicoPendientesOperador.proceso, proceso)
+      )
+    );
+  }
+
+  async deleteHistoricoDelDiaSinAsignar(fecha: string, proceso: 'CCM' | 'PRR') {
+    return this.db.delete(historicoSinAsignar).where(
+      and(
+        eq(historicoSinAsignar.fecha, fecha),
+        eq(historicoSinAsignar.proceso, proceso)
+      )
+    );
   }
 }
 

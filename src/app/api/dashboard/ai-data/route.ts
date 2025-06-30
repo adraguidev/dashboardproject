@@ -38,12 +38,14 @@ export async function GET(request: NextRequest) {
 
     logInfo(`🤖 IA solicitando datos: ${params.proceso} - formato ${params.formato}`);
 
+    const cacheKey = `dashboard:ai_optimized:${params.proceso}:v2`;
+    const ttl = 6 * 60 * 60; // 6 horas
+
     // Obtener datos usando el sistema de caché optimizado
     const fullData = await cachedOperation<AIOptimizedDashboardData>({
-      key: `dashboard:ai_data:${params.proceso}:${params.periodo}:v1`,
-      ttlSeconds: 2 * 60 * 60, // 2 horas para IA
-
-      fetcher: async (): Promise<AIOptimizedDashboardData> => {
+      key: cacheKey,
+      ttl: ttl, // Usa el mismo TTL para consistencia
+      operation: async (): Promise<AIOptimizedDashboardData> => {
         logInfo(`🔄 Generando datos frescos para IA: ${params.proceso}`);
         
         const dbAPI = await createDirectDatabaseAPI();

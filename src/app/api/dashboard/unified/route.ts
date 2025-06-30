@@ -55,9 +55,12 @@ export async function GET(request: NextRequest) {
     }
 
     // 2. Usar el gestor de cache optimizado para IA
+    const cacheKey = `dashboard:ai_optimized:${proceso}:v2`;
+    const ttl = 6 * 60 * 60; // 6 horas
+
     const dashboardData = await cachedOperation<AIOptimizedDashboardData>({
-      key: `dashboard:ai_optimized:${proceso}:v2`,
-      ttlSeconds: 2 * 60 * 60, // 2 horas (consistente con otros endpoints)
+      key: cacheKey,
+      ttl: ttl,
 
       // Función que obtiene y estructura todos los datos
       fetcher: async (): Promise<AIOptimizedDashboardData> => {

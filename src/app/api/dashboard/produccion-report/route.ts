@@ -330,13 +330,14 @@ export async function GET(request: NextRequest) {
 
     console.log(`✅ Datos obtenidos: ${data.length} registros de producción, ${evaluadores.length} evaluadores`)
 
-    const cacheKey = `dashboard:produccion_${process}_${days}_${dayType}`;
+    const cacheKey = `dashboard:produccion-report:${process}:v2`;
+    const ttl = 6 * 60 * 60; // 6 horas
     
     // Usar cachedOperation para gestionar el caché y generar datos cuando sea necesario
     const report = await cachedOperation({
       key: cacheKey,
-      ttlSeconds: 2 * 60 * 60, // 2 horas de caché para datos persistentes (REDUCIDO para evitar datos obsoletos)
-      fetcher: async () => generateProduccionReport(data, evaluadores, process, days, dayType)
+      ttl: ttl,
+      operation: async () => generateProduccionReport(data, evaluadores, process, days, dayType)
     });
 
     console.log(`📋 Reporte generado: ${report.data.length} operadores, ${report.fechas.length} días, ${report.grandTotal} total`)

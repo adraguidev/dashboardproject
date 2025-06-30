@@ -215,7 +215,8 @@ export async function GET(request: NextRequest) {
     const process = searchParams.get('process') as 'ccm' | 'prr' | null;
     const groupBy = (searchParams.get('groupBy') || 'quarter') as 'year' | 'quarter' | 'month';
 
-    const cacheKey = `dashboard:pendientes_${process}_${groupBy}`;
+    const cacheKey = `dashboard:pendientes-report:${process}:v2`;
+    const ttl = 6 * 60 * 60; // 6 horas
 
     console.log(`🔍 Generando reporte de pendientes para proceso: ${process}, agrupado por: ${groupBy}`);
 
@@ -229,8 +230,8 @@ export async function GET(request: NextRequest) {
     // Usar cachedOperation para manejar el caché
     const report = await cachedOperation({
       key: cacheKey,
-      ttlSeconds: 2 * 60 * 60, // 2 horas de caché para datos persistentes (REDUCIDO para evitar datos obsoletos)
-      fetcher: async () => {
+      ttl: ttl,
+      operation: async () => {
         let data: any[] = []
         let evaluadores: Evaluador[] = []
 
