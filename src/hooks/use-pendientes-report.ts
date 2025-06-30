@@ -6,14 +6,16 @@ import { PendientesReportSummary, GroupingType } from '@/types/dashboard'
 
 interface UsePendientesReportOptions {
   process: 'ccm' | 'prr'
+  groupBy?: GroupingType
   enabled?: boolean
 }
 
 export function usePendientesReport({
   process,
+  groupBy: initialGroupBy = 'year',
   enabled = true,
 }: UsePendientesReportOptions) {
-  const [groupBy, setGroupBy] = useState<GroupingType>('year')
+  const [groupBy, setGroupBy] = useState<GroupingType>(initialGroupBy)
   
   // La clave de la query ahora incluye el 'groupBy' para que se actualice
   const queryKey = ['pendientesReport', process, groupBy];
