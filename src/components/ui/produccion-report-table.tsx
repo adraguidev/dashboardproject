@@ -5,6 +5,7 @@ import { Card } from './card'
 import { ProduccionReportSummary, Evaluador } from '@/types/dashboard'
 import { ProduccionChart } from './produccion-chart'
 import { formatDateShort } from '@/lib/date-utils'
+import { ProductionOperatorModal } from './production-operator-modal'
 
 interface ProduccionReportTableProps {
   report: ProduccionReportSummary | null
@@ -28,6 +29,7 @@ export function ProduccionReportTable({
   currentFilters
 }: ProduccionReportTableProps) {
   const [activeTab, setActiveTab] = useState<TabType>('general')
+  const [modalOperator, setModalOperator] = useState<ProduccionReportData|null>(null)
 
   // A simple normalization for comparison: uppercase and alphanumeric.
   const normalizeSimple = (name: string): string => {
@@ -314,7 +316,8 @@ export function ProduccionReportTable({
             {filteredOperators.map((operadorData) => (
               <tr 
                 key={operadorData.operador}
-                className={`transition-colors ${operadorData.colorClass || ''}`}
+                className={`transition-colors cursor-pointer ${operadorData.colorClass || ''}`}
+                onClick={() => setModalOperator(operadorData)}
               >
                 <td className={`px-4 py-3 text-sm font-medium text-gray-900 sticky left-0 z-10 border-r ${operadorData.colorClass || 'bg-white'}`}>
                   <div className="max-w-[200px] truncate" title={operadorData.operador}>
@@ -402,6 +405,15 @@ export function ProduccionReportTable({
           className="border-0"
         />
       </div>
+
+      {/* Modal */}
+      {modalOperator && (
+        <ProductionOperatorModal 
+          operator={{ operador: modalOperator.operador, fechas: modalOperator.fechas }}
+          orderedDates={visibleFechas}
+          onClose={() => setModalOperator(null)}
+        />
+      )}
     </Card>
   )
 } 
