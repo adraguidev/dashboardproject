@@ -549,8 +549,8 @@ export function ThroughputChart({ proceso }: ChartProps) {
             <div className="flex items-center justify-between text-xs text-gray-500">
               <span>🔍 Vista detallada día por día</span>
               <span>
-                ↑ Déficit (ingresos > producción) | 
-                ↓ Superávit (producción > ingresos) | 
+                ↑ Déficit (ingresos &gt; producción) | 
+                ↓ Superávit (producción &gt; ingresos) | 
                 = Equilibrio
               </span>
             </div>
