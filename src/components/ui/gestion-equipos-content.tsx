@@ -78,7 +78,8 @@ export function GestionEquiposContent() {
   // El hook useQuery ya maneja automáticamente el cambio de proceso
   // No necesitamos useEffect manual
 
-  const handleProcessChange = (process: 'ccm' | 'prr') => {
+  const handleProcessChange = (process: string) => {
+    if (process !== 'ccm' && process !== 'prr') return;
     router.push(`/gestion-equipos?proceso=${process}`)
   }
 

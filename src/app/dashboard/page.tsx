@@ -7,10 +7,11 @@ import { DashboardHeader } from '@/components/dashboard/dashboard-header'
 import { ProcessModules } from '@/components/dashboard/process-modules'
 import { ErrorDisplay } from '@/components/ui/error-boundary'
 import { clearAllCache as clearLocalStorageCache } from '@/lib/frontend-cache'
+import { ProcessKey } from '@/types/dashboard'
 
 export default function DashboardPage() {
   const queryClient = useQueryClient()
-  const [selectedProcess, setSelectedProcess] = useState<'ccm' | 'prr'>('ccm')
+  const [selectedProcess, setSelectedProcess] = useState<ProcessKey>('ccm')
   const [activeModule, setActiveModule] = useState('pendientes')
   
   const isFetching = useIsFetching();
@@ -20,7 +21,7 @@ export default function DashboardPage() {
     error, 
   } = useSystemStatus()
 
-  const handleProcessChange = (process: 'ccm' | 'prr') => {
+  const handleProcessChange = (process: ProcessKey) => {
     setSelectedProcess(process)
   }
 
@@ -74,13 +75,18 @@ export default function DashboardPage() {
         loading={isInitialLoading || isFetching > 0}
       />
       <div className="max-w-7xl mx-auto px-6 py-6">
-        <div className="bg-white border border-gray-200/60 rounded-xl shadow-sm overflow-hidden">
+        {selectedProcess === 'spe' || selectedProcess === 'pas' ? (
+          <div className="p-12 text-center text-gray-600">
+            <h2 className="text-2xl font-semibold mb-4">Módulos para {selectedProcess.toUpperCase()} en desarrollo</h2>
+            Próximamente se mostrará información específica para este proceso.
+          </div>
+        ) : (
           <ProcessModules
-            selectedProcess={selectedProcess}
+            selectedProcess={selectedProcess as 'ccm' | 'prr'}
             selectedModule={activeModule}
             onModuleChange={handleModuleChange}
           />
-        </div>
+        )}
       </div>
     </div>
   )

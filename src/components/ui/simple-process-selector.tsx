@@ -1,10 +1,11 @@
 'use client'
 
 import React from 'react'
+import { ProcessKey } from '@/types/dashboard'
 
 interface SimpleProcessSelectorProps {
-  selectedProcess: 'ccm' | 'prr'
-  onProcessChange: (process: 'ccm' | 'prr') => void
+  selectedProcess: ProcessKey
+  onProcessChange: (process: ProcessKey) => void
   loading?: boolean
 }
 
@@ -38,6 +39,28 @@ export function SimpleProcessSelector({
           }`}
         >
           PRR
+        </button>
+        <button
+          onClick={() => onProcessChange('spe')}
+          disabled={loading}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            selectedProcess === 'spe'
+              ? 'bg-purple-600 text-white shadow-sm'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+          }`}
+        >
+          SPE
+        </button>
+        <button
+          onClick={() => onProcessChange('pas')}
+          disabled={loading}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            selectedProcess === 'pas'
+              ? 'bg-yellow-600 text-white shadow-sm'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+          }`}
+        >
+          PAS
         </button>
       </div>
     </div>

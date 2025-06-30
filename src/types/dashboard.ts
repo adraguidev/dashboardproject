@@ -259,3 +259,8 @@ export interface WeeklyIngresosEntry {
   endDate: string // "2025-01-07"
   count: number
 }
+
+// Alias global para los diferentes procesos manejados en el sistema.
+// A partir de ahora, utilizaremos `ProcessKey` en lugar de escribir manualmente
+// la unión literal en cada componente.
+export type ProcessKey = 'ccm' | 'prr' | 'spe' | 'pas'

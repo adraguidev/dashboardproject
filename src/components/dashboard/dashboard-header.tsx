@@ -4,10 +4,11 @@ import React, { useState, useRef, useEffect } from 'react'
 import { RefreshCcw, Settings, Bell, ChevronDown, Users, Upload } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
 import { FileUploadModal } from '@/components/ui/file-upload-modal'
+import { ProcessKey } from '@/types/dashboard'
 
 interface DashboardHeaderProps {
-  selectedProcess?: 'ccm' | 'prr'
-  onProcessChange?: (process: 'ccm' | 'prr') => void
+  selectedProcess?: ProcessKey
+  onProcessChange?: (process: ProcessKey) => void
   onRefresh?: () => void
   loading?: boolean
 }
@@ -22,9 +23,11 @@ export function DashboardHeader({
   const [showUploadModal, setShowUploadModal] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  const processes = {
+  const processes: Record<ProcessKey, { name: string; fullName: string; color: string }> = {
     ccm: { name: 'CCM', fullName: 'Cambio de Calidad Migratoria', color: 'bg-blue-500' },
-    prr: { name: 'PRR', fullName: 'Prórroga de Residencia', color: 'bg-emerald-500' }
+    prr: { name: 'PRR', fullName: 'Prórroga de Residencia', color: 'bg-emerald-500' },
+    spe: { name: 'SPE', fullName: 'Servicios Prestados por Exclusividad', color: 'bg-purple-500' },
+    pas: { name: 'PAS', fullName: 'Solicitud de Visas', color: 'bg-yellow-500' }
   }
 
   const currentProcess = processes[selectedProcess]
@@ -43,7 +46,7 @@ export function DashboardHeader({
     }
   }, [])
 
-  const handleProcessSelect = (process: 'ccm' | 'prr') => {
+  const handleProcessSelect = (process: ProcessKey) => {
     onProcessChange?.(process)
     setShowDropdown(false)
   }
@@ -89,7 +92,7 @@ export function DashboardHeader({
                         {Object.entries(processes).map(([key, process]) => (
                           <button
                             key={key}
-                            onClick={() => handleProcessSelect(key as 'ccm' | 'prr')}
+                            onClick={() => handleProcessSelect(key as ProcessKey)}
                             className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors ${
                               selectedProcess === key ? 'bg-blue-50 border-r-2 border-blue-500' : ''
                             }`}
@@ -137,7 +140,7 @@ export function DashboardHeader({
                         <select 
                             id="process-select-mobile"
                             value={selectedProcess}
-                            onChange={(e) => handleProcessSelect(e.target.value as 'ccm' | 'prr')}
+                            onChange={(e) => handleProcessSelect(e.target.value as ProcessKey)}
                             className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                         >
                             {Object.entries(processes).map(([key, process]) => (
