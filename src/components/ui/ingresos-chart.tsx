@@ -25,6 +25,49 @@ export function IngresosChart({
 }: IngresosChartProps) {
   const [selectedPeriod, setSelectedPeriod] = useState(30)
 
+  // ----------------------------------------------------
+  // GUARDIA DE RENDERIZADO TEMPRANO
+  // ----------------------------------------------------
+  if (loading) {
+    return (
+      <Card className={`p-6 ${className}`}>
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Cargando gráfico de ingresos...</p>
+          </div>
+        </div>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card className={`p-6 ${className}`}>
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <div className="text-red-500 text-4xl mb-4">⚠️</div>
+            <h3 className="text-lg font-semibold text-red-600 mb-2">Error al cargar datos</h3>
+            <p className="text-gray-600">{error}</p>
+          </div>
+        </div>
+      </Card>
+    )
+  }
+
+  if (!report || !report.data || report.data.length === 0) {
+    return (
+      <Card className={`p-6 ${className}`}>
+        <div className="flex items-center justify-center h-96">
+          <div className="text-4xl mb-4">📊</div>
+          <h3 className="text-lg font-semibold text-gray-700 mb-2">Sin datos</h3>
+          <p className="text-gray-500">No hay datos de ingresos para mostrar</p>
+        </div>
+      </Card>
+    )
+  }
+  // ----------------------------------------------------
+
   // Opciones de período
   const periodOptions = [
     { value: 15, label: '15 días' },
@@ -100,47 +143,6 @@ export function IngresosChart({
       )
     }
     return null
-  }
-
-  if (loading) {
-    return (
-      <Card className={`p-6 ${className}`}>
-        <div className="flex items-center justify-center h-96">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Cargando gráfico de ingresos...</p>
-          </div>
-        </div>
-      </Card>
-    )
-  }
-
-  if (error) {
-    return (
-      <Card className={`p-6 ${className}`}>
-        <div className="flex items-center justify-center h-96">
-          <div className="text-center">
-            <div className="text-red-500 text-4xl mb-4">⚠️</div>
-            <h3 className="text-lg font-semibold text-red-600 mb-2">Error al cargar datos</h3>
-            <p className="text-gray-600">{error}</p>
-          </div>
-        </div>
-      </Card>
-    )
-  }
-
-  if (!report || chartData.length === 0) {
-    return (
-      <Card className={`p-6 ${className}`}>
-        <div className="flex items-center justify-center h-96">
-          <div className="text-center">
-            <div className="text-4xl mb-4">📊</div>
-            <h3 className="text-lg font-semibold text-gray-700 mb-2">Sin datos</h3>
-            <p className="text-gray-500">No hay datos de ingresos para mostrar</p>
-          </div>
-        </div>
-      </Card>
-    )
   }
 
   return (

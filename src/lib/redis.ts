@@ -30,7 +30,7 @@ if (process.env.UPSTASH_REDIS_URL) {
   });
 
   redis.on('connect', () => {
-    console.log('✅ Conexión a Redis (Upstash) establecida.');
+  console.log('✅ Conexión a Redis (Upstash) establecida.');
   });
 
 } else {
@@ -64,4 +64,4 @@ export const jobStatusManager = {
       return null;
     }
   }
-}; 
+};

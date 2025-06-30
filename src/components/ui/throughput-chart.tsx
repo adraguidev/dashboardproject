@@ -121,7 +121,45 @@ export function ThroughputChart({ proceso }: ChartProps) {
   const { data, isLoading, error } = useThroughputAnalysis(proceso, periodo);
   const [showDetailedTable, setShowDetailedTable] = useState(false);
 
-  const tableStats = data ? calculateTableStats(data) : null;
+  // ----------------------------------------------------
+  // GUARDIA DE RENDERIZADO TEMPRANO
+  // ----------------------------------------------------
+  if (isLoading) {
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200 flex justify-center items-center h-96">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Cargando análisis de throughput...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200 flex justify-center items-center h-96">
+        <div className="text-center text-red-600">
+          <AlertCircle className="h-8 w-8 mx-auto mb-2" />
+          <p>Error al cargar el análisis:</p>
+          <p className="text-sm">{error.message}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200 flex justify-center items-center h-96">
+        <div className="text-center text-gray-500">
+          <BarChart3 className="h-8 w-8 mx-auto mb-2" />
+          <p>No hay datos suficientes para el análisis.</p>
+        </div>
+      </div>
+    )
+  }
+  // ----------------------------------------------------
+
+  const tableStats = calculateTableStats(data);
 
   return (
     <div className="space-y-6">
