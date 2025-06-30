@@ -60,9 +60,7 @@ export async function GET(request: NextRequest) {
 
     const dashboardData = await cachedOperation<AIOptimizedDashboardData>({
       key: cacheKey,
-      ttl: ttl,
-
-      // Función que obtiene y estructura todos los datos
+      ttlSeconds: ttl,
       fetcher: async (): Promise<AIOptimizedDashboardData> => {
         logInfo(`🤖 Generando datos optimizados para IA: ${proceso}`);
         

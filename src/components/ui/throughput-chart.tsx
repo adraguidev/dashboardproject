@@ -533,7 +533,7 @@ export function ThroughputChart({ proceso }: ChartProps) {
                             {total.toLocaleString()}
                           </span>
                           <div className={`text-xs ${balance > 0 ? 'text-red-500' : balance < 0 ? 'text-green-500' : 'text-gray-500'}`}>
-                            {balance > 0 ? `↑ +${balance}` : balance < 0 ? `↓ ${balance}` : '='}
+                            {balance > 0 ? `↑ +${balance}` : (balance < 0 ? `↓ ${balance}` : '=')}
                           </div>
                         </div>
                       </td>

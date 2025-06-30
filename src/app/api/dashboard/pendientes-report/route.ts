@@ -231,7 +231,7 @@ export async function GET(request: NextRequest) {
     const report = await cachedOperation({
       key: cacheKey,
       ttl: ttl,
-      operation: async () => {
+      fetcher: async () => {
         let data: any[] = []
         let evaluadores: Evaluador[] = []
 

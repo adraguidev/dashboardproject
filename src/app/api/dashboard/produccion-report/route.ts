@@ -336,8 +336,8 @@ export async function GET(request: NextRequest) {
     // Usar cachedOperation para gestionar el caché y generar datos cuando sea necesario
     const report = await cachedOperation({
       key: cacheKey,
-      ttl: ttl,
-      operation: async () => generateProduccionReport(data, evaluadores, process, days, dayType)
+      ttlSeconds: ttl,
+      fetcher: async () => generateProduccionReport(data, evaluadores, process as 'ccm' | 'prr', days, dayType as 'habiles' | 'calendario')
     });
 
     console.log(`📋 Reporte generado: ${report.data.length} operadores, ${report.fechas.length} días, ${report.grandTotal} total`)

@@ -44,8 +44,8 @@ export async function GET(request: NextRequest) {
     // Obtener datos usando el sistema de caché optimizado
     const fullData = await cachedOperation<AIOptimizedDashboardData>({
       key: cacheKey,
-      ttl: ttl, // Usa el mismo TTL para consistencia
-      operation: async (): Promise<AIOptimizedDashboardData> => {
+      ttlSeconds: ttl, // Usa el mismo TTL para consistencia
+      fetcher: async (): Promise<AIOptimizedDashboardData> => {
         logInfo(`🔄 Generando datos frescos para IA: ${params.proceso}`);
         
         const dbAPI = await createDirectDatabaseAPI();
