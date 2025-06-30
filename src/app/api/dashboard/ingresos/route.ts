@@ -444,7 +444,7 @@ export async function GET(request: NextRequest) {
     // Usar cachedOperation para gestionar el caché y generar datos cuando sea necesario
     const report = await cachedOperation({
       key: cacheKey,
-      ttl: ttl,
+      ttlSeconds: ttl,
       fetcher: async () => {
         // Generar reporte con datos separados
         const dailyReport = generateIngresosReport(dailyData, process as 'ccm' | 'prr', days);

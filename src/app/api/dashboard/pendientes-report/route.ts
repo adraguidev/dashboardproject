@@ -230,7 +230,7 @@ export async function GET(request: NextRequest) {
     // Usar cachedOperation para manejar el caché
     const report = await cachedOperation({
       key: cacheKey,
-      ttl: ttl,
+              ttlSeconds: ttl,
       fetcher: async () => {
         let data: any[] = []
         let evaluadores: Evaluador[] = []
