@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import { useState } from 'react'
-import type { IngresosReport } from '@/types/dashboard'
+import type { IngresosReport, ProcessMetrics } from '@/types/dashboard'
 
 // Esquema que coincide con la estructura de IngresosChartData en dashboard.ts
 const ingresosChartDataSchema = z.object({
@@ -22,6 +22,16 @@ const weeklyDataSchema = z.object({
   weeks: z.array(z.any())
 });
 
+const processMetricsSchema = z.object({
+  proceso: z.string(),
+  totalEntries: z.number(),
+  firstEntry: z.string(),
+  lastEntry: z.string(),
+  avgDiario: z.number(),
+  avgSemanal: z.number(),
+  avgMensual: z.number(),
+});
+
 // Esquema que coincide con la estructura completa de IngresosReport
 const ingresosReportSchema = z.object({
   data: z.array(ingresosChartDataSchema),
@@ -34,6 +44,7 @@ const ingresosReportSchema = z.object({
   periodo: z.string(),
   monthlyData: monthlyDataSchema,
   weeklyData: weeklyDataSchema,
+  processMetrics: z.array(processMetricsSchema).optional(),
 });
 
 // Esquema para la respuesta completa de la API

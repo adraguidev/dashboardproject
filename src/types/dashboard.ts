@@ -224,7 +224,7 @@ export interface IngresosReport {
   totalTramites: number
   fechaInicio: string
   fechaFin: string
-  process: 'ccm' | 'prr'
+  process: ProcessKey
   periodo: string // Descripción del período (ej: "Últimos 30 días")
   promedioTramitesPorDia: number
   diasConDatos: number
@@ -232,6 +232,8 @@ export interface IngresosReport {
   monthlyData: MonthlyIngresosData
   // Datos semanales
   weeklyData: WeeklyIngresosData
+  // Datos por proceso para SPE
+  processMetrics?: ProcessMetrics[]
 }
 
 export interface MonthlyIngresosData {
@@ -264,3 +266,13 @@ export interface WeeklyIngresosEntry {
 // A partir de ahora, utilizaremos `ProcessKey` en lugar de escribir manualmente
 // la unión literal en cada componente.
 export type ProcessKey = 'ccm' | 'prr' | 'spe' | 'pas'
+
+export interface ProcessMetrics {
+  proceso: string;
+  totalEntries: number;
+  firstEntry: string;
+  lastEntry: string;
+  avgDiario: number;
+  avgSemanal: number;
+  avgMensual: number;
+}

@@ -9,7 +9,7 @@ import type { IngresosReport, MonthlyIngresosData, WeeklyIngresosData } from '@/
 // --- CONFIGURACIÓN ---
 const SPREADSHEET_ID = '1_rNxpAUIepZdp_lGkndR_pTGuZ0hr6kBI4lEtt27km0'
 const SHEET_NAME = 'MATRIZ'
-// Leemos columnas clave: EXPEDIENTE, FECHA_INGRESO, EVALUADOR
+// Ampliamos el rango para incluir las columnas necesarias
 const SHEET_RANGE = `${SHEET_NAME}!B:F` 
 
 // --- TIPOS DE DATOS ---
@@ -22,6 +22,16 @@ interface IngresosChartData {
 // Tipo extendido para SPE
 type SpeIngresosReport = Omit<IngresosReport, 'process'> & {
   process: 'spe';
+}
+
+interface ProcessMetrics {
+  proceso: string;
+  totalEntries: number;
+  firstEntry: string;
+  lastEntry: string;
+  avgDiario: number;
+  avgSemanal: number;
+  avgMensual: number;
 }
 
 // --- HELPERS DE FECHAS Y DATOS ---
@@ -161,6 +171,73 @@ function generateWeeklyData(rawData: any[]): WeeklyIngresosData {
     }
 }
 
+function analyzeIngresosByProcess(rawData: any[]): ProcessMetrics[] {
+    const header = rawData.length > 0 ? rawData[0].map((h: any) => (typeof h === 'string' ? h.trim().toUpperCase() : '')) : [];
+    const dataRows = rawData.slice(1);
+
+    const getIndex = (name: string, fallback: number) => {
+      const index = header.indexOf(name);
+      return index === -1 ? fallback : index;
+    };
+    
+    // Columnas basadas en el input del usuario y el rango B:F
+    // B=0 (EXPEDIENTE), C=1, D=2 (PROCESO), E=3 (FECHA_INGRESO), F=4
+    const COL_PROCESO = getIndex('PROCESO', 2);
+    const COL_FECHA_INGRESO = getIndex('FECHA_INGRESO', 3);
+    const COL_EXPEDIENTE = getIndex('EXPEDIENTE', 0);
+
+    const processData = new Map<string, { expedientes: Set<string>, dates: Date[] }>();
+
+    dataRows.forEach(row => {
+        if(row.length <= Math.max(COL_PROCESO, COL_FECHA_INGRESO, COL_EXPEDIENTE)) return;
+
+        const proceso = row[COL_PROCESO];
+        const fechaIngresoValue = row[COL_FECHA_INGRESO];
+        const expediente = row[COL_EXPEDIENTE];
+        
+        const fechaIngreso = safeParseDate(fechaIngresoValue);
+
+        if (proceso && typeof proceso === 'string' && proceso.trim() !== '' && fechaIngreso && expediente) {
+            const trimmedProceso = proceso.trim();
+            if (!processData.has(trimmedProceso)) {
+                processData.set(trimmedProceso, { expedientes: new Set(), dates: [] });
+            }
+            const data = processData.get(trimmedProceso)!;
+            // Se asume que cada fila es un ingreso único, no se valida por expediente
+            data.expedientes.add(expediente);
+            data.dates.push(fechaIngreso);
+        }
+    });
+
+    const results: ProcessMetrics[] = [];
+
+    for (const [proceso, data] of processData.entries()) {
+        const sortedDates = data.dates.sort((a, b) => a.getTime() - b.getTime());
+        if (sortedDates.length === 0) continue;
+
+        const firstDate = sortedDates[0];
+        const lastDate = sortedDates[sortedDates.length - 1];
+        
+        // Usamos los días entre el primer y último ingreso para el promedio
+        const totalDays = Math.max(1, Math.ceil((lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24)));
+        const totalEntries = data.expedientes.size;
+
+        const dailyAvg = totalEntries / totalDays;
+        
+        results.push({
+            proceso,
+            totalEntries,
+            firstEntry: format(firstDate, 'yyyy-MM-dd'),
+            lastEntry: format(lastDate, 'yyyy-MM-dd'),
+            avgDiario: parseFloat(dailyAvg.toFixed(2)),
+            avgSemanal: parseFloat((dailyAvg * 7).toFixed(2)),
+            avgMensual: parseFloat((dailyAvg * 30.44).toFixed(2))
+        });
+    }
+
+    return results.sort((a,b) => b.totalEntries - a.totalEntries);
+}
+
 // --- LÓGICA PRINCIPAL ---
 
 export async function GET(request: NextRequest) {
@@ -242,19 +319,31 @@ export async function GET(request: NextRequest) {
             { revalidate: 3600, tags: ['spe-cache', 'spe-semanal'] }
         )
 
-        // --- 3. Obtener ambos sets de datos ---
-        const [dailyData, weeklyData, monthlyData] = await Promise.all([
+        // --- 3. Analizar datos por proceso (nuevo) ---
+        const getCachedProcessData = unstable_cache(
+            async () => {
+                logInfo(`(Re)generando análisis de ingresos por proceso de SPE.`);
+                return analyzeIngresosByProcess(rawData);
+            },
+            [`spe-ingresos-proceso-v2`],
+            { revalidate: 3600, tags: ['spe-cache', 'spe-proceso'] }
+        )
+
+        // --- 4. Obtener todos los sets de datos ---
+        const [dailyData, weeklyData, monthlyData, processMetrics] = await Promise.all([
             getCachedDailyData(),
             getCachedWeeklyData(),
-            generateMonthlyData(rawData) // Mensual no necesita caché por ahora
+            generateMonthlyData(rawData), // Mensual no necesita caché por ahora
+            getCachedProcessData()
         ]);
 
-        // --- 4. Ensamblar el reporte final ---
+        // --- 5. Ensamblar el reporte final ---
         const report = {
             ...dailyData,
             process: 'spe' as const,
             weeklyData,
             monthlyData,
+            processMetrics,
         }
 
         return NextResponse.json({ success: true, report });
