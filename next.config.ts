@@ -33,11 +33,10 @@ const nextConfig: NextConfig = {
 
   // Manejo de errores de hidratación de React
   reactStrictMode: true, // Habilitado para detectar problemas potenciales
-  // Esta opción puede ayudar a mitigar errores comunes de hidratación
-  // al renderizar de forma diferente en servidor y cliente.
-  // Es útil si los componentes dependen de APIs del navegador como `window`.
+  
+  // Configuraciones experimentales para Next.js 15
   experimental: {
-    missingSuspenseWithCSRBailout: false,
+    // Configuraciones específicas para Next.js 15 si las necesitamos
   },
 };
 
