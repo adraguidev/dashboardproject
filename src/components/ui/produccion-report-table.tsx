@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useCallback } from 'react'
 import { Card } from './card'
-import { ProduccionReportSummary, Evaluador } from '@/types/dashboard'
+import { ProduccionReportSummary, Evaluador, ProduccionReportData } from '@/types/dashboard'
 import { ProduccionChart } from './produccion-chart'
 import { formatDateShort } from '@/lib/date-utils'
 import { ProductionOperatorModal } from './production-operator-modal'
