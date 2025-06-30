@@ -233,7 +233,7 @@ export function AdvancedPendientesReportTable({
     );
   };
 
-  const { data, headers, grandTotal, process } = reportData;
+  const { data, grandTotal, process } = reportData;
 
   return (
     <div className={`bg-gray-50 p-4 sm:p-6 rounded-lg ${className}`}>
