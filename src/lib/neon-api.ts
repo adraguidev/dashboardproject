@@ -48,7 +48,7 @@ export class NeonDataAPI {
         })
 
         if (response.ok) {
-          const data = await response.json()
+          const data: T | T[] = await response.json()
           // Response received successfully
           return Array.isArray(data) ? data : [data]
         }

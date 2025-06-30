@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useThroughputAnalysis, ThroughputData } from '@/hooks/use-throughput-analysis';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area, TooltipContentProps } from 'recharts';
+import { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
 import { AlertCircle, TrendingUp, ArrowUp, ArrowDown, BarChart3, Activity, Calendar, Target, Table, Eye, EyeOff } from 'lucide-react';
 
 interface ChartProps {
@@ -136,13 +137,12 @@ export function ThroughputChart({ proceso }: ChartProps) {
   }
 
   if (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
     return (
       <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200 flex justify-center items-center h-96">
         <div className="text-center text-red-600">
           <AlertCircle className="h-8 w-8 mx-auto mb-2" />
           <p>Error al cargar el análisis:</p>
-          <p className="text-sm">{errorMessage}</p>
+          <p className="text-sm">{(error as Error).message}</p>
         </div>
       </div>
     );
@@ -197,7 +197,7 @@ export function ThroughputChart({ proceso }: ChartProps) {
             <div className="flex flex-col items-center justify-center h-full text-red-600">
               <AlertCircle className="h-8 w-8 mb-2"/>
               <p>Error al cargar el análisis:</p>
-              <p className="text-sm">{error instanceof Error ? error.message : 'Error desconocido'}</p>
+              <p className="text-sm">{(error as Error).message}</p>
             </div>
           )}
           {!isLoading && !error && data && (

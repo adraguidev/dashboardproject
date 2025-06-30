@@ -16,6 +16,16 @@ interface ProduccionReportData {
   otherProcessEvaluadores: Evaluador[]
 }
 
+interface ProduccionReportApiResponse {
+  success: boolean;
+  report: ProduccionReportSummary;
+  error?: string;
+}
+
+interface EvaluadoresApiResponse {
+  evaluadores?: Evaluador[];
+}
+
 export function useProduccionReport({
   process,
   days: initialDays = 20,
@@ -40,7 +50,7 @@ export function useProduccionReport({
       if (!reportResponse.ok) {
         throw new Error(`Error en reporte de producción: ${reportResponse.statusText}`);
       }
-      const reportResult = await reportResponse.json();
+      const reportResult: ProduccionReportApiResponse = await reportResponse.json();
       if (!reportResult.success) {
         throw new Error(reportResult.error || 'Error desconocido en reporte de producción');
       }
@@ -50,8 +60,8 @@ export function useProduccionReport({
       let otherProcessEvaluadores: Evaluador[] = [];
       if (evaluadoresResponse.ok) {
         try {
-          const evaluadoresResult = await evaluadoresResponse.json();
-          otherProcessEvaluadores = evaluadoresResult.evaluadores || evaluadoresResult || [];
+          const evaluadoresResult: EvaluadoresApiResponse | Evaluador[] = await evaluadoresResponse.json();
+          otherProcessEvaluadores = Array.isArray(evaluadoresResult) ? evaluadoresResult : (evaluadoresResult.evaluadores || []);
         } catch (e) {
           console.error("Error parsing evaluadores response:", e);
           otherProcessEvaluadores = [];

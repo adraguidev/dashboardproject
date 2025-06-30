@@ -17,6 +17,14 @@ interface PendientesData {
   filters: Record<string, any>
 }
 
+interface PendientesApiResponse {
+  success: boolean;
+  data: (CCMRecord | PRRRecord)[];
+  pagination: PendientesData['pagination'];
+  filters: PendientesData['filters'];
+  error?: string;
+}
+
 interface UsePendientesOptions {
   process: 'ccm' | 'prr'
   initialPage?: number
@@ -68,7 +76,7 @@ export function usePendientes({
         throw new Error(`Error ${response.status}: ${response.statusText}`)
       }
 
-      const result: { success: boolean; data: any[]; pagination: any; filters: any; error?: string } = await response.json()
+      const result: PendientesApiResponse = await response.json()
 
       if (!result.success) {
         throw new Error(result.error || 'Error desconocido')

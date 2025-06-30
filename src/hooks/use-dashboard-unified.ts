@@ -52,7 +52,7 @@ export function useDashboardUnified(proceso: string) {
       const response = await fetch(`/api/dashboard/unified?proceso=${proceso}`);
       
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData: DashboardError = await response.json();
         throw new Error(errorData.details || `HTTP ${response.status}`);
       }
       

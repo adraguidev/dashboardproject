@@ -4,9 +4,43 @@ import { useEffect, useState } from 'react'
 import { useUser } from "@stackframe/stack"
 import Link from "next/link"
 
+interface PostgrestTest {
+  success: boolean;
+  status: number;
+  error?: string;
+}
+
+interface TestResult {
+  secret: string;
+  role: string;
+  jwtGeneration: 'success' | 'failure';
+  postgrestTest?: PostgrestTest;
+}
+
+interface WorkingCombination {
+  secret: string;
+  role: string;
+  fullSecret: string;
+}
+
+interface Summary {
+  totalTests: number;
+  successfulTests: number;
+  failedTests: number;
+  workingCombinations: WorkingCombination[];
+}
+
+interface DebugApiResponse {
+  results: {
+    summary: Summary;
+    jwtTests: TestResult[];
+  };
+  error?: string;
+}
+
 export default function DebugJWTPage() {
   const user = useUser()
-  const [results, setResults] = useState<any>(null)
+  const [results, setResults] = useState<DebugApiResponse['results'] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -17,7 +51,7 @@ export default function DebugJWTPage() {
 
     try {
       const response = await fetch('/api/debug-jwt')
-      const data = await response.json()
+      const data: DebugApiResponse = await response.json()
 
       if (!response.ok) {
         throw new Error(data.error || 'Error en diagnóstico')
@@ -119,7 +153,7 @@ export default function DebugJWTPage() {
               <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
                 <h2 className="text-xl font-bold text-green-800 mb-4">🎯 Combinaciones Exitosas</h2>
                 <div className="space-y-3">
-                  {results.summary.workingCombinations.map((combo: any, index: number) => (
+                  {results.summary.workingCombinations.map((combo: WorkingCombination, index: number) => (
                     <div key={index} className="bg-green-50 border border-green-200 rounded-lg p-4">
                       <div className="flex justify-between items-center">
                         <div>
@@ -156,7 +190,7 @@ export default function DebugJWTPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {results.jwtTests?.map((test: any, index: number) => (
+                    {results.jwtTests?.map((test: TestResult, index: number) => (
                       <tr key={index} className={test.postgrestTest?.success ? 'bg-green-50' : 'bg-red-50'}>
                         <td className="px-4 py-4 text-sm">
                           <code className="bg-gray-100 px-2 py-1 rounded text-xs">{test.secret}</code>

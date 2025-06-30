@@ -10,6 +10,12 @@ interface UseIngresosOptions {
   enabled?: boolean
 }
 
+interface IngresosApiResponse {
+  success: boolean;
+  report: IngresosReport;
+  error?: string;
+}
+
 export function useIngresos({
   process,
   days: initialDays = 30,
@@ -31,7 +37,7 @@ export function useIngresos({
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      const result: { success: boolean; report: IngresosReport; error?: string } = await response.json();
+      const result: IngresosApiResponse = await response.json();
       if (!result.success) {
         throw new Error(result.error || 'Error desconocido al obtener el reporte de ingresos');
       }

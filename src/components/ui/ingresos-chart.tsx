@@ -25,6 +25,36 @@ export function IngresosChart({
 }: IngresosChartProps) {
   const [selectedPeriod, setSelectedPeriod] = useState(30)
 
+  // Procesar datos para el gráfico
+  const chartData = useMemo(() => {
+    if (!report) return []
+    
+    return report.data.map(item => ({
+      ...item,
+      fechaLabel: formatDateSafe(item.fecha, { 
+        day: '2-digit',
+        month: '2-digit'
+      })
+    }))
+  }, [report])
+
+  // Calcular estadísticas del período
+  const stats = useMemo(() => {
+    if (!report) return null
+    
+    const maxTramites = Math.max(...report.data.map(d => d.numeroTramite))
+    const minTramites = Math.min(...report.data.map(d => d.numeroTramite))
+    const diasConIngresos = report.data.filter(d => d.numeroTramite > 0).length
+    const porcentajeDiasConIngresos = (diasConIngresos / report.data.length) * 100
+    
+    return {
+      maxTramites,
+      minTramites,
+      diasConIngresos,
+      porcentajeDiasConIngresos: Math.round(porcentajeDiasConIngresos)
+    }
+  }, [report])
+
   // ----------------------------------------------------
   // GUARDIA DE RENDERIZADO TEMPRANO
   // ----------------------------------------------------
@@ -76,36 +106,6 @@ export function IngresosChart({
     { value: 60, label: '60 días' },
     { value: 90, label: '90 días' }
   ]
-
-  // Procesar datos para el gráfico
-  const chartData = useMemo(() => {
-    if (!report) return []
-    
-    return report.data.map(item => ({
-      ...item,
-      fechaLabel: formatDateSafe(item.fecha, { 
-        day: '2-digit',
-        month: '2-digit'
-      })
-    }))
-  }, [report])
-
-  // Calcular estadísticas del período
-  const stats = useMemo(() => {
-    if (!report) return null
-    
-    const maxTramites = Math.max(...report.data.map(d => d.numeroTramite))
-    const minTramites = Math.min(...report.data.map(d => d.numeroTramite))
-    const diasConIngresos = report.data.filter(d => d.numeroTramite > 0).length
-    const porcentajeDiasConIngresos = (diasConIngresos / report.data.length) * 100
-    
-    return {
-      maxTramites,
-      minTramites,
-      diasConIngresos,
-      porcentajeDiasConIngresos: Math.round(porcentajeDiasConIngresos)
-    }
-  }, [report])
 
   const handlePeriodChange = (newPeriod: number) => {
     setSelectedPeriod(newPeriod)

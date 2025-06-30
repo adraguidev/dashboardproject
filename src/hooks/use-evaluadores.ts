@@ -24,7 +24,14 @@ export function useEvaluadores({
       const response = await fetch(`/api/dashboard/evaluadores?process=${process}`)
       
       if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`)
+        let errorMessage = `Error ${response.status}: ${response.statusText}`;
+        try {
+          const errorResult = await response.json() as { error?: string };
+          errorMessage = errorResult.error || errorMessage;
+        } catch (e) {
+          // Si el json falla, mantenemos el error original
+        }
+        throw new Error(errorMessage);
       }
 
       const data: Evaluador[] = await response.json()

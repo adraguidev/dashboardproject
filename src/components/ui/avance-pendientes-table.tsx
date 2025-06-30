@@ -30,6 +30,11 @@ interface OperadorHistorico {
   [fecha: string]: string | number | undefined
 }
 
+interface SnapshotResponse {
+  success: boolean;
+  error?: string;
+}
+
 export default function AvancePendientesTable({ 
   className, 
   proceso: propProceso
@@ -96,7 +101,7 @@ export default function AvancePendientesTable({
 
   // Procesar datos históricos
   const processedData = useMemo(() => {
-    if (!data?.success || !data.data || !reportData) {
+    if (!data?.success || !data.data || !reportData || !reportData.data) {
       return { fechas: [], operadores: [], subEquipos: [], totalesPorDia: [], fechasFiltradas: [] }
     }
 
@@ -349,7 +354,7 @@ export default function AvancePendientesTable({
 
     try {
       const response = await fetch('/api/historico/trigger-snapshot', { method: 'POST' });
-      const result: { success: boolean, error?: string } = await response.json();
+      const result: SnapshotResponse = await response.json();
 
       if (!response.ok) {
         throw new Error(result.error || `Error del servidor: ${response.status}`);

@@ -53,6 +53,15 @@ const canonicalSchema = {
 // Es buena práctica mover esto a una variable de entorno.
 const WORKER_URL = 'https://worker-processor.aaguirreb16.workers.dev';
 
+interface FileToProcess {
+  key: string;
+  table: string;
+}
+
+interface ProcessFilesBody {
+  files: FileToProcess[];
+}
+
 /**
  * Este endpoint ahora actúa como un "disparador" para el workflow de GitHub Actions.
  * Su única responsabilidad es recibir la información del archivo y enviar un
@@ -70,7 +79,7 @@ export async function POST(request: NextRequest) {
 	}
 
 	try {
-		const { files }: { files: { key: string; table: string }[] } = await request.json();
+		const { files }: ProcessFilesBody = await request.json();
 
 		if (!files || !Array.isArray(files) || files.length === 0) {
 			return NextResponse.json({ error: 'No se proporcionaron archivos para procesar.' }, { status: 400 });

@@ -36,6 +36,10 @@ interface UseEvaluadoresCRUDResult {
   deleting: boolean
 }
 
+interface ErrorResponse {
+  error?: string;
+}
+
 // Funciones API
 async function fetchEvaluadoresAPI(process: 'ccm' | 'prr'): Promise<Evaluador[]> {
   logInfo(`🔍 Obteniendo evaluadores para proceso: ${process.toUpperCase()}`);
@@ -43,11 +47,11 @@ async function fetchEvaluadoresAPI(process: 'ccm' | 'prr'): Promise<Evaluador[]>
       const response = await fetch(`/api/dashboard/evaluadores?process=${process}`)
       
       if (!response.ok) {
-    const result = await response.json()
+    const result: ErrorResponse = await response.json()
         throw new Error(result.error || 'Error obteniendo evaluadores')
       }
       
-  const data = await response.json()
+  const data: Evaluador[] = await response.json()
   return Array.isArray(data) ? data : []
 }
 
@@ -61,7 +65,7 @@ async function createEvaluadorAPI(process: 'ccm' | 'prr', data: Omit<Evaluador, 
       })
       
   if (!response.ok) {
-      const result = await response.json()
+      const result: ErrorResponse = await response.json()
         throw new Error(result.error || 'Error creando evaluador')
       }
       
@@ -78,7 +82,7 @@ async function updateEvaluadorAPI(process: 'ccm' | 'prr', data: Evaluador): Prom
       })
       
   if (!response.ok) {
-      const result = await response.json()
+      const result: ErrorResponse = await response.json()
         throw new Error(result.error || 'Error actualizando evaluador')
       }
       
@@ -93,7 +97,7 @@ async function deleteEvaluadorAPI(process: 'ccm' | 'prr', id: number): Promise<v
       })
       
   if (!response.ok) {
-      const result = await response.json()
+      const result: ErrorResponse = await response.json()
         throw new Error(result.error || 'Error eliminando evaluador')
       }
 }

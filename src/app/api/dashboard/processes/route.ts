@@ -17,9 +17,15 @@ export async function GET() {
   }
 }
 
+interface NewProcessData {
+  name: string;
+  ownerId: string;
+  description?: string;
+}
+
 export async function POST(request: Request) {
   try {
-    const data = await request.json()
+    const data = await request.json() as NewProcessData;
     
     // Validación básica
     if (!data.name || !data.ownerId) {

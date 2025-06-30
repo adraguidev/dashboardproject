@@ -335,6 +335,16 @@ async function convertirColumnasFecha(sql: any, conversiones: Record<string, str
   }
 }
 
+interface FileUploadInfo {
+  name: string;
+  type: string;
+  size: number;
+}
+
+interface UploadFilesBody {
+  files: FileUploadInfo[];
+}
+
 export async function POST(request: NextRequest) {
   console.log('🚀 Iniciando proceso de subida de archivos...');
   
@@ -347,7 +357,7 @@ export async function POST(request: NextRequest) {
       throw new Error('Variables de entorno de Cloudflare R2 no configuradas');
     }
 
-    const body = await request.json();
+    const body: UploadFilesBody = await request.json();
     const { files } = body;
 
     if (!files || !Array.isArray(files) || files.length === 0) {

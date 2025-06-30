@@ -71,7 +71,7 @@ async function testJWT(token: string, secret: string, role: string) {
     }
     
     if (response.ok) {
-      result.data = await response.json()
+      result.data = await response.json() as any[];
     } else {
       result.error = await response.text()
     }

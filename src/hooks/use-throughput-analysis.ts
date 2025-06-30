@@ -9,6 +9,12 @@ export interface ThroughputData {
   'Aprobación Automática': number;
 }
 
+interface ThroughputApiResponse {
+  success: boolean;
+  data: ThroughputData[];
+  details?: string;
+}
+
 export function useThroughputAnalysis(proceso: 'ccm' | 'prr', days: number) {
   const queryKey = ['throughputAnalysis', proceso, days];
 
@@ -19,7 +25,7 @@ export function useThroughputAnalysis(proceso: 'ccm' | 'prr', days: number) {
       if (!response.ok) {
         throw new Error('No se pudo obtener el análisis de throughput');
       }
-      const result = await response.json();
+      const result: ThroughputApiResponse = await response.json();
       if (!result.success) {
         throw new Error(result.details || 'Error en la respuesta de la API');
       }

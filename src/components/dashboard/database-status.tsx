@@ -14,6 +14,10 @@ interface DatabaseInfo {
   lastCheck: Date
 }
 
+interface DbStatusResponse {
+  database: string;
+}
+
 export function DatabaseStatus({ className = '' }: DatabaseStatusProps) {
   const [dbStatus, setDbStatus] = useState<DatabaseInfo>({
     status: 'connected',
@@ -32,7 +36,7 @@ export function DatabaseStatus({ className = '' }: DatabaseStatusProps) {
       const responseTime = endTime - startTime
 
       if (response.ok) {
-        const data = await response.json()
+        const data: DbStatusResponse = await response.json()
         setDbStatus({
           status: 'connected',
           name: data.database || 'PostgreSQL',

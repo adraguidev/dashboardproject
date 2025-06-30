@@ -30,6 +30,16 @@ export interface ResueltosAnalysisData {
   };
 }
 
+interface ResueltosApiResponse {
+  success: boolean;
+  data?: ResueltosAnalysisData | null;
+  error?: string;
+}
+
+interface ErrorResponse {
+  details?: string;
+}
+
 export function useResueltosAnalysis(proceso: 'ccm' | 'prr') {
   return useQuery({
     queryKey: ['resueltos-analysis', proceso],
@@ -37,11 +47,11 @@ export function useResueltosAnalysis(proceso: 'ccm' | 'prr') {
       const response = await fetch(`/api/analysis/resueltos?proceso=${proceso}`);
       
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData: ErrorResponse = await response.json();
         throw new Error(errorData.details || 'Error al obtener análisis de resueltos');
       }
       
-      const result = await response.json();
+      const result: ResueltosApiResponse = await response.json();
       
       if (!result.success) {
         throw new Error(result.error || 'Error en la respuesta del servidor');

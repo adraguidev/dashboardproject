@@ -16,6 +16,12 @@ interface AuthTestResults {
   timestamp: string
   tokens_tested: string[]
   results: TestResult[]
+  error?: string;
+}
+
+interface EvaluadoresResponse {
+  total: number;
+  error?: string;
 }
 
 export default function TestAuthPage() {
@@ -30,7 +36,7 @@ export default function TestAuthPage() {
 
     try {
       const response = await fetch('/api/test-auth')
-      const data = await response.json()
+      const data: AuthTestResults = await response.json()
       
       if (!response.ok) {
         throw new Error(data.error || 'Error en las pruebas')
@@ -50,7 +56,7 @@ export default function TestAuthPage() {
 
     try {
       const response = await fetch('/api/dashboard/evaluadores?process=ccm')
-      const data = await response.json()
+      const data: EvaluadoresResponse = await response.json()
       
       if (!response.ok) {
         throw new Error(data.error || 'Error obteniendo evaluadores')

@@ -29,11 +29,11 @@ export function useDashboardAPI() {
         throw new Error('Error al cargar los datos')
       }
 
-      const kpisData = await kpisResponse.json()
-      const processesData = await processesResponse.json()
+      const kpisData: KPI[] = await kpisResponse.json()
+      const processesData: Process[] = await processesResponse.json()
 
       // Convertir fechas de string a Date
-      const processesWithDates = processesData.map((process: any) => ({
+      const processesWithDates = processesData.map((process) => ({
         ...process,
         lastUpdated: new Date(process.lastUpdated),
         metrics: process.metrics.map((metric: any) => ({
@@ -89,7 +89,7 @@ export function useDashboardAPI() {
         throw new Error('Error al crear el proceso')
       }
 
-      const newProcess = await response.json()
+      const newProcess: Process = await response.json()
       setProcesses(prev => [...prev, newProcess])
       return newProcess
     } catch (error) {

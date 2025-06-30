@@ -23,6 +23,12 @@ class MemoryCache {
 
 const memoryCache = MemoryCache.getInstance();
 
+interface EvaluadorData {
+  nombre_en_base?: string;
+  nombres_apellidos?: string;
+  id?: number;
+}
+
 // GET - Obtener evaluadores usando la nueva API directa
 export async function GET(request: NextRequest) {
   try {
@@ -63,7 +69,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Proceso inválido. Debe ser ccm o prr' }, { status: 400 })
     }
 
-    const data = await request.json()
+    const data = await request.json() as EvaluadorData;
     
     if (!data.nombre_en_base || !data.nombres_apellidos) {
       return NextResponse.json({ error: 'Nombre en base y nombres y apellidos son requeridos' }, { status: 400 })
@@ -114,7 +120,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'ID del evaluador es requerido' }, { status: 400 })
     }
 
-    const data = await request.json();
+    const data = await request.json() as EvaluadorData;
     delete data.id; // Nos aseguramos de no intentar actualizar el ID
 
     const dbAPI = await createDirectDatabaseAPI();

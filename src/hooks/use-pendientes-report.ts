@@ -13,6 +13,12 @@ interface UsePendientesReportOptions {
   enabled?: boolean
 }
 
+interface PendientesReportResponse {
+  success: boolean;
+  report: PendientesReportSummary;
+  error?: string;
+}
+
 export function usePendientesReport({
   process,
   groupBy: initialGroupBy = 'year',
@@ -29,9 +35,15 @@ export function usePendientesReport({
       console.log(`🚀 Fetching pendientes-report: process=${process}, groupBy=${groupBy}`);
       const response = await fetch(`/api/dashboard/pendientes-report?process=${process}&groupBy=${groupBy}`);
       if (!response.ok) {
-        throw new Error(`Error en el reporte de pendientes: ${response.statusText}`);
+        // Para errores de red o HTTP, podemos intentar obtener un mensaje de error del cuerpo
+        try {
+          const errorResult: { error: string } = await response.json();
+          throw new Error(errorResult.error || `Error en el reporte de pendientes: ${response.statusText}`);
+        } catch (e) {
+          throw new Error(`Error en el reporte de pendientes: ${response.statusText}`);
+        }
       }
-      const result = await response.json();
+      const result: PendientesReportResponse = await response.json();
       if (!result.success) {
         throw new Error(result.error || 'Error desconocido en el reporte de pendientes');
       }

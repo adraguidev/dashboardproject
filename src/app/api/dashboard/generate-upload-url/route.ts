@@ -14,9 +14,14 @@ const r2Client = new S3Client({
 
 const BUCKET_NAME = process.env.CLOUDFLARE_R2_BUCKET_NAME!
 
+interface GenerateUploadUrlBody {
+  filename: string;
+  contentType: string;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { filename, contentType } = await request.json()
+    const { filename, contentType } = await request.json() as GenerateUploadUrlBody;
 
     if (!filename || !contentType) {
       return NextResponse.json({ error: 'Faltan los parámetros filename y contentType' }, { status: 400 })

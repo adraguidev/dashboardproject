@@ -80,6 +80,12 @@ interface ErrorBoundaryState {
   isWakingDB: boolean
 }
 
+interface WakeDbResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
 interface ErrorBoundaryProps {
   children: React.ReactNode
   fallback?: React.ComponentType<{ error: Error; retry: () => void }>
@@ -127,7 +133,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
         headers: { 'Content-Type': 'application/json' }
       })
       
-      const result = await response.json()
+      const result: WakeDbResponse = await response.json()
       console.log('📊 Resultado de wake-db:', result)
       
       if (result.success) {
