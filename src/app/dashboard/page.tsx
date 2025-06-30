@@ -8,6 +8,7 @@ import { ProcessModules } from '@/components/dashboard/process-modules'
 import { ErrorDisplay } from '@/components/ui/error-boundary'
 import { clearAllCache as clearLocalStorageCache } from '@/lib/frontend-cache'
 import { ProcessKey } from '@/types/dashboard'
+import { SpeModules } from '@/components/spe/spe-modules'
 
 export default function DashboardPage() {
   const queryClient = useQueryClient()
@@ -75,18 +76,22 @@ export default function DashboardPage() {
         loading={isInitialLoading || isFetching > 0}
       />
       <div className="max-w-7xl mx-auto px-6 py-6">
-        {selectedProcess === 'spe' || selectedProcess === 'pas' ? (
-          <div className="p-12 text-center text-gray-600">
-            <h2 className="text-2xl font-semibold mb-4">Módulos para {selectedProcess.toUpperCase()} en desarrollo</h2>
-            Próximamente se mostrará información específica para este proceso.
-          </div>
-        ) : (
-          <ProcessModules
-            selectedProcess={selectedProcess as 'ccm' | 'prr'}
-            selectedModule={activeModule}
-            onModuleChange={handleModuleChange}
-          />
-        )}
+        <div className="bg-white border border-gray-200/60 rounded-xl shadow-sm overflow-hidden">
+          {selectedProcess === 'ccm' || selectedProcess === 'prr' ? (
+            <ProcessModules
+              selectedProcess={selectedProcess}
+              selectedModule={activeModule}
+              onModuleChange={handleModuleChange}
+            />
+          ) : selectedProcess === 'spe' ? (
+            <SpeModules />
+          ) : (
+            <div className="p-12 text-center text-gray-600">
+              <h2 className="text-2xl font-semibold mb-4">Módulos para {selectedProcess.toUpperCase()} en desarrollo</h2>
+              Próximamente se mostrará información específica para este proceso.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
