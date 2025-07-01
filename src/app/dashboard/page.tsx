@@ -9,6 +9,7 @@ import { ErrorDisplay } from '@/components/ui/error-boundary'
 import { clearAllCache as clearLocalStorageCache } from '@/lib/frontend-cache'
 import { ProcessKey } from '@/types/dashboard'
 import { SpeModules } from '@/components/spe/spe-modules'
+import { useSmartPrefetch } from '@/hooks/use-smart-prefetch'
 
 export default function DashboardPage() {
   const queryClient = useQueryClient()
@@ -29,6 +30,9 @@ export default function DashboardPage() {
   const handleModuleChange = (moduleId: string) => {
     setActiveModule(moduleId)
   }
+
+  // Prefetch silencioso de otras vistas CCM/PRR
+  useSmartPrefetch(selectedProcess)
 
   const handleFullRefresh = async () => {
     try {
