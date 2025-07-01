@@ -445,6 +445,39 @@ export class DirectDatabaseAPI {
     return result[0]?.count || 0;
   }
 
+  // ============= MÉTODOS AGREGADOS PARA PRODUCCIÓN =============
+
+  async getAggregatedProduccionReport(
+    proceso: 'ccm' | 'prr',
+    daysBack: number = 20
+  ) {
+    const table = proceso === 'ccm' ? tableCCM : tablePRR;
+
+    const today = new Date();
+    const startDate = new Date(today);
+    startDate.setDate(today.getDate() - daysBack);
+    const startDateStr = startDate.toISOString().split('T')[0];
+
+    const whereConditions = and(
+      gte(table.fechapre, startDateStr),
+      isNotNull(table.operadorpre)
+    );
+
+    const dateExpression = sql`DATE_TRUNC('day', ${table.fechapre}::timestamp)::date`;
+
+    const operadorExpression = sql<string>`COALESCE(NULLIF(${table.operadorpre}, ''), 'Sin Operador')`;
+
+    return await this.db
+      .select({
+        operador: operadorExpression.as('operador'),
+        fecha: dateExpression.as('fecha'),
+        count: count(table.numerotramite)
+      })
+      .from(table)
+      .where(and(whereConditions, isNotNull(table.fechapre)))
+      .groupBy(operadorExpression, dateExpression);
+  }
+
   // ============= MÉTODOS ADICIONALES =============
   
   async getKPIs() {

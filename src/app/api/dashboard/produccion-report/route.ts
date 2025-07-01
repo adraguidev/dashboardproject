@@ -124,6 +124,9 @@ function generateDays(data: any[], daysCount: number, dayType: 'TODOS' | 'LABORA
   return dates;
 }
 
+/**
+ * @deprecated Se reemplaza por formatAggregatedProduccionData que utiliza datos pre-agregados desde la BD.
+ */
 function generateProduccionReport(
   data: any[], 
   evaluadores: Evaluador[], 
@@ -279,6 +282,82 @@ function generateProduccionReport(
   };
 }
 
+// ===== NUEVA FUNCIÓN OPTIMIZADA =====
+function formatAggregatedProduccionData(
+  aggregatedData: { operador: string; fecha: any; count: number }[],
+  evaluadores: Evaluador[],
+  process: 'ccm' | 'prr',
+  daysCount: number,
+  dayType: 'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA'
+): ProduccionReportSummary {
+  // Reutilizamos generateDays pero necesitamos simular records con fechapre
+  const fakeRecords = aggregatedData.map(r => ({ fechapre: r.fecha, }));
+  const targetDays = generateDays(fakeRecords, daysCount, dayType);
+
+  const operadorMap = new Map<string, { [fecha: string]: number }>();
+
+  aggregatedData.forEach(record => {
+    const operadorName = record.operador;
+    const fechaStr = typeof record.fecha === 'string' ? record.fecha : (record.fecha as Date).toISOString().split('T')[0];
+
+    if (!targetDays.includes(fechaStr)) return;
+
+    if (!operadorMap.has(operadorName)) {
+      operadorMap.set(operadorName, {});
+    }
+    const data = operadorMap.get(operadorName)!;
+    data[fechaStr] = (data[fechaStr] || 0) + record.count;
+  });
+
+  const totalByDate: { [fecha: string]: number } = {};
+  targetDays.forEach(d => (totalByDate[d] = 0));
+
+  const evaluadorMap = new Map<string, Evaluador>();
+  evaluadores.forEach(ev => evaluadorMap.set(ev.nombre_en_base, ev));
+
+  const reportData: ProduccionReportData[] = [];
+
+  operadorMap.forEach((fechaData, operadorName) => {
+    const evaluador = evaluadorMap.get(operadorName);
+    const subEquipo = evaluador?.sub_equipo;
+    const { colorClass } = getColorConfig(subEquipo);
+
+    const operadorReport: ProduccionReportData = {
+      operador: operadorName,
+      fechas: {},
+      total: 0,
+      subEquipo: subEquipo || 'NO_ENCONTRADO',
+      colorClass,
+    };
+
+    let totalOp = 0;
+    targetDays.forEach(d => {
+      const cnt = fechaData[d] || 0;
+      operadorReport.fechas[d] = cnt;
+      totalOp += cnt;
+      totalByDate[d] += cnt;
+    });
+    operadorReport.total = totalOp;
+    if (totalOp > 0) reportData.push(operadorReport);
+  });
+
+  reportData.sort((a, b) => b.total - a.total);
+
+  const grandTotal = Object.values(totalByDate).reduce((s, c) => s + c, 0);
+
+  const legendWithCounts = COLOR_LEGEND.map(l => ({ ...l, count: reportData.filter(r => r.subEquipo === l.subEquipo).length }));
+
+  return {
+    data: reportData,
+    fechas: targetDays,
+    totalByDate,
+    grandTotal,
+    process,
+    legend: legendWithCounts,
+    periodo: `Últimos ${daysCount} ${dayType.toLowerCase().replace('_', ' ')}`,
+  };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -309,44 +388,26 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    let data: any[] = []
-    let evaluadores: Evaluador[] = []
+    const maxDaysToFetch = Math.min(days + 30, 365);
 
-    // Usar un rango amplio para obtener datos (máximo 365 días hacia atrás para evitar sobrecarga)
-    const maxDaysToFetch = Math.min(days + 30, 365); // Un poco más de margen
-
-    // Crear instancia de la API directa a PostgreSQL
     const dbAPI = await createDirectDatabaseAPI();
 
-    if (process === 'ccm') {
-      console.log(`📊 Obteniendo TODOS los datos CCM de producción y evaluadores (últimos ${maxDaysToFetch} días)...`)
-      const [ccmData, ccmEvaluadores] = await Promise.all([
-        dbAPI.getAllCCMProduccion(maxDaysToFetch),
-        dbAPI.getEvaluadoresCCM()
-      ])
-      data = ccmData
-      evaluadores = ccmEvaluadores
-    } else {
-      console.log(`📊 Obteniendo TODOS los datos PRR de producción y evaluadores (últimos ${maxDaysToFetch} días)...`)
-      const [prrData, prrEvaluadores] = await Promise.all([
-        dbAPI.getAllPRRProduccion(maxDaysToFetch),
-        dbAPI.getEvaluadoresPRR()
-      ])
-      data = prrData
-      evaluadores = prrEvaluadores
-    }
+    console.log(`📊 Obteniendo datos AGREGADOS de producción y evaluadores (últimos ${maxDaysToFetch} días)...`);
 
-    console.log(`✅ Datos obtenidos: ${data.length} registros de producción, ${evaluadores.length} evaluadores`)
+    const [aggregatedData, evaluadores] = await Promise.all([
+      dbAPI.getAggregatedProduccionReport(process, maxDaysToFetch),
+      process === 'ccm' ? dbAPI.getEvaluadoresCCM() : dbAPI.getEvaluadoresPRR()
+    ]);
 
-    // La llave del caché ahora incluye los filtros para que sea única
-    const cacheKey = `dashboard:produccion-report:${process}:${days}:${dayType}:v3`;
+    console.log(`✅ Datos agregados obtenidos: ${aggregatedData.length} filas, ${evaluadores.length} evaluadores`);
+
+    const cacheKey = `dashboard:produccion-report:${process}:${days}:${dayType}:v4`;
     const ttl = 6 * 60 * 60; // 6 horas
-    
-    // Usar cachedOperation para gestionar el caché y generar datos cuando sea necesario
+
     const report = await cachedOperation({
       key: cacheKey,
       ttlSeconds: ttl,
-      fetcher: async () => generateProduccionReport(data, evaluadores, process as 'ccm' | 'prr', days, dayType)
+      fetcher: async () => formatAggregatedProduccionData(aggregatedData, evaluadores, process as 'ccm' | 'prr', days, dayType)
     });
 
     console.log(`📋 Reporte generado: ${report.data.length} operadores, ${report.fechas.length} días, ${report.grandTotal} total`)
@@ -355,7 +416,7 @@ export async function GET(request: NextRequest) {
       success: true,
       report,
       meta: {
-        processedRecords: data.length,
+        processedRecords: aggregatedData.length,
         uniqueOperators: report.data.length,
         evaluadoresCount: evaluadores.length,
         fechasSpan: report.fechas,
