@@ -75,6 +75,12 @@ export function GestionEquiposContent() {
     sub_equipo: 'EVALUACION'
   })
 
+  const [isClient, setIsClient] = useState(false)
+  
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+
   // El hook useQuery ya maneja automáticamente el cambio de proceso
   // No necesitamos useEffect manual
 
@@ -166,7 +172,7 @@ export function GestionEquiposContent() {
     }
   }
 
-  if (loading && evaluadores.length === 0) {
+  if (!isClient || (loading && evaluadores.length === 0)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -355,7 +361,7 @@ export function GestionEquiposContent() {
                   </td>
                 </tr>
               ) : (
-                evaluadores.map((evaluador) => (
+                isClient && evaluadores.map((evaluador) => (
                   <tr key={evaluador.id} className="hover:bg-gray-50 transition-colors">
                     {editingId === evaluador.id ? (
                       <>
