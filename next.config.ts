@@ -1,5 +1,9 @@
 import type { NextConfig } from "next";
 
+const withBundleAnalyzer = require('@next/bundle-analyzer')({
+  enabled: process.env.ANALYZE === 'true',
+});
+
 const nextConfig: NextConfig = {
   // Solo usar configuración de webpack cuando NO se use Turbopack
   // Turbopack maneja los polyfills automáticamente
@@ -39,8 +43,12 @@ const nextConfig: NextConfig = {
   
   // Configuraciones experimentales para Next.js 15
   experimental: {
-    // Configuraciones específicas para Next.js 15 si las necesitamos
+    // Optimizar imports de paquetes pesados - carga solo lo que se usa
+    optimizePackageImports: ['lucide-react', 'd3', 'recharts', '@radix-ui/react-dialog'],
   },
+  
+  // Excluir paquetes pesados del bundle del servidor
+  serverExternalPackages: ['@aws-sdk/client-s3', '@aws-sdk/lib-storage', '@aws-sdk/s3-request-presigner', 'exceljs', 'googleapis'],
 };
 
-export default nextConfig;
+export default withBundleAnalyzer(nextConfig);
