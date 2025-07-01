@@ -478,6 +478,36 @@ export class DirectDatabaseAPI {
       .groupBy(operadorExpression, dateExpression);
   }
 
+  // ============= MÉTODOS AGREGADOS PARA RESUELTOS =============
+
+  async getAggregatedResueltosAnalysis(
+    proceso: 'ccm' | 'prr',
+    yearsBack: number = 2
+  ) {
+    const table = proceso === 'ccm' ? tableCCM : tablePRR;
+
+    const startDate = subYears(new Date(), yearsBack).toISOString().split('T')[0];
+
+    const categoryExpr = sql<string>`COALESCE(NULLIF(${table.estadopre}, ''), 'INDEFINIDO')`;
+    const operatorExpr = sql<string>`COALESCE(NULLIF(${table.operadorpre}, ''), 'SIN OPERADOR')`;
+    const periodExpr = sql`DATE_TRUNC('month', ${table.fechapre}::timestamp)::date`;
+
+    return await this.db
+      .select({
+        categoria: categoryExpr.as('categoria'),
+        operador: operatorExpr.as('operador'),
+        periodo: periodExpr.as('periodo'),
+        count: count(table.numerotramite)
+      })
+      .from(table)
+      .where(and(
+        isNotNull(table.estadopre),
+        ne(table.estadopre, ''),
+        gte(table.fechapre, startDate)
+      ))
+      .groupBy(categoryExpr, operatorExpr, periodExpr);
+  }
+
   // ============= MÉTODOS ADICIONALES =============
   
   async getKPIs() {
