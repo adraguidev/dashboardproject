@@ -1,6 +1,8 @@
 'use client'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
 import { useState, lazy, Suspense } from 'react';
 
 // Cargar DevTools dinámicamente solo en desarrollo
@@ -20,10 +22,10 @@ export function QueryProvider({ children }: QueryProviderProps) {
     () => new QueryClient({
       defaultOptions: {
         queries: {
-          // Cache durante 5 minutos antes de considerarse stale
-          staleTime: 5 * 60 * 1000, // 5 min
-          // Mantener en cache 30 minutos después de unused
-          gcTime: 30 * 60 * 1000, // 30 min
+          // Cache durante 6 horas (igual que TTL máximo en Redis)
+          staleTime: 6 * 60 * 60 * 1000, // 6 h
+          // Mantener en memoria hasta 24 h para rehidratación rápida
+          gcTime: 24 * 60 * 60 * 1000, // 24 h
           // Retry automático con backoff exponencial
           retry: (failureCount, error) => {
             // No retry en errores 4xx (cliente) pero sí en 5xx (servidor)
@@ -40,13 +42,28 @@ export function QueryProvider({ children }: QueryProviderProps) {
     })
   );
 
+  const persister = createSyncStoragePersister({
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    throttleTime: 1000, // evita escrituras excesivas
+  })
+
+  const shouldPersist = (q: any) => q.queryKey?.some?.((k: any) => k === 'ccm' || k === 'prr')
+
   return (
-    <QueryClientProvider client={queryClient}>
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{
+        persister,
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+        buster: 'v1',
+        dehydrateOptions: { shouldDehydrateQuery: shouldPersist },
+      }}
+    >
       {children}
       {/* DevTools cargado dinámicamente solo en desarrollo */}
       <Suspense fallback={null}>
         <ReactQueryDevtools initialIsOpen={false} />
       </Suspense>
-    </QueryClientProvider>
+    </PersistQueryClientProvider>
   );
 } 
