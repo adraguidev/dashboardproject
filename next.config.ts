@@ -1,8 +1,11 @@
 import type { NextConfig } from "next";
 
-const withBundleAnalyzer = require('@next/bundle-analyzer')({
-  enabled: process.env.ANALYZE === 'true',
-});
+// Solo cargar bundle analyzer en desarrollo o cuando se solicite análisis
+const withBundleAnalyzer = process.env.NODE_ENV === 'development' || process.env.ANALYZE === 'true' 
+  ? require('@next/bundle-analyzer')({
+      enabled: process.env.ANALYZE === 'true',
+    })
+  : (config: any) => config;
 
 const nextConfig: NextConfig = {
   // Solo usar configuración de webpack cuando NO se use Turbopack
