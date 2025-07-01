@@ -43,7 +43,7 @@ interface ColumnFilters {
   [key: string]: string
 }
 
-export function AdvancedDataTable<T>({
+function AdvancedDataTableComponent<T>({
   data,
   columns,
   pageSize = 10,
@@ -560,6 +560,14 @@ export function AdvancedDataTable<T>({
       )}
     </div>
   )
-} 
+}
+
+// Exportamos la versión memoizada manteniendo el mismo nombre público
+// para no romper los imports existentes.
+// La comparación shallow de React.memo es suficiente porque las props
+// (data, columns, callbacks) ya se memorizan aguas arriba.
+
+// eslint-disable-next-line react/display-name
+export const AdvancedDataTable = React.memo(AdvancedDataTableComponent) as typeof AdvancedDataTableComponent;
  
  

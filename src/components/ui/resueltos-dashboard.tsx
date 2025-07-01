@@ -11,7 +11,7 @@ const COLORS = ['#3b82f6', '#10b981', '#f97316', '#ef4444', '#8b5cf6', '#eab308'
 // =================================================================
 // COMPONENTE PRINCIPAL DEL DASHBOARD DE RESUELTOS
 // =================================================================
-export default function ResueltosDashboard({ proceso }: { proceso: 'ccm' | 'prr' }) {
+function ResueltosDashboardComponent({ proceso }: { proceso: 'ccm' | 'prr' }) {
   const { data, isLoading, error } = useResueltosAnalysis(proceso);
 
   if (isLoading) return <LoadingSkeleton />;
@@ -35,6 +35,12 @@ export default function ResueltosDashboard({ proceso }: { proceso: 'ccm' | 'prr'
     </div>
   );
 }
+
+// eslint-disable-next-line react/display-name
+export const ResueltosDashboard = React.memo(ResueltosDashboardComponent) as typeof ResueltosDashboardComponent;
+
+// Mantener exportación por defecto para compatibilidad con imports existentes
+export default ResueltosDashboard;
 
 // =================================================================
 // SUB-COMPONENTES DE VISUALIZACIÓN

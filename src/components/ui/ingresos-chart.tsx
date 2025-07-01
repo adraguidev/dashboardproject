@@ -7,6 +7,7 @@ import type { IngresosReport } from '@/types/dashboard'
 import { formatDateSafe } from '@/lib/date-utils'
 import { MonthlyIngresosTable } from './monthly-ingresos-table'
 import { WeeklyIngresosTable } from './weekly-ingresos-table'
+import React from 'react'
 
 interface IngresosChartProps {
   report: IngresosReport | null
@@ -16,7 +17,7 @@ interface IngresosChartProps {
   onPeriodChange?: (days: number) => void
 }
 
-export function IngresosChart({ 
+function IngresosChartComponent({ 
   report, 
   loading = false, 
   error = null, 
@@ -300,4 +301,8 @@ export function IngresosChart({
       />
     </div>
   )
-} 
+}
+
+// Export memoized version
+// eslint-disable-next-line react/display-name
+export const IngresosChart = React.memo(IngresosChartComponent) as typeof IngresosChartComponent; 

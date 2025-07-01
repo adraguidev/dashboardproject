@@ -3,6 +3,7 @@
 import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { useMemo } from 'react'
 import { TrendingUp, TrendingDown, Minus, Zap, X } from 'lucide-react'
+import React from 'react'
 
 interface OperatorData {
   operador: string
@@ -66,8 +67,7 @@ const TrendAnalysis = ({ data }: { data: { fecha: string; Pendientes: number; Te
   )
 }
 
-
-export function OperatorTrendModal({ operatorData, fechas, onClose }: ModalProps) {
+function OperatorTrendModalComponent({ operatorData, fechas, onClose }: ModalProps) {
   const chartData = useMemo(() => {
     if (!operatorData) return []
     const data = fechas.map(f => ({
@@ -154,4 +154,7 @@ export function OperatorTrendModal({ operatorData, fechas, onClose }: ModalProps
       </div>
     </div>
   )
-} 
+}
+
+// eslint-disable-next-line react/display-name
+export const OperatorTrendModal = React.memo(OperatorTrendModalComponent) as typeof OperatorTrendModalComponent; 

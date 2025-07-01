@@ -5,6 +5,7 @@ import { useThroughputAnalysis, ThroughputData } from '@/hooks/use-throughput-an
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area, TooltipContentProps } from 'recharts';
 import { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
 import { AlertCircle, TrendingUp, ArrowUp, ArrowDown, BarChart3, Activity, Calendar, Target, Table, Eye, EyeOff } from 'lucide-react';
+import React from 'react';
 
 interface ChartProps {
   proceso: 'ccm' | 'prr';
@@ -117,7 +118,7 @@ const TrendIndicator = ({ value }: { value: number }) => {
   );
 };
 
-export function ThroughputChart({ proceso }: ChartProps) {
+function ThroughputChartComponent({ proceso }: ChartProps) {
   const [periodo, setPeriodo] = useState(30);
   const { data, isLoading, error } = useThroughputAnalysis(proceso, periodo);
   const [showDetailedTable, setShowDetailedTable] = useState(false);
@@ -643,4 +644,7 @@ export function ThroughputChart({ proceso }: ChartProps) {
       )}
     </div>
   );
-} 
+}
+
+// eslint-disable-next-line react/display-name
+export const ThroughputChart = React.memo(ThroughputChartComponent) as typeof ThroughputChartComponent; 

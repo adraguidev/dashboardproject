@@ -69,7 +69,7 @@ const TrendAnalysis = ({ trend }: { trend: TrendState }) => {
   )
 }
 
-export function ProductionOperatorModal({ operator, orderedDates, onClose }: ModalProps){
+function ProductionOperatorModalComponent({ operator, orderedDates, onClose }: ModalProps){
   const chartData = useMemo(()=>{
     if(!operator) return []
     const data = orderedDates.map(d=>({
@@ -187,4 +187,7 @@ export function ProductionOperatorModal({ operator, orderedDates, onClose }: Mod
       </div>
     </div>
   )
-} 
+}
+
+// eslint-disable-next-line react/display-name
+export const ProductionOperatorModal = React.memo(ProductionOperatorModalComponent) as typeof ProductionOperatorModalComponent; 

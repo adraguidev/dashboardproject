@@ -21,6 +21,7 @@ import { Card } from '@/components/ui/card'
 import { ProduccionReportSummary } from '@/types/dashboard'
 import { formatDateSafe, getDayOfWeekSafe, parseDateSafe } from '@/lib/date-utils'
 import { TrendingUp, TrendingDown, Calendar, Users, BarChart3 } from 'lucide-react'
+import React from 'react'
 
 interface ProduccionChartProps {
   report: ProduccionReportSummary | null
@@ -28,9 +29,7 @@ interface ProduccionChartProps {
   className?: string
 }
 
-
-
-export function ProduccionChart({ report, loading = false, className = '' }: ProduccionChartProps) {
+function ProduccionChartComponent({ report, loading = false, className = '' }: ProduccionChartProps) {
   // Preparar datos para el gráfico (solo días con datos > 0)
   const chartData = useMemo(() => {
     if (!report || !report.fechas.length) return []
@@ -500,4 +499,7 @@ export function ProduccionChart({ report, loading = false, className = '' }: Pro
       </div>
     </Card>
   )
-} 
+}
+
+// eslint-disable-next-line react/display-name
+export const ProduccionChart = React.memo(ProduccionChartComponent) as typeof ProduccionChartComponent; 

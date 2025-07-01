@@ -1,13 +1,14 @@
 'use client'
 
 import { LineChart, Line, ResponsiveContainer } from 'recharts'
+import React from 'react'
 
 interface SparklineProps {
   data: number[]
   strokeColor?: string
 }
 
-export function SparklineChart({ data, strokeColor = '#8884d8' }: SparklineProps) {
+function SparklineChartComponent({ data, strokeColor = '#8884d8' }: SparklineProps) {
   const chartData = data.map((value, index) => ({ name: index, value }))
 
   return (
@@ -23,4 +24,7 @@ export function SparklineChart({ data, strokeColor = '#8884d8' }: SparklineProps
       </LineChart>
     </ResponsiveContainer>
   )
-} 
+}
+
+// eslint-disable-next-line react/display-name
+export const SparklineChart = React.memo(SparklineChartComponent) as typeof SparklineChartComponent; 

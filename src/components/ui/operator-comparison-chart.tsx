@@ -3,6 +3,7 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { useMemo } from 'react';
 import { Users } from 'lucide-react';
+import React from 'react';
 
 interface OperatorData {
   operador: string;
@@ -22,7 +23,7 @@ const getBarColor = (colorClass: string | undefined) => {
   return '#60a5fa'; // Azul para 'EVALUACION' o sin color específico
 };
 
-export function OperatorComparisonChart({ data }: ChartProps) {
+function OperatorComparisonChartComponent({ data }: ChartProps) {
   const chartData = useMemo(() => {
     // Filtrar operadores con 0 pendientes y tomar los top 20 para legibilidad
     return data
@@ -80,4 +81,7 @@ export function OperatorComparisonChart({ data }: ChartProps) {
       </div>
     </div>
   );
-} 
+}
+
+// eslint-disable-next-line react/display-name
+export const OperatorComparisonChart = React.memo(OperatorComparisonChartComponent) as typeof OperatorComparisonChartComponent; 
