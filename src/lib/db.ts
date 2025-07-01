@@ -177,6 +177,52 @@ export class DirectDatabaseAPI {
       .orderBy(desc(tablePRR.fechaexpendiente));
   }
 
+  // ============= MÉTODOS AGREGADOS PARA REPORTES =============
+
+  async getAggregatedPendientesReport(
+    proceso: 'ccm' | 'prr',
+    groupBy: 'year' | 'quarter' | 'month'
+  ) {
+    const table = proceso === 'ccm' ? tableCCM : tablePRR;
+
+    // Reutilizamos la misma lógica de filtros que en los métodos originales
+    const whereConditions =
+      proceso === 'ccm'
+        ? and(
+            eq(tableCCM.ultimaetapa, 'EVALUACIÓN - I'),
+            or(isNull(tableCCM.estadopre), eq(tableCCM.estadopre, '')),
+            eq(tableCCM.estadotramite, 'PENDIENTE')
+          )
+        : and(
+            inArray(tablePRR.ultimaetapa, [
+              'ACTUALIZAR DATOS BENEFICIARIO - F',
+              'ACTUALIZAR DATOS BENEFICIARIO - I',
+              'ASOCIACION BENEFICIARIO - F',
+              'ASOCIACION BENEFICIARIO - I',
+              'CONFORMIDAD SUB-DIREC.INMGRA. - I',
+              'PAGOS, FECHA Y NRO RD. - F',
+              'PAGOS, FECHA Y NRO RD. - I',
+              'RECEPCIÓN DINM - F'
+            ]),
+            or(isNull(tablePRR.estadopre), eq(tablePRR.estadopre, '')),
+            eq(tablePRR.estadotramite, 'PENDIENTE')
+          );
+          
+    // Usamos sql.raw con comillas simples para pasar 'year', 'quarter', etc. como string literal.
+    // Además, casteamos la columna a TIMESTAMP para que DATE_TRUNC acepte el tipo correcto.
+    const periodExpression = sql`DATE_TRUNC(${sql.raw(`'${groupBy}'`)}, ${table.fechaexpendiente}::timestamp)::date`;
+
+    return await this.db
+      .select({
+        operador: sql<string>`COALESCE(NULLIF(${table.operador}, ''), 'Sin Operador')`.as('operador'),
+        period: sql<Date>`${periodExpression}`.as('period'),
+        count: count(table.numerotramite),
+      })
+      .from(table)
+      .where(and(whereConditions, isNotNull(table.fechaexpendiente)))
+      .groupBy(sql`operador`, sql`period`);
+  }
+
   // ============= MÉTODOS PARA EVALUADORES =============
   
   async getEvaluadoresCCM() {

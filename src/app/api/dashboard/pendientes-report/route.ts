@@ -124,6 +124,9 @@ function normalizeName(name: string | null | undefined): string {
   return name.trim().toUpperCase().replace(/\s+/g, ' ');
 }
 
+/**
+ * @deprecated Reemplazada por formatAggregatedData que trabaja con datos pre-agregados desde la BD.
+ */
 function generatePendientesReport(
   data: any[], 
   evaluadores: Evaluador[], 
@@ -209,13 +212,102 @@ function generatePendientesReport(
   };
 }
 
+// NUEVA FUNCIÓN OPTIMIZADA
+function formatAggregatedData(
+  aggregatedData: { operador: string; period: any; count: number }[],
+  evaluadores: Evaluador[],
+  process: 'ccm' | 'prr',
+  groupBy: 'year' | 'quarter' | 'month'
+): PendientesReportSummary {
+  const operadorMap = new Map<string, { [period: string]: number }>();
+  const allPeriods = new Set<string>();
+
+  const evaluadorMap = new Map<string, Evaluador>();
+  evaluadores.forEach(evaluador => {
+    if (evaluador.nombre_en_base) {
+      evaluadorMap.set(normalizeName(evaluador.nombre_en_base), evaluador);
+    }
+  });
+
+  // La data ya viene agregada, solo necesitamos transformarla
+  aggregatedData.forEach(record => {
+    const operadorName = record.operador;
+    // El campo period puede llegar como Date o como string ISO (p.ej. '2024-01-01').
+    const rawPeriod: string = typeof record.period === 'string'
+      ? record.period
+      : (record.period as Date).toISOString();
+
+    const periodStr = extractPeriodFromDate(rawPeriod, groupBy) || 'Sin Fecha';
+    allPeriods.add(periodStr);
+
+    if (!operadorMap.has(operadorName)) {
+      operadorMap.set(operadorName, {});
+    }
+
+    const operadorData = operadorMap.get(operadorName)!;
+    operadorData[periodStr] = (operadorData[periodStr] || 0) + record.count;
+  });
+
+  const periods = Array.from(allPeriods).sort(customPeriodSort);
+  const reportData: PendientesReportData[] = [];
+  const totalByPeriod: { [period: string]: number } = {};
+  
+  periods.forEach(period => {
+    totalByPeriod[period] = 0;
+  });
+
+  operadorMap.forEach((periodData, operadorName) => {
+    const normalizedOperadorName = normalizeName(operadorName);
+    const evaluador = evaluadorMap.get(normalizedOperadorName);
+    const subEquipo = evaluador?.sub_equipo;
+    const { colorClass } = getColorConfig(subEquipo);
+
+    const operadorReport: PendientesReportData = {
+      operador: operadorName,
+      years: {},
+      total: 0,
+      subEquipo: subEquipo || 'NO_ENCONTRADO',
+      colorClass,
+    };
+
+    let totalForOperator = 0;
+    periods.forEach(period => {
+      const count = periodData[period] || 0;
+      operadorReport.years[period] = count;
+      totalForOperator += count;
+      totalByPeriod[period] += count;
+    });
+    operadorReport.total = totalForOperator;
+
+    reportData.push(operadorReport);
+  });
+
+  reportData.sort((a, b) => b.total - a.total);
+
+  const grandTotal = Object.values(totalByPeriod).reduce((sum, count) => sum + count, 0);
+
+  const legendWithCounts = COLOR_LEGEND.map(legendItem => {
+    const count = reportData.filter(item => item.subEquipo === legendItem.subEquipo).length;
+    return { ...legendItem, count };
+  });
+
+  return {
+    data: reportData,
+    years: periods,
+    totalByYear: totalByPeriod,
+    grandTotal,
+    process,
+    legend: legendWithCounts,
+  };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const process = searchParams.get('process') as 'ccm' | 'prr' | null;
     const groupBy = (searchParams.get('groupBy') || 'quarter') as 'year' | 'quarter' | 'month';
 
-    const cacheKey = `dashboard:pendientes-report:${process}:${groupBy}:v3`;
+    const cacheKey = `dashboard:pendientes-report:${process}:${groupBy}:v4`; // Bump cache version
     const ttl = 6 * 60 * 60; // 6 horas
 
     console.log(`🔍 Generando reporte de pendientes para proceso: ${process}, agrupado por: ${groupBy}`);
@@ -232,33 +324,23 @@ export async function GET(request: NextRequest) {
       key: cacheKey,
               ttlSeconds: ttl,
       fetcher: async () => {
-        let data: any[] = []
-        let evaluadores: Evaluador[] = []
-
-        // Crear instancia de la API directa a PostgreSQL
         const dbAPI = await createDirectDatabaseAPI();
 
-        if (process === 'ccm') {
-          console.log('📊 Obteniendo TODOS los datos CCM pendientes y evaluadores...')
-          const [ccmData, ccmEvaluadores] = await Promise.all([
-            dbAPI.getAllCCMPendientes(),
-            dbAPI.getEvaluadoresCCM()
-          ])
-          data = ccmData
-          evaluadores = ccmEvaluadores
-        } else {
-          console.log('📊 Obteniendo TODOS los datos PRR pendientes y evaluadores...')
-          const [prrData, prrEvaluadores] = await Promise.all([
-            dbAPI.getAllPRRPendientes(),
-            dbAPI.getEvaluadoresPRR()
-          ])
-          data = prrData
-          evaluadores = prrEvaluadores
-        }
+        console.log('📊 Obteniendo datos AGREGADOS y evaluadores...');
+        
+        // ¡LA OPTIMIZACIÓN CLAVE!
+        // 1. Llamamos al nuevo método que ejecuta la agregación en la BD.
+        // 2. Obtenemos los evaluadores en paralelo.
+        const [aggregatedData, evaluadores] = await Promise.all([
+          dbAPI.getAggregatedPendientesReport(process, groupBy),
+          process === 'ccm' ? dbAPI.getEvaluadoresCCM() : dbAPI.getEvaluadoresPRR()
+        ]);
 
-        console.log(`✅ Datos obtenidos: ${data.length} registros pendientes, ${evaluadores.length} evaluadores`)
+        console.log(`✅ Datos agregados obtenidos: ${aggregatedData.length} filas.`);
+        
+        // Usamos la nueva función ligera para formatear los resultados
+        const generatedReport = formatAggregatedData(aggregatedData, evaluadores, process, groupBy);
 
-        const generatedReport = generatePendientesReport(data, evaluadores, process, groupBy);
         console.log(`📋 Reporte generado: ${generatedReport.data.length} operadores, ${generatedReport.years.length} periodos, ${generatedReport.grandTotal} total`);
         return generatedReport;
       }
