@@ -34,6 +34,9 @@ const nextConfig: NextConfig = {
   // Manejo de errores de hidratación de React
   reactStrictMode: true, // Habilitado para detectar problemas potenciales
   
+  // No generar source-maps del navegador en producción; ahorra ~40-50 MB
+  productionBrowserSourceMaps: false,
+  
   // Configuraciones experimentales para Next.js 15
   experimental: {
     // Configuraciones específicas para Next.js 15 si las necesitamos

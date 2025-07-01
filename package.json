@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "heroku-postbuild": "next build && rm -rf ./node_modules && rm -rf ./.next/cache",
+    "heroku-postbuild": "next build && npm prune --production && rm -rf ./build/cache",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
