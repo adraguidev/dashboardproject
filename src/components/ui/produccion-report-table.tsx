@@ -2,12 +2,16 @@
 
 import React, { useState, useMemo, useCallback } from 'react'
 import * as ExcelJS from 'exceljs'
-import { Card } from './card'
+import { Card } from '@/components/ui/card'
 import { ProduccionReportSummary, Evaluador, ProduccionReportData } from '@/types/dashboard'
 import { ProduccionChart } from './produccion-chart'
 import { formatDateShort } from '@/lib/date-utils'
 import { ProductionOperatorModal } from './production-operator-modal'
-import { Download, Search, Filter } from 'lucide-react'
+import { Download, Search, Filter, BarChart, Calendar } from 'lucide-react'
+import { SectionHeader } from '@/components/ui/section-header'
+import { SearchInput } from './search-input'
+import { FilterSelect } from './filter-select'
+import { SectionCard } from './section-card'
 
 interface ProduccionReportTableProps {
   report: ProduccionReportSummary | null
@@ -294,48 +298,44 @@ export function ProduccionReportTable({
   // -------------------------------------------------
 
   return (
-    <Card className={`${className}`}>
-      {/* Encabezado */}
-      <div className="p-4 bg-gray-50 border-b">
-        <div className="flex justify-between items-center mb-4">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Reporte de Producción</h3>
-            <p className="text-sm text-gray-500">Análisis de producción por día y operador - {report.process.toUpperCase()}</p>
-          </div>
-          <div className="text-sm text-gray-600">
-            Total: <span className="font-bold">{filteredTotals.total.toLocaleString()}</span> expedientes procesados
-          </div>
-        </div>
-
-        {/* Selectores */}
-        <div className="flex flex-wrap gap-4 items-center mb-4">
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700">Días:</label>
-            <select 
-              value={currentFilters.days} 
-              onChange={(e) => onFiltersChange({ days: Number(e.target.value) })}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value={15}>15 días</option>
-              <option value={20}>20 días</option>
-              <option value={30}>30 días</option>
-              <option value={60}>60 días</option>
-            </select>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700">Tipo:</label>
-            <select 
-              value={currentFilters.dayType} 
-              onChange={(e) => onFiltersChange({ dayType: e.target.value as 'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA' })}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="TODOS">Todos</option>
-              <option value="LABORABLES">Laborables</option>
-              <option value="FIN_DE_SEMANA">Fin de Semana</option>
-            </select>
-          </div>
-          
+    <SectionCard className={className}>
+      {/* Encabezado y filtros principales */}
+      <div className="border-b pb-4">
+        <SectionHeader
+          icon={<BarChart className="h-6 w-6 text-green-600" />}
+          title="Reporte de Producción"
+          description={`Análisis de producción por día y operador - ${report.process.toUpperCase()}`}
+          actions={
+            <div className="text-sm text-gray-600">
+              Total: <span className="font-bold">{filteredTotals.total.toLocaleString()}</span> expedientes procesados
+            </div>
+          }
+        />
+        <div className="flex flex-wrap gap-4 items-center mt-4">
+          <FilterSelect
+            value={currentFilters.days}
+            onChange={(e) => onFiltersChange({ days: Number(e.target.value) })}
+            icon={<Calendar className="h-4 w-4" />}
+            containerClassName="w-full sm:w-48"
+          >
+            <option value="15">15 días</option>
+            <option value="20">20 días</option>
+            <option value="30">30 días</option>
+            <option value="60">60 días</option>
+          </FilterSelect>
+          <FilterSelect
+            value={currentFilters.dayType}
+            onChange={(e) =>
+              onFiltersChange({
+                dayType: e.target.value as 'TODOS' | 'LABORABLES' | 'FIN_DE_SEMANA',
+              })
+            }
+            containerClassName="w-full sm:w-48"
+          >
+            <option value="TODOS">Todos los días</option>
+            <option value="LABORABLES">Días laborables</option>
+            <option value="FIN_DE_SEMANA">Fines de semana</option>
+          </FilterSelect>
           <button
             onClick={exportToExcel}
             className="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -344,253 +344,247 @@ export function ProduccionReportTable({
             <Download className="w-4 h-4" />
             <span>Exportar</span>
           </button>
-          
           <div className="text-sm text-gray-600">
             <span className="font-medium">Mostrando:</span> {visibleFechas.length} días con datos
           </div>
         </div>
-
-        <div className="text-sm text-gray-600">
+        <div className="text-sm text-gray-600 mt-2">
           <span className="font-medium">Período base:</span> {report.periodo}
         </div>
       </div>
-
-      {/* Tabs System and Filters */}
-      <div className="p-4 bg-white border-b">
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  setActiveTab(tab.id);
-                  // Reset filters when changing tabs
-                  setSearchTerm('');
-                  setSubEquipoFilter('');
-                }}
-                className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                {`${tab.name} (${tab.count})`}
-              </button>
-            ))}
-          </nav>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-4 items-center">
-            <div className="relative flex-grow">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <input
-                    type="text"
-                    placeholder="Buscar operador..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                />
-            </div>
-            {activeTab === 'general' && (
-                <div className="relative flex-grow">
-                    <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                    <select
-                        value={subEquipoFilter}
-                        onChange={(e) => setSubEquipoFilter(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-blue-500"
-                    >
-                        <option value="">Todos los sub-equipos</option>
-                        {uniqueSubEquipos.map(subEquipo => (
-                            <option key={subEquipo} value={subEquipo}>{subEquipo}</option>
-                        ))}
-                    </select>
-                </div>
-            )}
-        </div>
-        <div className="mt-2 text-sm text-gray-600">
-          {tabs.find(tab => tab.id === activeTab)?.description}
-        </div>
-      </div>
-
-      {/* Tabla para Desktop */}
-      <div className="overflow-x-auto hidden md:block">
-        <table className="w-full">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-100 z-10">
-                Operador
-              </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
-                Sub Equipo
-              </th>
-              {visibleFechas.map((fecha: string) => (
-                <th 
-                  key={fecha}
-                  className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[60px]"
-                  title={`Fecha: ${fecha} (${formatDate(fecha)})`}
+      
+      {/* Contenido principal: Tabs, Tabla, Gráfico */}
+      <div className="mt-6 space-y-6">
+        <Card className="p-4 bg-white">
+           {/* Tabs System and Filters */}
+           <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    // Reset filters when changing tabs
+                    setSearchTerm('');
+                    setSubEquipoFilter('');
+                  }}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
                 >
-                  {formatDate(fecha)}
-                </th>
+                  {`${tab.name} (${tab.count})`}
+                </button>
               ))}
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-blue-50 min-w-[80px]">
-                Total
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {filteredOperators.map((operadorData) => (
-              <tr 
-                key={operadorData.operador}
-                className={`transition-colors cursor-pointer ${operadorData.colorClass || ''}`}
-                onClick={() => setModalOperator(operadorData)}
+            </nav>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-4 items-center">
+            <SearchInput
+              placeholder="Buscar operador..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              containerClassName="flex-grow"
+            />
+            {activeTab === 'general' && (
+              <FilterSelect
+                value={subEquipoFilter}
+                onChange={(e) => setSubEquipoFilter(e.target.value)}
+                containerClassName="flex-grow"
               >
-                <td className={`px-4 py-3 text-sm font-medium text-gray-900 sticky left-0 z-10 border-r ${operadorData.colorClass || 'bg-white'}`}>
-                  <div className="max-w-[200px] truncate" title={operadorData.operador}>
-                    {operadorData.operador}
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-sm text-center">
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${
-                    operadorData.subEquipo === 'EVALUACION' 
-                      ? 'bg-gray-100 text-gray-800'
-                      : operadorData.subEquipo === 'REASIGNADOS'
-                      ? 'bg-orange-200 text-orange-900'
-                      : operadorData.subEquipo === 'SUSPENDIDA'
-                      ? 'bg-orange-400 text-orange-950'
-                      : operadorData.subEquipo === 'RESPONSABLE'
-                      ? 'bg-green-200 text-green-900'
-                      : 'bg-gray-300 text-gray-700'
-                  }`}>
-                    {operadorData.subEquipo === 'NO_ENCONTRADO' ? 'N/A' : operadorData.subEquipo}
-                  </span>
-                </td>
-                {visibleFechas.map((fecha: string) => {
-                  const count = operadorData.fechas[fecha] || 0
-                  return (
+                <option value="">Todos los sub-equipos</option>
+                {uniqueSubEquipos.map(subEquipo => (
+                  <option key={subEquipo} value={subEquipo}>{subEquipo}</option>
+                ))}
+              </FilterSelect>
+            )}
+          </div>
+          <div className="mt-2 text-sm text-gray-600">
+            {tabs.find(tab => tab.id === activeTab)?.description}
+          </div>
+        </Card>
+
+        <Card className="bg-white">
+          {/* Tabla para Desktop */}
+          <div className="overflow-x-auto hidden md:block">
+            <table className="w-full">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-100 z-10">
+                    Operador
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
+                    Sub Equipo
+                  </th>
+                  {visibleFechas.map((fecha: string) => (
+                    <th 
+                      key={fecha}
+                      className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[60px]"
+                      title={`Fecha: ${fecha} (${formatDate(fecha)})`}
+                    >
+                      {formatDate(fecha)}
+                    </th>
+                  ))}
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-blue-50 min-w-[80px]">
+                    Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredOperators.map((operadorData) => (
+                  <tr 
+                    key={operadorData.operador}
+                    className={`transition-colors cursor-pointer ${operadorData.colorClass || ''}`}
+                    onClick={() => setModalOperator(operadorData)}
+                  >
+                    <td className={`px-4 py-3 text-sm font-medium text-gray-900 sticky left-0 z-10 border-r ${operadorData.colorClass || 'bg-white'}`}>
+                      <div className="max-w-[200px] truncate" title={operadorData.operador}>
+                        {operadorData.operador}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-center">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        operadorData.subEquipo === 'EVALUACION' 
+                          ? 'bg-gray-100 text-gray-800'
+                          : operadorData.subEquipo === 'REASIGNADOS'
+                          ? 'bg-orange-200 text-orange-900'
+                          : operadorData.subEquipo === 'SUSPENDIDA'
+                          ? 'bg-orange-400 text-orange-950'
+                          : operadorData.subEquipo === 'RESPONSABLE'
+                          ? 'bg-green-200 text-green-900'
+                          : 'bg-gray-300 text-gray-700'
+                      }`}>
+                        {operadorData.subEquipo === 'NO_ENCONTRADO' ? 'N/A' : operadorData.subEquipo}
+                      </span>
+                    </td>
+                    {visibleFechas.map((fecha: string) => {
+                      const count = operadorData.fechas[fecha] || 0
+                      return (
+                        <td 
+                          key={fecha}
+                          className={`px-3 py-3 text-sm text-center font-mono ${
+                            count > 0 
+                              ? 'text-gray-900 font-medium'
+                              : 'text-gray-400'
+                          }`}
+                        >
+                          {count > 0 ? count.toLocaleString() : '0'}
+                        </td>
+                      )
+                    })}
+                    <td className="px-4 py-3 text-sm text-center font-bold bg-blue-50 text-blue-900">
+                      {visibleFechas.reduce((sum: number, fecha: string) => sum + (operadorData.fechas[fecha] || 0), 0).toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+                
+                {/* Fila de totales */}
+                <tr className="bg-green-100 border-t-2 border-green-300">
+                  <td className="px-4 py-3 text-sm font-bold text-green-900 sticky left-0 bg-green-100 z-10">
+                    TOTAL
+                  </td>
+                  <td className="px-4 py-3 text-sm text-center font-bold text-green-900">
+                    -
+                  </td>
+                  {visibleFechas.map((fecha: string) => (
                     <td 
                       key={fecha}
-                      className={`px-3 py-3 text-sm text-center font-mono ${
-                        count > 0 
-                          ? 'text-gray-900 font-medium'
-                          : 'text-gray-400'
-                      }`}
+                      className="px-3 py-3 text-sm text-center font-bold text-green-900"
                     >
-                      {count > 0 ? count.toLocaleString() : '0'}
+                      {(filteredTotals as any)[fecha]?.toLocaleString() || '0'}
                     </td>
-                  )
-                })}
-                <td className="px-4 py-3 text-sm text-center font-bold bg-blue-50 text-blue-900">
-                  {visibleFechas.reduce((sum: number, fecha: string) => sum + (operadorData.fechas[fecha] || 0), 0).toLocaleString()}
-                </td>
-              </tr>
-            ))}
-            
-            {/* Fila de totales */}
-            <tr className="bg-green-100 border-t-2 border-green-300">
-              <td className="px-4 py-3 text-sm font-bold text-green-900 sticky left-0 bg-green-100 z-10">
-                TOTAL
-              </td>
-              <td className="px-4 py-3 text-sm text-center font-bold text-green-900">
-                -
-              </td>
-              {visibleFechas.map((fecha: string) => (
-                <td 
-                  key={fecha}
-                  className="px-3 py-3 text-sm text-center font-bold text-green-900"
-                >
-                  {(filteredTotals as any)[fecha]?.toLocaleString() || '0'}
-                </td>
-              ))}
-              <td className="px-4 py-3 text-sm text-center font-bold text-green-900 bg-green-200">
-                {filteredTotals.total.toLocaleString()}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      {/* Cards para Mobile */}
-      <div className="block md:hidden p-4 space-y-4">
-        {filteredOperators.map((operadorData) => (
-          <div 
-            key={operadorData.operador}
-            className={`bg-white rounded-lg shadow-md border border-gray-200 p-4 ${operadorData.colorClass || ''}`}
-            onClick={() => setModalOperator(operadorData)}
-          >
-            <div className="flex justify-between items-start mb-3">
-              <div>
-                <h4 className="font-bold text-gray-900 leading-tight truncate max-w-[200px]" title={operadorData.operador}>{operadorData.operador}</h4>
-                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                  operadorData.subEquipo === 'EVALUACION' 
-                    ? 'bg-gray-100 text-gray-800'
-                    : operadorData.subEquipo === 'REASIGNADOS'
-                    ? 'bg-orange-200 text-orange-900'
-                    : operadorData.subEquipo === 'SUSPENDIDA'
-                    ? 'bg-orange-400 text-orange-950'
-                    : operadorData.subEquipo === 'RESPONSABLE'
-                    ? 'bg-green-200 text-green-900'
-                    : 'bg-gray-300 text-gray-700'
-                }`}>
-                  {operadorData.subEquipo === 'NO_ENCONTRADO' ? 'N/A' : operadorData.subEquipo}
-                </span>
-              </div>
-              <div className="text-right flex-shrink-0 ml-2">
-                <div className="text-xs text-gray-500">Total</div>
-                <div className="text-lg font-bold text-blue-800">
-                  {visibleFechas.reduce((sum: number, fecha: string) => sum + (operadorData.fechas[fecha] || 0), 0).toLocaleString()}
-                </div>
-              </div>
-            </div>
-             <p className="text-xs text-gray-500 mt-2">Toque para ver detalle diario.</p>
+                  ))}
+                  <td className="px-4 py-3 text-sm text-center font-bold text-green-900 bg-green-200">
+                    {filteredTotals.total.toLocaleString()}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-        ))}
-        {/* Total Card */}
-        {filteredOperators.length > 0 && (
-            <div className="bg-green-100 rounded-lg shadow-md border border-green-300 p-4 mt-4 sticky bottom-4">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h4 className="font-bold text-green-900">PRODUCCIÓN TOTAL</h4>
-                  <p className="text-xs text-green-800">{filteredOperators.length} operadores</p>
-                </div>
-                 <div className="text-right flex-shrink-0 ml-2">
-                    <div className="text-2xl font-bold text-green-800">
-                      {filteredTotals.total.toLocaleString()}
+
+          {/* Cards para Mobile */}
+          <div className="block md:hidden p-4 space-y-4">
+            {filteredOperators.map((operadorData) => (
+              <div 
+                key={operadorData.operador}
+                className={`bg-white rounded-lg shadow-md border border-gray-200 p-4 ${operadorData.colorClass || ''}`}
+                onClick={() => setModalOperator(operadorData)}
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <h4 className="font-bold text-gray-900 leading-tight truncate max-w-[200px]" title={operadorData.operador}>{operadorData.operador}</h4>
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      operadorData.subEquipo === 'EVALUACION' 
+                        ? 'bg-gray-100 text-gray-800'
+                        : operadorData.subEquipo === 'REASIGNADOS'
+                        ? 'bg-orange-200 text-orange-900'
+                        : operadorData.subEquipo === 'SUSPENDIDA'
+                        ? 'bg-orange-400 text-orange-950'
+                        : operadorData.subEquipo === 'RESPONSABLE'
+                        ? 'bg-green-200 text-green-900'
+                        : 'bg-gray-300 text-gray-700'
+                    }`}>
+                      {operadorData.subEquipo === 'NO_ENCONTRADO' ? 'N/A' : operadorData.subEquipo}
+                    </span>
+                  </div>
+                  <div className="text-right flex-shrink-0 ml-2">
+                    <div className="text-xs text-gray-500">Total</div>
+                    <div className="text-lg font-bold text-blue-800">
+                      {visibleFechas.reduce((sum: number, fecha: string) => sum + (operadorData.fechas[fecha] || 0), 0).toLocaleString()}
                     </div>
                   </div>
+                </div>
+                 <p className="text-xs text-gray-500 mt-2">Toque para ver detalle diario.</p>
               </div>
+            ))}
+            {/* Total Card */}
+            {filteredOperators.length > 0 && (
+                <div className="bg-green-100 rounded-lg shadow-md border border-green-300 p-4 mt-4 sticky bottom-4">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h4 className="font-bold text-green-900">PRODUCCIÓN TOTAL</h4>
+                      <p className="text-xs text-green-800">{filteredOperators.length} operadores</p>
+                    </div>
+                     <div className="text-right flex-shrink-0 ml-2">
+                        <div className="text-2xl font-bold text-green-800">
+                          {filteredTotals.total.toLocaleString()}
+                        </div>
+                      </div>
+                  </div>
+                </div>
+            )}
+          </div>
+
+          {/* Leyenda de colores */}
+          <div className="p-4 bg-gray-50 border-t">
+            <h4 className="text-sm font-medium text-gray-900 mb-3">Código de Colores por Sub Equipo:</h4>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              {report.legend.map(legend => (
+                <div key={legend.subEquipo} className="flex items-center space-x-2">
+                  <div className={`w-4 h-4 rounded ${legend.colorClass}`}></div>
+                  <p className="text-xs text-gray-500">{legend.subEquipo} {legend.count}</p>
+                </div>
+              ))}
             </div>
-        )}
-      </div>
+          </div>
+        </Card>
 
-      {/* Leyenda de colores */}
-      <div className="p-4 bg-gray-50 border-t">
-        <h4 className="text-sm font-medium text-gray-900 mb-3">Código de Colores por Sub Equipo:</h4>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-          {report.legend.map(legend => (
-            <div key={legend.subEquipo} className="flex items-center space-x-2">
-              <div className={`w-4 h-4 rounded ${legend.colorClass}`}></div>
-              <p className="text-xs text-gray-500">{legend.subEquipo} {legend.count}</p>
-            </div>
-          ))}
-        </div>
+        <Card className="bg-white">
+          {/* Gráfico de evolución diaria */}
+          <ProduccionChart 
+            report={filteredReport}
+            loading={loading}
+          />
+        </Card>
       </div>
-
-      {/* Gráfico de evolución diaria */}
-      <div className="border-t">
-        <ProduccionChart 
-          report={filteredReport}
-          loading={loading}
-          className="border-0"
-        />
-      </div>
-
       {/* Modal */}
       {modalOperator && (
         <ProductionOperatorModal 
-          operator={{ operador: modalOperator.operador, fechas: modalOperator.fechas }}
-          orderedDates={visibleFechas}
-          onClose={() => setModalOperator(null)}
-        />
-      )}
-    </Card>
+            operator={{ operador: modalOperator.operador, fechas: modalOperator.fechas }}
+            orderedDates={visibleFechas}
+            onClose={() => setModalOperator(null)}
+          />
+        )}
+    </SectionCard>
   )
 } 

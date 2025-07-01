@@ -2,7 +2,11 @@
 
 import { useState, useMemo } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { Calendar, FileStack } from 'lucide-react'
+import { SectionHeader } from '@/components/ui/section-header'
+import { FilterSelect } from '@/components/ui/filter-select'
 import { Card } from '@/components/ui/card'
+import { SectionCard } from '@/components/ui/section-card'
 import type { IngresosReport } from '@/types/dashboard'
 import { formatDateSafe } from '@/lib/date-utils'
 import { MonthlyIngresosTable } from './monthly-ingresos-table'
@@ -147,43 +151,33 @@ function IngresosChartComponent({
   }
 
   return (
-    <div className={`space-y-6 ${className}`}>
-      {/* Gráfico principal diario */}
-      <Card className="overflow-hidden">
-        {/* Header con controles */}
-        <div className="p-6 bg-gray-50 border-b">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-1">
-                Ingreso Diario de Expedientes - {report.process.toUpperCase()}
-              </h3>
-              <div className="flex items-center gap-4 text-sm text-gray-600">
-                <span>{report.periodo}</span>
-                <span>•</span>
-                <span>{report.fechaInicio} al {report.fechaFin}</span>
-              </div>
-            </div>
-            
-            {/* Selector de período */}
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">Período:</label>
-              <select 
-                value={selectedPeriod}
-                onChange={(e) => handlePeriodChange(Number(e.target.value))}
-                className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                {periodOptions.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+    <SectionCard className={className}>
+      {/* Encabezado estandarizado */}
+      <SectionHeader
+        icon={<FileStack className="h-6 w-6 text-indigo-600" />}
+        title={`Ingreso Diario de Expedientes - ${report.process.toUpperCase()}`}
+        description={`${report.periodo} • ${report.fechaInicio} al ${report.fechaFin}`}
+        actions={
+          <FilterSelect
+            value={selectedPeriod}
+            onChange={(e) => handlePeriodChange(Number(e.target.value))}
+            icon={<Calendar className="h-4 w-4" />}
+            containerClassName="w-full sm:w-48"
+          >
+            {periodOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </FilterSelect>
+        }
+      />
 
+      <div className="space-y-6 mt-6">
+        <Card className="overflow-hidden bg-white">
           {/* Estadísticas rápidas */}
           {stats && (
-            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-4 border-b">
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-600">{report.totalTramites}</div>
                 <div className="text-xs text-gray-500">Total Trámites</div>
@@ -202,104 +196,77 @@ function IngresosChartComponent({
               </div>
             </div>
           )}
-        </div>
 
-        {/* Gráfico */}
-        <div className="p-2 sm:p-6">
-          <div className="h-96">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={chartData}
-                margin={{
-                  top: 20,
-                  right: 20,
-                  left: 5,
-                  bottom: 50
-                }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis 
-                  dataKey="fechaLabel"
-                  angle={-45}
-                  textAnchor="end"
-                  height={60}
-                  tick={{ fontSize: 10 }}
-                  stroke="#666"
-                  interval={'preserveStartEnd'}
-                  className="hidden sm:block"
-                />
-                 <XAxis 
-                  dataKey="fechaLabel"
-                  tick={{ fontSize: 9 }}
-                  stroke="#666"
-                  interval={3}
-                  className="block sm:hidden"
+          {/* Gráfico */}
+          <div className="p-2 sm:p-6">
+            <div className="h-96">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={chartData}
+                  margin={{
+                    top: 20,
+                    right: 20,
+                    left: 5,
+                    bottom: 50,
+                  }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis
+                    dataKey="fechaLabel"
+                    angle={-45}
+                    textAnchor="end"
+                    height={60}
+                    tick={{ fontSize: 10 }}
+                    stroke="#666"
+                    interval={'preserveStartEnd'}
+                    className="hidden sm:block"
                   />
-                <YAxis 
-                  stroke="#666"
-                  tick={{ fontSize: 10 }}
-                  width={30}
-                  tickFormatter={(value) => value.toString()}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend 
-                  wrapperStyle={{ paddingTop: '20px' }}
-                  iconType="line"
-                />
-                
-                {/* Línea principal de número de trámites */}
-                <Line 
-                  type="monotone" 
-                  dataKey="numeroTramite" 
-                  stroke="#3b82f6"
-                  strokeWidth={2}
-                  dot={{ r: 4, fill: '#3b82f6' }}
-                  activeDot={{ r: 6, fill: '#1d4ed8' }}
-                  name="NumeroTramite"
-                />
-                
-                {/* Línea de tendencia */}
-                {chartData.some(d => d.tendencia !== undefined) && (
-                  <Line 
-                    type="monotone" 
-                    dataKey="tendencia" 
-                    stroke="#ef4444"
+                  <XAxis
+                    dataKey="fechaLabel"
+                    tick={{ fontSize: 9 }}
+                    stroke="#666"
+                    interval={3}
+                    className="block sm:hidden"
+                  />
+                  <YAxis
+                    stroke="#666"
+                    tick={{ fontSize: 10 }}
+                    width={30}
+                    tickFormatter={(value) => value.toString()}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="line" />
+                  <Line
+                    type="monotone"
+                    dataKey="numeroTramite"
+                    stroke="#3b82f6"
                     strokeWidth={2}
-                    strokeDasharray="5 5"
-                    dot={false}
-                    name="Tendencia"
+                    dot={{ r: 4, fill: '#3b82f6' }}
+                    activeDot={{ r: 6, fill: '#1d4ed8' }}
+                    name="NumeroTramite"
                   />
-                )}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Footer con información adicional */}
-        <div className="px-6 py-4 bg-gray-50 border-t">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm text-gray-600">
-            <div>
-              <strong>Días con datos:</strong> {report.diasConDatos} de {report.data.length}
+                  {chartData.some((d) => d.tendencia !== undefined) && (
+                    <Line
+                      type="monotone"
+                      dataKey="tendencia"
+                      stroke="#ef4444"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      dot={false}
+                      name="Tendencia"
+                    />
+                  )}
+                </LineChart>
+              </ResponsiveContainer>
             </div>
-            <div>
-              <strong>Proceso:</strong> {report.process.toUpperCase()}
-            </div>
           </div>
-        </div>
-      </Card>
+        </Card>
 
-      {/* Tabla y gráfico mensual */}
-      <MonthlyIngresosTable 
-        data={report.monthlyData}
-        loading={loading}
-      />
-
-      {/* Tabla y gráfico semanal */}
-      <WeeklyIngresosTable 
-        data={report.weeklyData}
-        loading={loading}
-      />
-    </div>
+        {/* Tablas secundarias */}
+        <MonthlyIngresosTable data={report.monthlyData} loading={loading} />
+        <WeeklyIngresosTable data={report.weeklyData} loading={loading} />
+      </div>
+    </SectionCard>
   )
 }
 

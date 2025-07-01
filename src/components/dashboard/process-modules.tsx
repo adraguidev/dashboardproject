@@ -15,6 +15,7 @@ import { BarChart3, CheckCircle, Clock, TrendingUp, Construction, Factory, Trend
 import { ThroughputChart } from '../ui/throughput-chart'
 import ResueltosDashboard from '../ui/resueltos-dashboard'
 import { useQueryClient } from '@tanstack/react-query'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface ProcessModulesProps {
   selectedProcess: 'ccm' | 'prr'
@@ -225,7 +226,7 @@ export function ProcessModules({
       <div className="border-b border-gray-200/80 bg-gray-50/50">
         <div className="px-6 py-1">
           {/* Desktop Tabs */}
-          <nav className="hidden md:flex space-x-1">
+          <nav className="hidden md:flex space-x-1 relative">
             {modules.map((module) => {
               const IconComponent = module.icon
               const isActive = selectedModule === module.id
@@ -237,27 +238,32 @@ export function ProcessModules({
                   onClick={() => !isDisabled && onModuleChange(module.id)}
                   disabled={isDisabled}
                   className={`
-                    group flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200
+                    group relative flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 z-10
                     ${isActive 
-                      ? 'bg-white text-gray-900 shadow-sm border border-gray-200/80' 
+                      ? 'text-gray-900' 
                       : isDisabled
                         ? 'text-gray-400 cursor-not-allowed'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-white/60'
                     }
                   `}
                 >
-                  <IconComponent className={`
-                    w-4 h-4 transition-colors
-                    ${isActive ? module.color : 'text-gray-400 group-hover:text-gray-600'}
-                  `} />
-                  <span>{module.name}</span>
+                  {isActive && (
+                    <motion.div
+                      layoutId="active-tab-indicator"
+                      className="absolute inset-0 bg-white rounded-lg shadow-sm border border-gray-200/80"
+                      transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                    />
+                  )}
+                  <span className="relative z-10 flex items-center gap-2">
+                    <IconComponent className={`
+                      w-4 h-4 transition-colors
+                      ${isActive ? module.color : 'text-gray-400 group-hover:text-gray-600'}
+                    `} />
+                    <span>{module.name}</span>
+                  </span>
                   
                   {module.status === 'coming-soon' && module.id !== selectedModule && (
                     <div className="w-1.5 h-1.5 bg-amber-400 rounded-full"></div>
-                  )}
-                  
-                  {isActive && (
-                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
                   )}
                 </button>
               )
@@ -282,8 +288,18 @@ export function ProcessModules({
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 bg-white">
-        {renderModuleContent()}
+      <div className="flex-1 bg-white overflow-hidden">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={selectedModule}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.2 }}
+          >
+            {renderModuleContent()}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   )

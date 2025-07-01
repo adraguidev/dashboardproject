@@ -40,6 +40,7 @@
     "drizzle-orm": "^0.44.2",
     "excel-date-to-js": "^1.1.5",
     "exceljs": "^4.4.0",
+    "framer-motion": "^12.22.0",
     "googleapis": "^150.0.1",
     "ioredis": "^5.6.1",
     "jose": "^6.0.11",

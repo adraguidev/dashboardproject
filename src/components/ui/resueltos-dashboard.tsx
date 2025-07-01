@@ -5,6 +5,8 @@ import { Card } from '@/components/ui/card';
 import { useResueltosAnalysis, ResueltosAnalysisData } from '@/hooks/use-resueltos-analysis';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts';
 import { ArrowUpRight, ArrowDownRight, TrendingUp, CheckCircle, ListTree, Users } from 'lucide-react';
+import { SectionHeader } from '@/components/ui/section-header'
+import { SectionCard } from './section-card';
 
 const COLORS = ['#3b82f6', '#10b981', '#f97316', '#ef4444', '#8b5cf6', '#eab308', '#64748b'];
 
@@ -20,19 +22,16 @@ function ResueltosDashboardComponent({ proceso }: { proceso: 'ccm' | 'prr' }) {
   const { summary, monthlyTrends, categoryTrends, operatorsDetails } = data;
 
   return (
-    <div className="space-y-6">
+    <SectionCard>
       <DashboardHeader proceso={proceso} />
-      <KPISection summary={summary} />
-
-      {/* Tendencia mensual (arriba) */}
-      <MonthlyComparisonChart data={monthlyTrends.comparison} />
-
-      {/* Distribución de categorías (debajo) */}
-      <CategoryDistributionChart data={summary.currentYear.categories} />
-
-      <CategoryTrendsChart data={categoryTrends} />
-      <OperatorsTable data={operatorsDetails} />
-    </div>
+      <div className="mt-6 space-y-6">
+        <KPISection summary={summary} />
+        <MonthlyComparisonChart data={monthlyTrends.comparison} />
+        <CategoryDistributionChart data={summary.currentYear.categories} />
+        <CategoryTrendsChart data={categoryTrends} />
+        <OperatorsTable data={operatorsDetails} />
+      </div>
+    </SectionCard>
   );
 }
 
@@ -48,15 +47,11 @@ export default ResueltosDashboard;
 
 function DashboardHeader({ proceso }: { proceso: 'ccm' | 'prr' }) {
   return (
-    <div>
-      <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-        <CheckCircle className="h-7 w-7 text-blue-600" />
-        Análisis de Resoluciones ({proceso.toUpperCase()})
-      </h2>
-      <p className="text-gray-600 mt-1">
-        Comparativa de expedientes resueltos del año actual vs. el año anterior.
-      </p>
-    </div>
+    <SectionHeader
+      icon={<CheckCircle className="h-7 w-7 text-blue-600" />}
+      title={`Análisis de Resoluciones (${proceso.toUpperCase()})`}
+      description="Comparativa de expedientes resueltos del año actual vs. el año anterior."
+    />
   );
 }
 
@@ -83,7 +78,7 @@ function KPISection({ summary }: { summary: ResueltosAnalysisData['summary'] }) 
 function MonthlyComparisonChart({ data }: { data: ResueltosAnalysisData['monthlyTrends']['comparison'] | undefined }) {
   if (!data || data.length === 0) {
     return (
-      <Card className="p-6 h-full flex items-center justify-center text-sm text-gray-500">
+      <Card className="p-6 h-full flex items-center justify-center text-sm text-gray-500 bg-white">
         No hay datos de tendencia mensual disponibles.
       </Card>
     )
@@ -92,7 +87,7 @@ function MonthlyComparisonChart({ data }: { data: ResueltosAnalysisData['monthly
   const previousYear = currentYear - 1;
 
   return (
-    <Card className="p-6 h-full">
+    <Card className="p-6 h-full bg-white">
       <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
         <TrendingUp className="h-5 w-5 text-gray-700" />
         Tendencia Mensual Comparativa
@@ -115,7 +110,7 @@ function MonthlyComparisonChart({ data }: { data: ResueltosAnalysisData['monthly
 function CategoryDistributionChart({ data }: { data: { name: string; total: number }[] | undefined }) {
   const chartData = data && data.length > 0 ? data : []
   return (
-    <Card className="p-6 h-full">
+    <Card className="p-6 h-full bg-white">
       <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
         <ListTree className="h-5 w-5 text-gray-700" />
         Distribución por Categorías
@@ -136,7 +131,7 @@ function CategoryDistributionChart({ data }: { data: { name: string; total: numb
 function CategoryTrendsChart({ data }: { data: ResueltosAnalysisData['categoryTrends'] | undefined }) {
   if (!data || data.byMonth.length === 0) return null
   return (
-    <Card className="p-6">
+    <Card className="p-6 bg-white">
       <h3 className="text-lg font-semibold mb-4">Tendencia de Categorías (Año Actual)</h3>
       <ResponsiveContainer width="100%" height={350}>
         <AreaChart data={data.byMonth}>
@@ -157,7 +152,7 @@ function CategoryTrendsChart({ data }: { data: ResueltosAnalysisData['categoryTr
 function OperatorsTable({ data }: { data: ResueltosAnalysisData['operatorsDetails'] | undefined }) {
   if (!data || data.operators.length === 0) return null
   return (
-    <Card className="p-0 overflow-hidden">
+    <Card className="p-0 overflow-hidden bg-white">
       <div className="p-4 border-b">
         <h3 className="text-lg font-semibold flex items-center gap-2">
           <Users className="h-5 w-5 text-gray-700" />
@@ -242,7 +237,7 @@ function KPICard({ title, value, comparisonValue, comparisonText, isAverage = fa
   const formatValue = (val: number) => isAverage ? val.toFixed(1) : val.toLocaleString();
 
   return (
-    <Card className="p-4">
+    <Card className="p-4 bg-white">
       <h4 className="text-sm font-medium text-gray-600">{title}</h4>
       <div className="flex items-baseline gap-2 mt-1">
         <span className="text-3xl font-bold text-gray-900">{formatValue(value)}</span>

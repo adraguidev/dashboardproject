@@ -9,12 +9,16 @@ import { useEvaluadores } from '@/hooks/use-evaluadores'
 import { useHistoricoSinAsignar } from '@/hooks/use-historico-sin-asignar'
 import { format, parseISO, subDays } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Activity, Users, Calendar, TrendingDown, Search, Filter, Download, Save, Loader2, LineChart, AlertTriangle } from 'lucide-react'
+import { Activity, AlertTriangle, BarChart, Calendar, Download, Filter, LineChart, Loader2, Save, Search, TrendingDown, Users } from 'lucide-react'
 import { Evaluador } from '@/types/dashboard'
 import { useToast } from '@/components/ui/toast'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Line, ComposedChart } from 'recharts';
 import { OperatorTrendModal } from './operator-trend-modal'
 import { OperatorMovers } from './operator-movers'
+import { SectionHeader } from '@/components/ui/section-header'
+import { SectionCard } from '@/components/ui/section-card'
+import { SearchInput } from './search-input'
+import { FilterSelect } from './filter-select'
 
 interface AvancePendientesTableProps {
   className?: string
@@ -440,42 +444,30 @@ export default function AvancePendientesTable({
   }
 
   return (
-    <div className={`bg-gray-50 p-4 sm:p-6 rounded-lg ${className}`}>
+    <SectionCard className={className}>
       {/* Header */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6">
-        <div className="flex items-center mb-4 lg:mb-0">
-          <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 mr-4">
-            <Activity className="h-6 w-6 text-orange-600" />
+      <SectionHeader
+        icon={<Activity className="h-6 w-6 text-orange-600" />}
+        title="Avance de Pendientes"
+        description="Histórico de pendientes por operador y fecha."
+        actions={
+          <div className="flex items-center space-x-1 bg-white p-1.5 rounded-lg shadow-sm border border-gray-200">
+            {[7, 15, 30, 60, 90, 180].map((dias) => (
+              <button
+                key={dias}
+                onClick={() => setPeriodoSeleccionado(dias)}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  periodoSeleccionado === dias
+                    ? 'bg-orange-500 text-white shadow-md'
+                    : 'text-gray-600 hover:bg-orange-50'
+                }`}
+              >
+                {dias} días
+              </button>
+            ))}
           </div>
-          <div>
-            <h3 className="text-xl font-bold text-gray-800">Avance de Pendientes</h3>
-            <p className="text-sm text-gray-500">Histórico de pendientes por operador y fecha.</p>
-          </div>
-        </div>
-        <div className="flex items-center text-sm text-gray-600 bg-white px-3 py-2 rounded-lg shadow-sm border border-gray-200">
-          <Calendar className="h-4 w-4 mr-2" />
-          {processedData.fechasFiltradas.length} fechas registradas
-        </div>
-      </div>
-
-      {/* NUEVO: Selector de Período */}
-      <div className="mb-4 flex justify-center">
-        <div className="flex items-center space-x-1 bg-white p-1.5 rounded-lg shadow-sm border border-gray-200">
-          {[7, 15, 30, 60, 90, 180].map((dias) => (
-            <button
-              key={dias}
-              onClick={() => setPeriodoSeleccionado(dias)}
-              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                periodoSeleccionado === dias
-                  ? 'bg-orange-500 text-white shadow-md'
-                  : 'text-gray-600 hover:bg-orange-50'
-              }`}
-            >
-              {dias} días
-            </button>
-          ))}
-        </div>
-      </div>
+        }
+      />
 
       {/* Tabs System */}
       <div className="mb-6">
@@ -539,32 +531,25 @@ export default function AvancePendientesTable({
       {/* Controls */}
       <div className="mb-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div className="flex flex-col sm:flex-row gap-3 flex-1">
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Buscar operador..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full h-10 pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
-            />
-          </div>
+          <SearchInput
+            placeholder="Buscar operador..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="focus:ring-orange-500 focus:border-orange-500"
+          />
           {activeTab === 'general' && (
-            <div className="relative w-full sm:w-64">
-              <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none z-10" />
-              <select
-                value={subEquipoFilter}
-                onChange={(e) => setSubEquipoFilter(e.target.value)}
-                className="w-full h-10 pl-10 pr-8 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white text-sm appearance-none"
-              >
-                <option value="">Todos los sub equipos</option>
-                {processedData.subEquipos.map(subEquipo => (
-                  <option key={subEquipo} value={subEquipo}>
-                    {subEquipo}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <FilterSelect
+              value={subEquipoFilter}
+              onChange={(e) => setSubEquipoFilter(e.target.value)}
+              className="focus:ring-orange-500 focus:border-orange-500"
+            >
+              <option value="">Todos los sub equipos</option>
+              {processedData.subEquipos.map(subEquipo => (
+                <option key={subEquipo} value={subEquipo}>
+                  {subEquipo}
+                </option>
+              ))}
+            </FilterSelect>
           )}
         </div>
         <div className="flex gap-2">
@@ -882,6 +867,6 @@ export default function AvancePendientesTable({
         fechas={processedData.fechasFiltradas}
         onClose={() => setSelectedOperator(null)}
       />
-    </div>
+    </SectionCard>
   )
 } 
