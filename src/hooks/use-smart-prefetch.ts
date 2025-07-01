@@ -13,6 +13,9 @@ export function useSmartPrefetch(proceso: string) {
   useEffect(() => {
     if (proceso !== 'ccm' && proceso !== 'prr') return
 
+    // Valor en mayúsculas para endpoints históricos (la BD usa 'CCM' | 'PRR')
+    const procesoUpper = proceso.toUpperCase()
+
     // Lanzar 15 s después de que el usuario esté en la pantalla
     const timer = setTimeout(() => {
       const endpoints = [
@@ -28,7 +31,6 @@ export function useSmartPrefetch(proceso: string) {
         `/api/dashboard/produccion-report?process=${proceso}&days=20&dayType=FIN_DE_SEMANA`,
         // Rangos más amplios (todos los días)
         `/api/dashboard/produccion-report?process=${proceso}&days=15`,
-        `/api/dashboard/produccion-report?process=${proceso}&days=20`,
         `/api/dashboard/produccion-report?process=${proceso}&days=30`,
         `/api/dashboard/produccion-report?process=${proceso}&days=60`,
 
@@ -49,9 +51,9 @@ export function useSmartPrefetch(proceso: string) {
         // 5️⃣ Resueltos (análisis anual)
         `/api/analysis/resueltos?proceso=${proceso}`,
 
-        // 6️⃣ Históricos opcionales (pesados)
-        `/api/historico/avance-pendientes?process=${proceso}`,
-        `/api/historico/sin-asignar?process=${proceso}`,
+        // 6️⃣ Históricos opcionales (pesados) - NOTA: estos endpoints esperan 'proceso' en mayúsculas
+        `/api/historico/avance-pendientes?proceso=${procesoUpper}`,
+        `/api/historico/sin-asignar?proceso=${procesoUpper}&dias=30`,
 
         // 7️⃣ KPIs y evaluadores (ligeros)
         `/api/dashboard/kpis`,
@@ -63,7 +65,7 @@ export function useSmartPrefetch(proceso: string) {
         qc.prefetchQuery({
           queryKey: ['prefetch', key],
           queryFn: () => fetch(url).then((r) => r.json()),
-          staleTime: 'static',
+          staleTime: Infinity,
         })
       })
     }, 15_000) // 15 segundos
