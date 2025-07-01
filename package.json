@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "heroku-postbuild": "next build && npm prune --production && rm -rf ./build/cache",
+    "heroku-postbuild": "next build && pnpm prune --prod && rm -rf ./build/cache",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
@@ -54,6 +54,10 @@
     "uuid": "^11.1.0",
     "xlsx": "^0.18.5",
     "zod": "^3.25.67"
+  },
+  "engines": {
+    "node": "20.x",
+    "pnpm": "9.x"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
