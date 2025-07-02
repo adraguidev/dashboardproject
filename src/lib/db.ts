@@ -988,37 +988,66 @@ export class DirectDatabaseAPI {
 
   /**
    * Función auxiliar para obtener datos de pendientes SPE desde Google Sheets.
-   * Este método hace una llamada a la API de SPE para obtener los datos actuales.
+   * Usa llamada directa en lugar de HTTP para evitar problemas de red.
    */
   async getAllSpePendientes(): Promise<any[]> {
     try {
-      // Hacer una llamada interna a la API de SPE
-      const response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/spe/data`);
-      if (!response.ok) {
-        throw new Error(`Error al obtener datos SPE: ${response.status}`);
-      }
-      const data = await response.json();
+      // Importar directamente la función de Google Sheets
+      const { getSheetData } = await import('@/lib/google-sheets');
       
-      if (!data.success || !data.data) {
-        throw new Error('No se pudieron obtener datos de SPE');
+      const SPREADSHEET_ID = '1_rNxpAUIepZdp_lGkndR_pTGuZ0hr6kBI4lEtt27km0';
+      const SHEET_NAME = 'MATRIZ';
+      const SHEET_RANGE = `${SHEET_NAME}!A:G`;
+
+      console.log('📊 Obteniendo datos directamente de Google Sheets...');
+      const rawData = await getSheetData(SPREADSHEET_ID, SHEET_RANGE);
+      
+      if (!rawData || rawData.length < 2) {
+        console.log('⚠️ No hay datos en Google Sheets');
+        return [];
       }
 
-      // Convertir los datos agrupados por evaluador a registros individuales para el snapshot
-      const registrosPendientes: any[] = [];
+      const header = rawData[0].map((h: any) => typeof h === 'string' ? h.trim().toUpperCase() : '');
+      const dataRows = rawData.slice(1);
+
+      // Mapeo de columnas
+      const getIndex = (name: string, fallbackIndex: number): number => {
+        const index = header.indexOf(name);
+        return index !== -1 ? index : fallbackIndex;
+      };
       
-      data.data.forEach((evaluadorData: any) => {
-        const evaluador = evaluadorData.evaluador || 'Sin Asignar';
-        const totalPendientes = evaluadorData.totalGeneral || 0;
+      const COL_EVALUADOR = getIndex('EVALUADOR', 5);
+      const COL_ETAPA = getIndex('ETAPA', 6);
+
+      // Procesar datos y agrupar por evaluador
+      const pendientesAgrupados = dataRows.reduce((acc: any, row: any) => {
+        const etapaRaw = (row[COL_ETAPA] || '').toString();
+        const etapaClean = etapaRaw.trim().toUpperCase();
         
-        if (totalPendientes > 0) {
-          registrosPendientes.push({
-            evaluador,
-            pendientes: totalPendientes
-          });
+        // Solo procesar registros con etapa 'INICIADA' o vacía (pendientes)
+        if (etapaClean !== 'INICIADA' && etapaClean !== '') {
+          return acc;
         }
-      });
 
+        const evaluador = row[COL_EVALUADOR] || 'Sin Asignar';
+        
+        if (!acc[evaluador]) {
+          acc[evaluador] = 0;
+        }
+        acc[evaluador]++;
+        
+        return acc;
+      }, {});
+
+      // Convertir a array para el snapshot
+      const registrosPendientes = Object.entries(pendientesAgrupados).map(([evaluador, pendientes]) => ({
+        evaluador,
+        pendientes: pendientes as number
+      }));
+
+      console.log(`✅ Datos SPE procesados: ${registrosPendientes.length} evaluadores`);
       return registrosPendientes;
+      
     } catch (error) {
       console.error('❌ Error obteniendo datos SPE para snapshot:', error);
       throw error;
