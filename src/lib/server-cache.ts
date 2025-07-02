@@ -33,6 +33,38 @@ interface AIOptimizedDashboardData {
   processes: any;
 }
 
+// Tipos específicos para filas de datos brutos
+interface RawIngresosRow {
+  fecha_ingreso: string;
+  total_ingresos?: number;
+  completados?: number;
+  otros_estados?: number;
+}
+
+interface RawProduccionRow {
+  fecha_produccion: string;
+  evaluador?: string;
+  casos_procesados?: number;
+}
+
+interface RawPendienteRow {
+  numerotramite: string;
+  fechaexpendiente: string;
+  estadotramite?: string;
+  ultimaetapa?: string;
+  operador?: string;
+}
+
+interface RawDashboardData {
+  ingresos: RawIngresosRow[];
+  produccion: RawProduccionRow[];
+  pendientes: RawPendienteRow[];
+  kpis?: Record<string, unknown>;
+  evaluadores?: Record<string, unknown>[];
+  processes?: string[];
+  metadata?: { errors?: string[] };
+}
+
 /**
  * Validador inteligente que verifica la calidad de los datos
  */
@@ -109,7 +141,7 @@ export async function cachedOperation<T>({
 /**
  * Función auxiliar para estructurar datos de dashboard de forma optimizada para IA
  */
-export function structureDataForAI(rawData: any, proceso: 'CCM' | 'PRR'): AIOptimizedDashboardData {
+export function structureDataForAI(rawData: RawDashboardData, proceso: 'CCM' | 'PRR'): AIOptimizedDashboardData {
   const now = new Date();
   const fechaCorte = now.toISOString().split('T')[0];
   
@@ -141,7 +173,7 @@ export function structureDataForAI(rawData: any, proceso: 'CCM' | 'PRR'): AIOpti
 }
 
 // Funciones auxiliares para estructurar cada tipo de datos
-function calculateDateRange(data: any[]): { desde: string; hasta: string; totalDias: number } {
+function calculateDateRange(data: Array<Record<string, unknown>>): { desde: string; hasta: string; totalDias: number } {
   if (!data || data.length === 0) {
     return { desde: '', hasta: '', totalDias: 0 };
   }
@@ -157,7 +189,7 @@ function calculateDateRange(data: any[]): { desde: string; hasta: string; totalD
   };
 }
 
-function calculateSummary(rawData: any) {
+function calculateSummary(rawData: RawDashboardData) {
   const ingresos = rawData.ingresos?.length || 0;
   const produccion = rawData.produccion?.length || 0;
   const pendientes = rawData.pendientes?.length || 0;
@@ -174,7 +206,7 @@ function calculateSummary(rawData: any) {
   };
 }
 
-function getUniqueDays(data: any[]): number {
+function getUniqueDays(data: Array<Record<string, unknown>>): number {
   if (!data) return 1;
   const fechas = new Set(data.map(item => 
     item.fecha_produccion || item.fecha_ingreso || item.fechaexpendiente
@@ -182,7 +214,7 @@ function getUniqueDays(data: any[]): number {
   return Math.max(1, fechas.size);
 }
 
-function structureIngresosData(data: any[]) {
+function structureIngresosData(data: RawIngresosRow[]) {
   const processedData = data.map(item => ({
     fecha: item.fecha_ingreso,
     total_ingresos: item.total_ingresos || 0,
@@ -201,7 +233,7 @@ function structureIngresosData(data: any[]) {
   };
 }
 
-function structureProduccionData(data: any[]) {
+function structureProduccionData(data: RawProduccionRow[]) {
   const processedData = data.map(item => ({
     fecha_produccion: item.fecha_produccion,
     evaluador: item.evaluador || 'Sin asignar',
@@ -219,7 +251,7 @@ function structureProduccionData(data: any[]) {
   };
 }
 
-function structurePendientesData(data: any[]) {
+function structurePendientesData(data: RawPendienteRow[]) {
   const processedData = data.map(item => {
     const diasPendiente = calculateDaysDifference(item.fechaexpendiente);
     return {
@@ -242,7 +274,7 @@ function structurePendientesData(data: any[]) {
   };
 }
 
-function structureKPIsData(data: any) {
+function structureKPIsData(data: Record<string, unknown>) {
   return {
     description: "Indicadores clave de desempeño",
     data: {
@@ -260,7 +292,7 @@ function structureKPIsData(data: any) {
   };
 }
 
-function structureEvaluadoresData(data: any[]) {
+function structureEvaluadoresData(data: Record<string, unknown>[]) {
   return {
     description: "Evaluadores activos y sus métricas de desempeño",
     data: data.map(item => ({
@@ -303,7 +335,7 @@ function getCriticality(dias: number): 'CRITICA' | 'ALTA' | 'MEDIA' | 'BAJA' {
   return 'BAJA';
 }
 
-function calculateIngresosAggregates(data: any[]) {
+function calculateIngresosAggregates(data: RawIngresosRow[]) {
   const total = data.reduce((sum, item) => sum + item.total_ingresos, 0);
   const sorted = data.sort((a, b) => b.total_ingresos - a.total_ingresos);
   
@@ -316,7 +348,7 @@ function calculateIngresosAggregates(data: any[]) {
   };
 }
 
-function calculateProduccionAggregates(data: any[]) {
+function calculateProduccionAggregates(data: RawProduccionRow[]) {
   const totalCasos = data.reduce((sum, item) => sum + item.casos_procesados, 0);
   const evaluadores = new Set(data.map(item => item.evaluador));
   
@@ -344,7 +376,7 @@ function calculateProduccionAggregates(data: any[]) {
   };
 }
 
-function calculatePendientesAggregates(data: any[]) {
+function calculatePendientesAggregates(data: RawPendienteRow[]) {
   const total = data.length;
   const antiguedadPromedio = data.reduce((sum, item) => sum + item.dias_pendiente, 0) / Math.max(1, total);
   
@@ -370,19 +402,18 @@ function calculatePendientesAggregates(data: any[]) {
   };
 }
 
-function calculateApprovalRate(data: any): number {
+function calculateApprovalRate(data: Record<string, unknown>): number {
   const total = (data.totalCasosCCM || 0) + (data.totalCasosPRR || 0);
   const pendientes = (data.pendientesCCM || 0) + (data.pendientesPRR || 0);
   return total > 0 ? ((total - pendientes) / total) * 100 : 0;
 }
 
-function calculateAverageProcessingTime(data: any): number {
-  // Esto es una estimación basada en datos disponibles
-  // En el futuro se podría calcular con fechas reales de inicio y fin
+// TODO: implement when we have timestamps de inicio/fin precisos
+function calculateAverageProcessingTime(_data: Record<string, unknown>): number {
   return 0;
 }
 
-function calculateAverageWorkload(data: any): number {
+function calculateAverageWorkload(data: Record<string, unknown>): number {
   const total = (data.totalCasosCCM || 0) + (data.totalCasosPRR || 0);
   const evaluadores = data.evaluadoresActivos || 1;
   return total / evaluadores;
