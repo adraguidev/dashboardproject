@@ -34,6 +34,8 @@ jobs:
 
       # 4. Ejecutar snapshot SPE llamando a la API
       - name: Take SPE Snapshot
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
         run: |
           echo "🔍 Iniciando snapshot automático de SPE..."
           
