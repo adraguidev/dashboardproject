@@ -4,9 +4,10 @@ import React, { useState, useRef } from 'react'
 import { useSpeAvancePendientes } from '@/hooks/use-spe-avance-pendientes'
 import { SectionCard } from '@/components/ui/section-card'
 import { SectionHeader } from '@/components/ui/section-header'
-import { Activity, Download, RefreshCw, Camera } from 'lucide-react'
+import { Activity, Download, RefreshCw, Camera, Users, Calendar } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { formatDateShort, formatDateSafe } from '@/lib/date-utils'
+import { Activity as ActivityIcon } from 'lucide-react'
 
 interface SpeAvancePendientesTableProps {
   className?: string
@@ -138,19 +139,18 @@ export default function SpeAvancePendientesTable({
               <button
                 onClick={handleSnapshot}
                 disabled={isSnapshotLoading}
-                className="flex items-center space-x-1 px-3 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center space-x-2 px-4 py-2 bg-orange-100 text-orange-700 border border-orange-200 rounded-lg hover:bg-orange-200 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Camera className={`h-4 w-4 ${isSnapshotLoading ? 'animate-pulse' : ''}`} />
                 <span>{isSnapshotLoading ? 'Tomando...' : 'Tomar Snapshot'}</span>
               </button>
               
               <button
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-                className="flex items-center space-x-1 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm disabled:opacity-50"
+                onClick={handleExport}
+                className="flex items-center space-x-2 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
               >
-                <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                <span>{isRefreshing ? 'Actualizando...' : 'Actualizar'}</span>
+                <Download className="h-4 w-4" />
+                <span>Exportar</span>
               </button>
             </div>
           }
@@ -175,9 +175,20 @@ export default function SpeAvancePendientesTable({
 
   const processedData = data.data
   
-  // Filtrar fechas según el período seleccionado
-  const fechasFiltradas = processedData.fechas.slice(0, periodoSeleccionado)
+  // 1. Corregir orden de fechas (ascendente) y filtrar
+  const fechasOrdenadas = [...new Set(processedData.fechas)]
+    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+  const fechasFiltradas = fechasOrdenadas.slice(-periodoSeleccionado);
   
+  // --- KPI Calculations ---
+  const totalOperadores = processedData.operadores.length;
+  const ultimaFechaRaw = processedData.fechas[0];
+  const ultimaFechaFormateada = formatDateShort(ultimaFechaRaw);
+  const totalActual = processedData.operadores.reduce((sum, op) => {
+    return sum + (op[ultimaFechaRaw] as number || 0);
+  }, 0);
+  // --------------------
+
   return (
     <SectionCard className={className}>
       {/* Header */}
@@ -208,7 +219,7 @@ export default function SpeAvancePendientesTable({
             <button
               onClick={handleSnapshot}
               disabled={isSnapshotLoading}
-              className="flex items-center space-x-1 px-3 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center space-x-2 px-4 py-2 bg-orange-100 text-orange-700 border border-orange-200 rounded-lg hover:bg-orange-200 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Camera className={`h-4 w-4 ${isSnapshotLoading ? 'animate-pulse' : ''}`} />
               <span>{isSnapshotLoading ? 'Tomando...' : 'Tomar Snapshot'}</span>
@@ -216,23 +227,54 @@ export default function SpeAvancePendientesTable({
             
             <button
               onClick={handleExport}
-              className="flex items-center space-x-1 px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm"
+              className="flex items-center space-x-2 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
             >
               <Download className="h-4 w-4" />
               <span>Exportar</span>
             </button>
-            
-            <button
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              className="flex items-center space-x-1 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm disabled:opacity-50"
-            >
-              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span>{isRefreshing ? 'Actualizando...' : 'Actualizar'}</span>
-            </button>
           </div>
         }
       />
+
+      {/* KPI Cards Section */}
+      <div className="px-6 py-4 border-b border-gray-200">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          
+          {/* Tarjeta Operadores */}
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex items-center">
+            <div className="bg-blue-100 p-3 rounded-full mr-4">
+              <Users className="w-6 h-6 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Operadores</p>
+              <p className="text-2xl font-bold text-gray-900">{totalOperadores}</p>
+            </div>
+          </div>
+
+          {/* Tarjeta Última Fecha */}
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex items-center">
+            <div className="bg-orange-100 p-3 rounded-full mr-4">
+              <Calendar className="w-6 h-6 text-orange-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Última Fecha</p>
+              <p className="text-2xl font-bold text-gray-900">{ultimaFechaFormateada}</p>
+            </div>
+          </div>
+
+          {/* Tarjeta Total Actual */}
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex items-center">
+            <div className="bg-green-100 p-3 rounded-full mr-4">
+              <ActivityIcon className="w-6 h-6 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Total Actual</p>
+              <p className="text-2xl font-bold text-gray-900">{totalActual.toLocaleString()}</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
 
       {/* Tabla */}
       <div 
@@ -262,13 +304,13 @@ export default function SpeAvancePendientesTable({
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: index * 0.05 }}
-                className="hover:bg-gray-50 transition-colors"
+                className="hover:bg-gray-50 transition-colors cursor-pointer"
               >
-                <td className="sticky left-0 z-10 bg-white px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-gray-200">
+                <td className="sticky left-0 z-10 bg-white group-hover:bg-gray-50 px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-gray-200">
                   {operador.operador}
                 </td>
                 {fechasFiltradas.map((fecha) => {
-                  const valor = operador[fecha] as number || 0
+                  const valor = operador[fecha] as number || 0;
                   return (
                     <td 
                       key={fecha} 
@@ -289,6 +331,21 @@ export default function SpeAvancePendientesTable({
               </motion.tr>
             ))}
           </tbody>
+          <tfoot className="bg-gray-100 font-bold">
+            <tr>
+              <td className="sticky left-0 z-10 bg-gray-100 px-6 py-3 text-left text-sm text-gray-800 border-r border-gray-200">
+                Total
+              </td>
+              {fechasFiltradas.map((fecha) => {
+                const totalDia = processedData.operadores.reduce((sum, op) => sum + (op[fecha] as number || 0), 0);
+                return (
+                  <td key={fecha} className="px-4 py-3 text-center text-sm text-gray-800">
+                    {totalDia}
+                  </td>
+                );
+              })}
+            </tr>
+          </tfoot>
         </table>
       </div>
 
