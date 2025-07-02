@@ -190,11 +190,11 @@ export function formatRelativeTime(date: Date | string | undefined): string {
   }
 }
 
-export function isValidDate(date: any): boolean {
+export function isValidDate(date: unknown): boolean {
   if (!date) return false
   
   try {
-    const dateObj = date instanceof Date ? date : new Date(date)
+    const dateObj = date instanceof Date ? date : new Date(date as string | number | Date)
     return !isNaN(dateObj.getTime())
   } catch {
     return false

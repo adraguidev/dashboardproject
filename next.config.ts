@@ -5,7 +5,7 @@ const withBundleAnalyzer = process.env.NODE_ENV === 'development' || process.env
   ? require('@next/bundle-analyzer')({
       enabled: process.env.ANALYZE === 'true',
     })
-  : (config: any) => config;
+  : (config: NextConfig) => config;
 
 const nextConfig: NextConfig = {
   // Solo usar configuración de webpack cuando NO se use Turbopack
