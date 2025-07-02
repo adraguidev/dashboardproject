@@ -66,8 +66,11 @@ export const useSpeData = () => {
   return useQuery<SpePendientesResponse, Error>({
     queryKey: ['speDataPendientes'],
     queryFn: fetchSpeData,
-    staleTime: 10 * 60 * 1000, // 10 minutos
-    refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000, // 5 minutos - reducido para actualizaciones más frecuentes
+    gcTime: 15 * 60 * 1000, // 15 minutos en cache
+    refetchInterval: 5 * 60 * 1000, // Auto-refresh cada 5 minutos
+    refetchOnWindowFocus: true, // Refrescar cuando el usuario vuelve a la ventana
+    refetchIntervalInBackground: false, // No refrescar en background
     retry: 1, // Intentar una vez más en caso de error
   })
 } 

@@ -99,7 +99,7 @@ function transformDataToPendientes(rows: any[][]): SpePendiente[] {
 
 export async function GET() {
   const cacheKey = `spe:data:pendientes:v2`; // Clave de caché específica
-  const ttl = 15 * 60; // 15 minutos de caché
+  const ttl = 5 * 60; // 5 minutos de caché - sincronizado con frontend
 
   try {
     // Validación rápida en caso de que alguien olvide configurar las constantes.
