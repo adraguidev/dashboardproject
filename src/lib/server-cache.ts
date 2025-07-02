@@ -47,12 +47,26 @@ interface RawProduccionRow {
   casos_procesados?: number;
 }
 
+// Filas enriquecidas tras procesamiento
+interface ProcessedProduccionRow {
+  fecha_produccion: string;
+  evaluador: string;
+  casos_procesados: number;
+  dia_semana: string;
+  es_laborable: boolean;
+}
+
 interface RawPendienteRow {
   numerotramite: string;
   fechaexpendiente: string;
   estadotramite?: string;
   ultimaetapa?: string;
   operador?: string;
+}
+
+interface ProcessedPendienteRow extends RawPendienteRow {
+  dias_pendiente: number;
+  criticidad: 'CRITICA' | 'ALTA' | 'MEDIA' | 'BAJA';
 }
 
 interface RawDashboardData {
@@ -250,7 +264,7 @@ function structureProduccionData(data: RawProduccionRow[]) {
     unit: "casos procesados",
     structure: "evaluador -> fecha -> cantidad",
     data: processedData,
-    aggregated: calculateProduccionAggregates(processedData)
+    aggregated: calculateProduccionAggregates(processedData as ProcessedProduccionRow[])
   };
 }
 
@@ -273,7 +287,7 @@ function structurePendientesData(data: RawPendienteRow[]) {
     unit: "expedientes pendientes",
     structure: "pendientes ordenados por antigüedad",
     data: processedData,
-    aggregated: calculatePendientesAggregates(processedData)
+    aggregated: calculatePendientesAggregates(processedData as ProcessedPendienteRow[])
   };
 }
 
@@ -360,24 +374,25 @@ function calculateIngresosAggregates(data: ProcessedIngresosRow[]) {
   };
 }
 
-function calculateProduccionAggregates(data: RawProduccionRow[]) {
-  const totalCasos = data.reduce((sum, item) => sum + item.casos_procesados, 0);
-  const evaluadores = new Set(data.map(item => item.evaluador));
+function calculateProduccionAggregates(data: ProcessedProduccionRow[]) {
+  const totalCasos = data.reduce((sum, item) => sum + (item.casos_procesados ?? 0), 0);
+  const evaluadores = new Set(data.map(item => item.evaluador ?? 'SIN_ASIGNAR'));
   
   // Agrupar por evaluador
-  const porEvaluador = data.reduce((acc, item) => {
-    acc[item.evaluador] = (acc[item.evaluador] || 0) + item.casos_procesados;
+  const porEvaluador = data.reduce<Record<string, number>>((acc, item) => {
+    const nombre = item.evaluador ?? 'SIN_ASIGNAR';
+    acc[nombre] = (acc[nombre] || 0) + (item.casos_procesados ?? 0);
     return acc;
-  }, {} as Record<string, number>);
+  }, {});
   
   const mejorEvaluadorEntry = Object.entries(porEvaluador)
     .sort(([,a], [,b]) => (b as number) - (a as number))[0];
     
   // Agrupar por día de semana
-  const porDia = data.reduce((acc, item) => {
-    acc[item.dia_semana] = (acc[item.dia_semana] || 0) + item.casos_procesados;
+  const porDia = data.reduce<Record<string, number>>((acc, item) => {
+    acc[item.dia_semana] = (acc[item.dia_semana] || 0) + (item.casos_procesados ?? 0);
     return acc;
-  }, {} as Record<string, number>);
+  }, {});
 
   return {
     total_casos: totalCasos,
@@ -388,21 +403,24 @@ function calculateProduccionAggregates(data: RawProduccionRow[]) {
   };
 }
 
-function calculatePendientesAggregates(data: RawPendienteRow[]) {
+function calculatePendientesAggregates(data: ProcessedPendienteRow[]) {
   const total = data.length;
   const antiguedadPromedio = data.reduce((sum, item) => sum + item.dias_pendiente, 0) / Math.max(1, total);
   
-  const distribucion = data.reduce((acc, item) => {
-    acc[item.criticidad.toLowerCase()]++;
-    return acc;
-  }, { critica: 0, alta: 0, media: 0, baja: 0 });
+  const distribucion = data.reduce(
+    (acc, item) => {
+      acc[item.criticidad.toLowerCase() as 'critica' | 'alta' | 'media' | 'baja']++;
+      return acc;
+    },
+    { critica: 0, alta: 0, media: 0, baja: 0 }
+  );
   
-  const evaluadores = data.reduce((acc, item) => {
+  const evaluadores = data.reduce<Record<string, number>>((acc, item) => {
     if (item.operador) {
       acc[item.operador] = (acc[item.operador] || 0) + 1;
     }
     return acc;
-  }, {} as Record<string, number>);
+  }, {});
 
   return {
     total_pendientes: total,
