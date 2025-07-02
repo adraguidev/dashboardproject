@@ -62,8 +62,37 @@ export const historicoSinAsignar = pgTable(
   },
 )
 
+/**
+ * Tabla para almacenar el histórico de expedientes pendientes SPE por operador.
+ * Similar a historico_pendientes_operador pero específica para SPE.
+ */
+export const historicoSpePendientes = pgTable(
+  'historico_spe_pendientes',
+  {
+    id: serial('id').primaryKey(),
+    fecha: date('fecha').notNull(),
+    trimestre: integer('trimestre').notNull(),
+    operador: text('operador').notNull(),
+    // Para SPE no usamos años de expediente como CCM/PRR
+    pendientes: integer('pendientes').notNull(),
+    createdAt: timestamp('created_at').defaultNow(),
+  },
+  table => {
+    return {
+      // Índice único para evitar duplicados en SPE
+      fechaOperadorUnico: uniqueIndex('spe_fecha_operador_idx').on(
+        table.fecha,
+        table.operador,
+      ),
+    }
+  },
+)
+
 export type HistoricoPendientesOperador = typeof historicoPendientesOperador.$inferSelect
 export type NewHistoricoPendientesOperador = typeof historicoPendientesOperador.$inferInsert
 
 export type HistoricoSinAsignar = typeof historicoSinAsignar.$inferSelect
-export type NewHistoricoSinAsignar = typeof historicoSinAsignar.$inferInsert 
+export type NewHistoricoSinAsignar = typeof historicoSinAsignar.$inferInsert
+
+export type HistoricoSpePendientes = typeof historicoSpePendientes.$inferSelect
+export type NewHistoricoSpePendientes = typeof historicoSpePendientes.$inferInsert 

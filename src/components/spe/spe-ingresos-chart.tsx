@@ -7,6 +7,10 @@ import type { IngresosReport } from '@/types/dashboard'
 import { formatDateSafe } from '@/lib/date-utils'
 import { MonthlyIngresosTable } from '@/components/ui/monthly-ingresos-table'
 import { WeeklyIngresosTable } from '@/components/ui/weekly-ingresos-table'
+import { SectionCard } from '@/components/ui/section-card'
+import { SectionHeader } from '@/components/ui/section-header'
+import { FilterSelect } from '@/components/ui/filter-select'
+import { FileStack, Calendar } from 'lucide-react'
 
 interface SpeIngresosChartProps {
   report: IngresosReport | null
@@ -146,76 +150,32 @@ export function SpeIngresosChart({
   }
 
   return (
-    <div className={`space-y-6 ${className}`}>
-      {/* Gráfico principal diario */}
-      <Card className="overflow-hidden">
-        {/* Header con controles */}
-        <div className="p-6 bg-gray-50 border-b">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-1">
-                Ingreso Diario de Expedientes - SPE
-              </h3>
-              <div className="flex items-center gap-4 text-sm text-gray-600">
-                <span>{report.periodo}</span>
-                <span>•</span>
-                <span>{report.fechaInicio} al {report.fechaFin}</span>
-              </div>
-            </div>
-            
-            {/* Selector de período */}
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">Período:</label>
-              <select 
-                value={selectedPeriod}
-                onChange={(e) => handlePeriodChange(Number(e.target.value))}
-                className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                {periodOptions.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+    <SectionCard className={className}>
+      <SectionHeader
+        icon={<FileStack className="h-6 w-6 text-indigo-600" />}
+        title="Ingreso Diario de Expedientes - SPE"
+        description={`${report.periodo} • ${report.fechaInicio} al ${report.fechaFin}`}
+        actions={
+          <FilterSelect
+            value={selectedPeriod}
+            onChange={(e) => handlePeriodChange(Number(e.target.value))}
+            icon={<Calendar className="h-4 w-4" />}
+            containerClassName="w-full sm:w-48"
+          >
+            {periodOptions.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </FilterSelect>
+        }
+      />
 
-          {/* Estadísticas rápidas */}
-          {stats && (
-            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">{report.totalTramites}</div>
-                <div className="text-xs text-gray-500">Total Trámites</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">{report.promedioTramitesPorDia}</div>
-                <div className="text-xs text-gray-500">Promedio/Día</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-orange-600">{stats.maxTramites}</div>
-                <div className="text-xs text-gray-500">Máximo/Día</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-purple-600">{stats.porcentajeDiasConIngresos}%</div>
-                <div className="text-xs text-gray-500">Días con Ingresos</div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Gráfico */}
-        <div className="p-2 sm:p-6">
-          <div className="h-96">
+      <div className="space-y-6 mt-6">
+        <Card className="overflow-hidden bg-white">
+          <div className="p-2 sm:p-6 h-96">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={chartData}
-                margin={{
-                  top: 20,
-                  right: 20,
-                  left: 5,
-                  bottom: 50
-                }}
-              >
+              <LineChart data={chartData} margin={{ top: 20, right: 20, left: 5, bottom: 50 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis 
                   dataKey="fechaLabel"
@@ -272,26 +232,12 @@ export function SpeIngresosChart({
               </LineChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </Card>
 
-        {/* Footer con información adicional */}
-        <div className="px-6 py-4 bg-gray-50 border-t">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm text-gray-600">
-            <div>
-              <strong>Días con datos:</strong> {report.diasConDatos} de {report.data.length}
-            </div>
-            <div>
-              <strong>Proceso:</strong> SPE
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* Tabla y gráfico semanal */}
-      <WeeklyIngresosTable 
-        data={report.weeklyData}
-        loading={loading}
-      />
-    </div>
+        {/* Tablas secundarias */}
+        <MonthlyIngresosTable data={report.monthlyData} loading={loading} />
+        <WeeklyIngresosTable data={report.weeklyData} loading={loading} />
+      </div>
+    </SectionCard>
   )
 } 

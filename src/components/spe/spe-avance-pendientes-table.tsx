@@ -1,0 +1,320 @@
+'use client'
+
+import React, { useState, useRef } from 'react'
+import { useSpeAvancePendientes } from '@/hooks/use-spe-avance-pendientes'
+import { SectionCard } from '@/components/ui/section-card'
+import { SectionHeader } from '@/components/ui/section-header'
+import { Activity, Download, RefreshCw, Camera } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { formatDateShort, formatDateSafe } from '@/lib/date-utils'
+
+interface SpeAvancePendientesTableProps {
+  className?: string
+}
+
+export default function SpeAvancePendientesTable({ 
+  className
+}: SpeAvancePendientesTableProps) {
+  const { data, isLoading, error, refetch } = useSpeAvancePendientes()
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isSnapshotLoading, setIsSnapshotLoading] = useState(false)
+  const [periodoSeleccionado, setPeriodoSeleccionado] = useState<number>(30)
+  const tableContainerRef = useRef<HTMLDivElement>(null)
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    try {
+      await refetch()
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
+  const handleSnapshot = async () => {
+    setIsSnapshotLoading(true)
+    try {
+      const response = await fetch('/api/historico/spe-snapshot', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        // Mostrar mensaje de éxito y refrescar datos
+        alert(`✅ Snapshot SPE creado exitosamente!\n${result.message}`)
+        // Refrescar los datos para mostrar el nuevo snapshot
+        await refetch()
+      } else {
+        alert(`❌ Error al crear snapshot: ${result.error}`)
+      }
+    } catch (error) {
+      console.error('Error al tomar snapshot:', error)
+      alert('❌ Error al comunicarse con el servidor')
+    } finally {
+      setIsSnapshotLoading(false)
+    }
+  }
+
+  const handleExport = () => {
+    if (!data?.success || !data.data) return
+
+    const processedData = data.data
+    const csvHeaders = ['Evaluador', ...processedData.fechas].join(',')
+    const csvRows = processedData.operadores.map(operador => {
+      const row = [operador.operador]
+      processedData.fechas.forEach(fecha => {
+        row.push((operador[fecha] || 0).toString())
+      })
+      return row.join(',')
+    })
+
+    const csvContent = [csvHeaders, ...csvRows].join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      link.setAttribute('download', `spe_avance_pendientes_${new Date().toISOString().split('T')[0]}.csv`)
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <SectionCard className={className}>
+        <SectionHeader
+          icon={<Activity className="h-6 w-6 text-blue-600" />}
+          title="Avance de Pendientes SPE"
+          description="Cargando datos históricos..."
+        />
+        <div className="flex justify-center items-center h-64">
+          <div className="flex items-center space-x-2">
+            <RefreshCw className="h-6 w-6 animate-spin text-blue-500" />
+            <span className="text-gray-600">Cargando avance de pendientes SPE...</span>
+          </div>
+        </div>
+      </SectionCard>
+    )
+  }
+
+  if (error) {
+    return (
+      <SectionCard className={className}>
+        <SectionHeader
+          icon={<Activity className="h-6 w-6 text-red-600" />}
+          title="Avance de Pendientes SPE"
+          description="Error al cargar datos"
+        />
+        <div className="text-center py-8">
+          <p className="text-red-600 mb-4">Error: {(error as Error).message}</p>
+          <button
+            onClick={handleRefresh}
+            className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+          >
+            Reintentar
+          </button>
+        </div>
+      </SectionCard>
+    )
+  }
+
+  if (!data?.success || !data.data || data.data.fechas.length === 0) {
+    return (
+      <SectionCard className={className}>
+        <SectionHeader
+          icon={<Activity className="h-6 w-6 text-gray-400" />}
+          title="Avance de Pendientes SPE"
+          description="No hay datos históricos disponibles"
+          actions={
+            <div className="flex items-center space-x-2">
+              {/* Botón de Snapshot siempre visible */}
+              <button
+                onClick={handleSnapshot}
+                disabled={isSnapshotLoading}
+                className="flex items-center space-x-1 px-3 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Camera className={`h-4 w-4 ${isSnapshotLoading ? 'animate-pulse' : ''}`} />
+                <span>{isSnapshotLoading ? 'Tomando...' : 'Tomar Snapshot'}</span>
+              </button>
+              
+              <button
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="flex items-center space-x-1 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm disabled:opacity-50"
+              >
+                <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>{isRefreshing ? 'Actualizando...' : 'Actualizar'}</span>
+              </button>
+            </div>
+          }
+        />
+        <div className="text-center py-8">
+          <div className="flex flex-col items-center space-y-4">
+            <Camera className="h-16 w-16 text-gray-300" />
+            <div>
+              <p className="text-gray-600 font-medium">No hay datos históricos de SPE disponibles</p>
+              <p className="text-sm text-gray-500 mt-2">
+                Utiliza el botón <span className="inline-flex items-center px-2 py-1 bg-orange-100 text-orange-800 rounded text-xs font-medium">
+                  <Camera className="h-3 w-3 mr-1" />
+                  Tomar Snapshot
+                </span> para comenzar a registrar el histórico
+              </p>
+            </div>
+          </div>
+        </div>
+      </SectionCard>
+    )
+  }
+
+  const processedData = data.data
+  
+  // Filtrar fechas según el período seleccionado
+  const fechasFiltradas = processedData.fechas.slice(0, periodoSeleccionado)
+  
+  return (
+    <SectionCard className={className}>
+      {/* Header */}
+      <SectionHeader
+        icon={<Activity className="h-6 w-6 text-blue-600" />}
+        title="Avance de Pendientes SPE"
+        description="Histórico de pendientes por evaluador y fecha."
+        actions={
+          <div className="flex items-center space-x-2">
+            {/* Selector de período */}
+            <div className="flex items-center space-x-1 bg-white p-1.5 rounded-lg shadow-sm border border-gray-200">
+              {[7, 15, 30, 60, 90].map((dias) => (
+                <button
+                  key={dias}
+                  onClick={() => setPeriodoSeleccionado(dias)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    periodoSeleccionado === dias
+                      ? 'bg-blue-500 text-white shadow-md'
+                      : 'text-gray-600 hover:bg-blue-50'
+                  }`}
+                >
+                  {dias} días
+                </button>
+              ))}
+            </div>
+            
+            {/* Botones de acción */}
+            <button
+              onClick={handleSnapshot}
+              disabled={isSnapshotLoading}
+              className="flex items-center space-x-1 px-3 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Camera className={`h-4 w-4 ${isSnapshotLoading ? 'animate-pulse' : ''}`} />
+              <span>{isSnapshotLoading ? 'Tomando...' : 'Tomar Snapshot'}</span>
+            </button>
+            
+            <button
+              onClick={handleExport}
+              className="flex items-center space-x-1 px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm"
+            >
+              <Download className="h-4 w-4" />
+              <span>Exportar</span>
+            </button>
+            
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="flex items-center space-x-1 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span>{isRefreshing ? 'Actualizando...' : 'Actualizar'}</span>
+            </button>
+          </div>
+        }
+      />
+
+      {/* Tabla */}
+      <div 
+        ref={tableContainerRef} 
+        className="overflow-x-auto border border-gray-200 rounded-lg"
+      >
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="sticky left-0 z-10 bg-gray-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
+                Evaluador
+              </th>
+              {fechasFiltradas.map((fecha) => (
+                <th 
+                  key={fecha} 
+                  className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]"
+                >
+                  {formatDateShort(fecha)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {processedData.operadores.map((operador, index) => (
+              <motion.tr
+                key={operador.operador}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: index * 0.05 }}
+                className="hover:bg-gray-50 transition-colors"
+              >
+                <td className="sticky left-0 z-10 bg-white px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-gray-200">
+                  {operador.operador}
+                </td>
+                {fechasFiltradas.map((fecha) => {
+                  const valor = operador[fecha] as number || 0
+                  return (
+                    <td 
+                      key={fecha} 
+                      className="px-4 py-4 whitespace-nowrap text-center text-sm"
+                    >
+                      <span 
+                        className={`inline-flex items-center justify-center min-w-[32px] h-6 rounded-full text-xs font-medium ${
+                          valor > 0 
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-gray-100 text-gray-500'
+                        }`}
+                      >
+                        {valor}
+                      </span>
+                    </td>
+                  )
+                })}
+              </motion.tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Footer con estadísticas */}
+      <div className="mt-4 px-6 py-3 bg-gray-50 rounded-lg">
+        <div className="flex items-center justify-between text-sm text-gray-600">
+          <span>
+            Total evaluadores: <strong>{processedData.operadores.length}</strong>
+          </span>
+          <span>
+            Fechas mostradas: <strong>{fechasFiltradas.length}</strong>
+          </span>
+          <span>
+            Última actualización: <strong>
+              {fechasFiltradas.length > 0 
+                ? formatDateSafe(fechasFiltradas[0], { 
+                    day: '2-digit', 
+                    month: '2-digit', 
+                    year: 'numeric' 
+                  })
+                : 'N/A'
+              }
+            </strong>
+          </span>
+        </div>
+      </div>
+    </SectionCard>
+  )
+} 

@@ -2,10 +2,13 @@
 
 import React, { useState } from 'react'
 import { useSpeData } from '@/hooks/use-spe-data'
-import { Loader2, AlertTriangle, BarChart3, Construction, TrendingUp } from 'lucide-react'
+import { Loader2, AlertTriangle, BarChart3, Construction, TrendingUp, Activity } from 'lucide-react'
 import { SpePendientesTable } from './spe-pendientes-table'
 import { SpeProcessSummaryTable } from './spe-process-summary-table'
 import { SpeIngresosView } from './spe-ingresos-view'
+import SpeAvancePendientesTable from './spe-avance-pendientes-table'
+import { motion, AnimatePresence } from 'framer-motion'
+import { SectionCard } from '@/components/ui/section-card'
 
 export function SpeModules() {
   const [selectedModule, setSelectedModule] = useState('pendientes')
@@ -20,13 +23,19 @@ export function SpeModules() {
       status: 'active',
       color: 'text-purple-600',
     },
-    // Aquí se pueden añadir futuros módulos para SPE
     {
       id: 'ingresos',
       name: 'Ingresos',
       icon: TrendingUp,
       status: 'active',
       color: 'text-blue-600',
+    },
+    {
+      id: 'avance-pendientes',
+      name: 'Avance Pendientes',
+      icon: Activity,
+      status: 'active',
+      color: 'text-orange-600',
     },
     {
       id: 'produccion',
@@ -63,20 +72,31 @@ export function SpeModules() {
       case 'pendientes':
         return (
           <div className="p-6">
-            <div className="bg-gray-50 p-4 sm:p-6 rounded-lg">
+            <SectionCard>
               <SpePendientesTable
                 data={apiResponse?.data || []}
                 periodos={apiResponse?.periodos || { anios: [], trimestres: [], meses: [] }}
                 loading={isLoading}
+                className="w-full"
                 groupBy={groupBy}
                 onGroupingChange={setGroupBy}
               />
               <SpeProcessSummaryTable groupBy={groupBy} />
-            </div>
+            </SectionCard>
           </div>
         )
       case 'ingresos':
-        return <SpeIngresosView />
+        return (
+          <div className="p-6">
+            <SpeIngresosView />
+          </div>
+        )
+      case 'avance-pendientes':
+        return (
+          <div className="p-6">
+            <SpeAvancePendientesTable />
+          </div>
+        )
       default:
         return (
           <div className="p-16 text-center text-gray-500">
@@ -90,48 +110,82 @@ export function SpeModules() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Pestañas de Módulos */}
+      {/* Modern Tabs */}
       <div className="border-b border-gray-200/80 bg-gray-50/50">
         <div className="px-6 py-1">
-          <nav className="flex space-x-1">
+          {/* Desktop Tabs */}
+          <nav className="hidden md:flex space-x-1 relative">
             {modules.map((module) => {
               const IconComponent = module.icon
               const isActive = selectedModule === module.id
               const isDisabled = module.status === 'coming-soon'
-              
               return (
                 <button
                   key={module.id}
                   onClick={() => !isDisabled && setSelectedModule(module.id)}
                   disabled={isDisabled}
                   className={`
-                    group flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200
+                    group relative flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 z-10
                     ${isActive 
-                      ? 'bg-white text-gray-900 shadow-sm border border-gray-200/80' 
+                      ? 'text-gray-900' 
                       : isDisabled
                         ? 'text-gray-400 cursor-not-allowed'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-white/60'
                     }
                   `}
                 >
-                  <IconComponent className={`
-                    w-4 h-4 transition-colors
-                    ${isActive ? module.color : 'text-gray-400 group-hover:text-gray-600'}
-                  `} />
-                  <span>{module.name}</span>
-                  {isDisabled && (
-                    <div className="w-1.5 h-1.5 bg-amber-400 rounded-full ml-1"></div>
+                  {isActive && (
+                    <motion.div
+                      layoutId="active-tab-indicator"
+                      className="absolute inset-0 bg-white rounded-lg shadow-sm border border-gray-200/80"
+                      transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                    />
+                  )}
+                  <span className="relative z-10 flex items-center gap-2">
+                    <IconComponent className={`
+                      w-4 h-4 transition-colors
+                      ${isActive ? module.color : 'text-gray-400 group-hover:text-gray-600'}
+                    `} />
+                    <span>{module.name}</span>
+                  </span>
+                  {module.status === 'coming-soon' && module.id !== selectedModule && (
+                    <div className="w-1.5 h-1.5 bg-amber-400 rounded-full"></div>
                   )}
                 </button>
               )
             })}
           </nav>
+          {/* Mobile Select */}
+          <div className="block md:hidden py-2">
+            <select
+              id="module-select"
+              value={selectedModule}
+              onChange={(e) => setSelectedModule(e.target.value)}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-base font-medium text-gray-700"
+            >
+              {modules.map((module) => (
+                <option key={module.id} value={module.id} disabled={module.status === 'coming-soon'}>
+                  {module.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
-      {/* Contenido del Módulo */}
-      <div className="flex-1 bg-white">
-        {renderModuleContent()}
+      {/* Content Area */}
+      <div className="flex-1 bg-white overflow-hidden">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={selectedModule}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.2 }}
+          >
+            {renderModuleContent()}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   )

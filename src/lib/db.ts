@@ -1,7 +1,7 @@
 import { neon } from "@neondatabase/serverless";
 import { drizzle, NeonHttpDatabase } from "drizzle-orm/neon-http";
-import { eq, and, isNull, isNotNull, desc, asc, count, gte, lte, inArray, like, or, sql, ne } from "drizzle-orm";
-import { subYears, format } from 'date-fns';
+import { eq, and, isNull, isNotNull, desc, asc, count, gte, lte, inArray, like, or, sql, ne, lt } from "drizzle-orm";
+import { subYears, format, subDays } from 'date-fns';
 import { logInfo } from './logger';
 import * as mainSchema from './schema/main';
 import * as historicosSchema from './schema/historicos';
@@ -14,7 +14,7 @@ const schema = {
 
 // Reexportamos los esquemas individuales para que sigan estando disponibles donde se necesiten
 export const { tableCCM, tablePRR, evaluadoresCCM, evaluadoresPRR, fileProcessingJobs } = mainSchema;
-export const { historicoPendientesOperador, historicoSinAsignar } = historicosSchema;
+export const { historicoPendientesOperador, historicoSinAsignar, historicoSpePendientes } = historicosSchema;
 
 // Función para obtener conexión a la base de datos (POOLED o DIRECTA)
 export async function getDrizzleDB(options: { type: 'pooled' | 'direct' } = { type: 'pooled' }) {
@@ -982,6 +982,75 @@ export class DirectDatabaseAPI {
       categoryTrends,
       operatorsDetails,
     };
+  }
+
+  // ============= MÉTODOS PARA SPE =============
+
+  /**
+   * Función auxiliar para obtener datos de pendientes SPE desde Google Sheets.
+   * Este método hace una llamada a la API de SPE para obtener los datos actuales.
+   */
+  async getAllSpePendientes(): Promise<any[]> {
+    try {
+      // Hacer una llamada interna a la API de SPE
+      const response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/spe/data`);
+      if (!response.ok) {
+        throw new Error(`Error al obtener datos SPE: ${response.status}`);
+      }
+      const data = await response.json();
+      
+      if (!data.success || !data.data) {
+        throw new Error('No se pudieron obtener datos de SPE');
+      }
+
+      // Convertir los datos agrupados por evaluador a registros individuales para el snapshot
+      const registrosPendientes: any[] = [];
+      
+      data.data.forEach((evaluadorData: any) => {
+        const evaluador = evaluadorData.evaluador || 'Sin Asignar';
+        const totalPendientes = evaluadorData.totalGeneral || 0;
+        
+        if (totalPendientes > 0) {
+          registrosPendientes.push({
+            evaluador,
+            pendientes: totalPendientes
+          });
+        }
+      });
+
+      return registrosPendientes;
+    } catch (error) {
+      console.error('❌ Error obteniendo datos SPE para snapshot:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Insertar/actualizar registros de histórico SPE pendientes
+   */
+  async upsertHistoricoSpePendientes(data: (typeof historicoSpePendientes.$inferInsert)[]) {
+    if (data.length === 0) return;
+    
+    return this.db.insert(historicoSpePendientes)
+      .values(data)
+      .onConflictDoUpdate({
+        target: [
+          historicoSpePendientes.fecha,
+          historicoSpePendientes.operador,
+        ],
+        set: {
+          pendientes: sql`excluded.pendientes`,
+        },
+      });
+  }
+
+  /**
+   * Eliminar registros históricos de SPE para una fecha específica
+   */
+  async deleteHistoricoDelDiaSpe(fecha: string) {
+    return this.db.delete(historicoSpePendientes).where(
+      eq(historicoSpePendientes.fecha, fecha)
+    );
   }
 }
 

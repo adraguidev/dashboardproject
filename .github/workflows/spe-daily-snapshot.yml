@@ -1,0 +1,84 @@
+# Workflow para Snapshot Automático Diario de SPE
+name: SPE Daily Snapshot
+
+# Ejecutar todos los días a las 11 PM hora de Perú (4 AM UTC del día siguiente)
+on:
+  schedule:
+    # Perú = UTC-5, así que 11 PM Perú = 4 AM UTC del día siguiente
+    # Formato: min hour day-of-month month day-of-week
+    - cron: '0 4 * * *'
+  
+  # También permitir ejecución manual para testing
+  workflow_dispatch:
+
+jobs:
+  spe-snapshot:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. Checkout del código (necesario para logs)
+      - name: Check out repository code
+        uses: actions/checkout@v3
+
+      # 2. Configurar Node.js (por si necesitamos dependencias)
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      # 3. Mostrar hora actual para debugging
+      - name: Show current time
+        run: |
+          echo "UTC Time: $(date -u)"
+          echo "Peru Time (UTC-5): $(TZ='America/Lima' date)"
+
+      # 4. Ejecutar snapshot SPE llamando a la API
+      - name: Take SPE Snapshot
+        run: |
+          echo "🔍 Iniciando snapshot automático de SPE..."
+          
+          # Hacer llamada HTTP POST al endpoint de snapshot
+          response=$(curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.INTERNAL_API_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -w "%{http_code}" \
+            -s \
+            -o response.json \
+            "${{ secrets.API_URL }}/api/historico/spe-snapshot")
+          
+          echo "📡 HTTP Status Code: $response"
+          
+          # Mostrar respuesta
+          echo "📋 Response body:"
+          cat response.json
+          
+          # Verificar si fue exitoso
+          if [ "$response" -eq 200 ]; then
+            echo "✅ Snapshot SPE creado exitosamente"
+            
+            # Extraer información de la respuesta para logs
+            if command -v jq >/dev/null 2>&1; then
+              success=$(jq -r '.success' response.json 2>/dev/null || echo "unknown")
+              message=$(jq -r '.message // empty' response.json 2>/dev/null || echo "")
+              evaluadores=$(jq -r '.results.evaluadores // empty' response.json 2>/dev/null || echo "")
+              total=$(jq -r '.results.totalPendientes // empty' response.json 2>/dev/null || echo "")
+              
+              echo "📊 Resultado: $success"
+              if [ ! -z "$message" ]; then
+                echo "💬 Mensaje: $message"
+              fi
+              if [ ! -z "$evaluadores" ] && [ ! -z "$total" ]; then
+                echo "📈 Estadísticas: $evaluadores evaluadores, $total pendientes totales"
+              fi
+            fi
+          else
+            echo "❌ Error en snapshot SPE. Status code: $response"
+            cat response.json
+            exit 1
+          fi
+
+      # 5. Limpiar archivos temporales
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f response.json 
