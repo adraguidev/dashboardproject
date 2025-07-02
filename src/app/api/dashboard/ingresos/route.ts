@@ -415,16 +415,18 @@ export async function GET(request: NextRequest) {
       // Crear instancia de la API directa a PostgreSQL
       const dbAPI = await createDirectDatabaseAPI();
 
+      const DAYS_TWO_YEARS = 730;
+
       if (process === 'ccm') {
         // Datos limitados para gráfico diario
         dailyData = await dbAPI.getCCMIngresos(days);
-        // Datos completos para mensuales/semanales (SIN LÍMITE)
-        allData = await dbAPI.getAllCCMIngresos();
+        // Datos para mensuales/semanales: ÚLTIMOS 2 AÑOS (≈730 días)
+        allData = await dbAPI.getCCMIngresos(DAYS_TWO_YEARS);
       } else {
-        // Datos limitados para gráfico diario  
+        // Datos limitados para gráfico diario
         dailyData = await dbAPI.getPRRIngresos(days);
-        // Datos completos para mensuales/semanales (SIN LÍMITE)
-        allData = await dbAPI.getAllPRRIngresos();
+        // Datos para mensuales/semanales: ÚLTIMOS 2 AÑOS (≈730 días)
+        allData = await dbAPI.getPRRIngresos(DAYS_TWO_YEARS);
       }
     } catch (error) {
       console.error(`❌ Error obteniendo datos de ${process?.toUpperCase()}:`, error);
