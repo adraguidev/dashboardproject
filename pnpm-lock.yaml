@@ -151,7 +151,7 @@ importers:
         specifier: ^9.0.10
         version: 9.0.10
       '@types/node':
-        specifier: '20'
+        specifier: ^20.19.1
         version: 20.19.1
       '@types/react':
         specifier: ^19
@@ -8009,7 +8009,7 @@ snapshots:
   '@types/jsonwebtoken@9.0.10':
     dependencies:
       '@types/ms': 2.1.0
-      '@types/node': 20.19.1
+      '@types/node': 22.15.33
 
   '@types/ms@2.1.0': {}
 
@@ -8025,7 +8025,7 @@ snapshots:
 
   '@types/pg@8.15.4':
     dependencies:
-      '@types/node': 20.19.1
+      '@types/node': 22.15.33
       pg-protocol: 1.10.2
       pg-types: 2.2.0
 
