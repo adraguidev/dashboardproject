@@ -31,12 +31,15 @@ async function takeSpeSnapshot(api: import('@/lib/db').DirectDatabaseAPI) {
   }
 
   if (allSpePendientes.length > 0) {
-    // 3. Preparar datos para insertar
+    // 3. Preparar datos para insertar con timestamp explícito de Lima
+    const createdAtLima = nowInLima // Usar el objeto Date de Lima directamente
+    
     const historicosOperador = allSpePendientes.map(item => ({
       fecha,
       trimestre,
       operador: item.evaluador,
       pendientes: item.pendientes,
+      createdAt: createdAtLima, // Timestamp explícito en zona horaria de Lima
     }))
     
     // 4. Insertar/actualizar en la base de datos
