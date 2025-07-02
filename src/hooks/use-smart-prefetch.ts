@@ -18,6 +18,7 @@ export function useSmartPrefetch(proceso: string) {
 
     // Lanzar 15 s después de que el usuario esté en la pantalla
     const timer = setTimeout(() => {
+      // ⚠️ Se han eliminado los endpoints históricos (punto 6) para reducir transferencia y memoria
       const endpoints = [
         // 1️⃣ Pendientes (por defecto: year)
         `/api/dashboard/pendientes-report?process=${proceso}&groupBy=year`, // básica
@@ -51,23 +52,39 @@ export function useSmartPrefetch(proceso: string) {
         // 5️⃣ Resueltos (análisis anual)
         `/api/analysis/resueltos?proceso=${proceso}`,
 
-        // 6️⃣ Históricos opcionales (pesados) - NOTA: estos endpoints esperan 'proceso' en mayúsculas
-        `/api/historico/avance-pendientes?proceso=${procesoUpper}`,
-        `/api/historico/sin-asignar?proceso=${procesoUpper}&dias=30`,
-
-        // 7️⃣ KPIs y evaluadores (ligeros)
+        // 6️⃣ KPIs y evaluadores (ligeros)
         `/api/dashboard/kpis`,
         `/api/dashboard/evaluadores?process=${proceso}`,
       ]
 
-      endpoints.forEach((url) => {
-        const key = url // usar la url completa como parte de la queryKey
-        qc.prefetchQuery({
-          queryKey: ['prefetch', key],
-          queryFn: () => fetch(url).then((r) => r.json()),
-          staleTime: Infinity,
-        })
-      })
+      // 👉 Prefetch en lotes pequeños para limitar simultaneidad
+      const BATCH_SIZE = 4
+      const STEP_DELAY_MS = 600
+
+      const prefetchInBatches = async () => {
+        for (let i = 0; i < endpoints.length; i += BATCH_SIZE) {
+          const batch = endpoints.slice(i, i + BATCH_SIZE)
+
+          await Promise.allSettled(
+            batch.map((url) => {
+              const key = url // usar la url completa como parte de la queryKey
+              return qc.prefetchQuery({
+                queryKey: ['prefetch', key],
+                queryFn: () => fetch(url).then((r) => r.json()),
+                staleTime: Infinity,
+              })
+            })
+          )
+
+          // Esperar entre lotes salvo en el último
+          if (i + BATCH_SIZE < endpoints.length) {
+            await new Promise((res) => setTimeout(res, STEP_DELAY_MS))
+          }
+        }
+      }
+
+      // Ejecutar la función async sin bloquear
+      prefetchInBatches()
     }, 15_000) // 15 segundos
 
     return () => clearTimeout(timer)
