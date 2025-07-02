@@ -214,24 +214,6 @@ export default function SpeAvancePendientesTable({
                 </button>
               ))}
             </div>
-            
-            {/* Botones de acción */}
-            <button
-              onClick={handleSnapshot}
-              disabled={isSnapshotLoading}
-              className="flex items-center space-x-2 px-4 py-2 bg-orange-100 text-orange-700 border border-orange-200 rounded-lg hover:bg-orange-200 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Camera className={`h-4 w-4 ${isSnapshotLoading ? 'animate-pulse' : ''}`} />
-              <span>{isSnapshotLoading ? 'Tomando...' : 'Tomar Snapshot'}</span>
-            </button>
-            
-            <button
-              onClick={handleExport}
-              className="flex items-center space-x-2 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
-            >
-              <Download className="h-4 w-4" />
-              <span>Exportar</span>
-            </button>
           </div>
         }
       />
@@ -239,7 +221,6 @@ export default function SpeAvancePendientesTable({
       {/* KPI Cards Section */}
       <div className="px-6 py-4 border-b border-gray-200">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          
           {/* Tarjeta Operadores */}
           <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex items-center">
             <div className="bg-blue-100 p-3 rounded-full mr-4">
@@ -250,7 +231,6 @@ export default function SpeAvancePendientesTable({
               <p className="text-2xl font-bold text-gray-900">{totalOperadores}</p>
             </div>
           </div>
-
           {/* Tarjeta Última Fecha */}
           <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex items-center">
             <div className="bg-orange-100 p-3 rounded-full mr-4">
@@ -261,7 +241,6 @@ export default function SpeAvancePendientesTable({
               <p className="text-2xl font-bold text-gray-900">{ultimaFechaFormateada}</p>
             </div>
           </div>
-
           {/* Tarjeta Total Actual */}
           <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex items-center">
             <div className="bg-green-100 p-3 rounded-full mr-4">
@@ -272,8 +251,26 @@ export default function SpeAvancePendientesTable({
               <p className="text-2xl font-bold text-gray-900">{totalActual.toLocaleString()}</p>
             </div>
           </div>
-
         </div>
+      </div>
+
+      {/* Botones de acción debajo de KPIs y encima de la tabla */}
+      <div className="px-6 pt-4 pb-2 flex justify-end gap-2">
+        <button
+          onClick={handleSnapshot}
+          disabled={isSnapshotLoading}
+          className="flex items-center space-x-2 px-4 py-2 bg-orange-100 text-orange-700 border border-orange-200 rounded-lg hover:bg-orange-200 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Camera className={`h-4 w-4 ${isSnapshotLoading ? 'animate-pulse' : ''}`} />
+          <span>{isSnapshotLoading ? 'Tomando...' : 'Regrabar Snapshot de Hoy'}</span>
+        </button>
+        <button
+          onClick={handleExport}
+          className="flex items-center space-x-2 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+        >
+          <Download className="h-4 w-4" />
+          <span>Exportar Excel</span>
+        </button>
       </div>
 
       {/* Tabla */}
@@ -282,17 +279,24 @@ export default function SpeAvancePendientesTable({
         className="overflow-x-auto border border-gray-200 rounded-lg"
       >
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-100">
             <tr>
-              <th className="sticky left-0 z-10 bg-gray-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
-                Evaluador
+              <th className="sticky left-0 z-10 bg-gray-100 px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider border-r border-gray-200">
+                <span className="inline-flex items-center gap-1">
+                  <Activity className="w-4 h-4 text-gray-400" />
+                  Operador
+                </span>
               </th>
               {fechasFiltradas.map((fecha) => (
                 <th 
                   key={fecha} 
-                  className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]"
+                  className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider min-w-[60px]"
+                  title={`Fecha: ${fecha} (${formatDateShort(fecha)})`}
                 >
-                  {formatDateShort(fecha)}
+                  <span className="inline-flex items-center gap-1">
+                    <Calendar className="w-4 h-4 text-gray-300" />
+                    {formatDateShort(fecha)}
+                  </span>
                 </th>
               ))}
             </tr>
@@ -306,7 +310,7 @@ export default function SpeAvancePendientesTable({
                 transition={{ duration: 0.3, delay: index * 0.05 }}
                 className="hover:bg-gray-50 transition-colors cursor-pointer"
               >
-                <td className="sticky left-0 z-10 bg-white group-hover:bg-gray-50 px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-gray-200">
+                <td className="sticky left-0 z-10 bg-white group-hover:bg-gray-50 px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-gray-200">
                   {operador.operador}
                 </td>
                 {fechasFiltradas.map((fecha) => {
@@ -314,7 +318,7 @@ export default function SpeAvancePendientesTable({
                   return (
                     <td 
                       key={fecha} 
-                      className="px-4 py-4 whitespace-nowrap text-center text-sm"
+                      className="px-3 py-3 whitespace-nowrap text-center text-sm font-mono"
                     >
                       <span 
                         className={`inline-flex items-center justify-center min-w-[32px] h-6 rounded-full text-xs font-medium ${
@@ -333,13 +337,13 @@ export default function SpeAvancePendientesTable({
           </tbody>
           <tfoot className="bg-gray-100 font-bold">
             <tr>
-              <td className="sticky left-0 z-10 bg-gray-100 px-6 py-3 text-left text-sm text-gray-800 border-r border-gray-200">
+              <td className="sticky left-0 z-10 bg-gray-100 px-4 py-3 text-left text-sm text-gray-800 border-r border-gray-200">
                 Total
               </td>
               {fechasFiltradas.map((fecha) => {
                 const totalDia = processedData.operadores.reduce((sum, op) => sum + (op[fecha] as number || 0), 0);
                 return (
-                  <td key={fecha} className="px-4 py-3 text-center text-sm text-gray-800">
+                  <td key={fecha} className="px-3 py-3 text-center text-sm text-gray-800">
                     {totalDia}
                   </td>
                 );

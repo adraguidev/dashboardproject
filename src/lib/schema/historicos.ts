@@ -92,7 +92,7 @@ export type HistoricoPendientesOperador = typeof historicoPendientesOperador.$in
 export type NewHistoricoPendientesOperador = typeof historicoPendientesOperador.$inferInsert
 
 export type HistoricoSinAsignar = typeof historicoSinAsignar.$inferSelect
-export type NewHistoricoSinAsignar = typeof historicoSinAsignar.$inferInsert
+export type NewHistoricoSinAsignar = typeof historicoSinAsignar.$inferInsert 
 
 export type HistoricoSpePendientes = typeof historicoSpePendientes.$inferSelect
 export type NewHistoricoSpePendientes = typeof historicoSpePendientes.$inferInsert 
