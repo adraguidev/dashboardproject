@@ -150,8 +150,8 @@ export function structureDataForAI(rawData: RawDashboardData, proceso: 'CCM' | '
     proceso,
     generatedAt: now.toISOString(),
     dataRanges: {
-      ingresos: calculateDateRange(rawData.ingresos),
-      produccion: calculateDateRange(rawData.produccion),
+      ingresos: calculateDateRange(rawData.ingresos, r => r.fecha_ingreso),
+      produccion: calculateDateRange(rawData.produccion, r => r.fecha_produccion),
       pendientes: { fechaCorte }
     },
     summary: calculateSummary(rawData),
@@ -173,19 +173,20 @@ export function structureDataForAI(rawData: RawDashboardData, proceso: 'CCM' | '
 }
 
 // Funciones auxiliares para estructurar cada tipo de datos
-function calculateDateRange(data: Array<Record<string, unknown>>): { desde: string; hasta: string; totalDias: number } {
+function calculateDateRange<T>(data: T[], selector: (row: T) => string | undefined): { desde: string; hasta: string; totalDias: number } {
   if (!data || data.length === 0) {
     return { desde: '', hasta: '', totalDias: 0 };
   }
-  
-  const fechas = data.map(item => item.fecha_produccion || item.fecha_ingreso || item.fechaexpendiente)
-    .filter(Boolean)
+
+  const fechas = data
+    .map(selector)
+    .filter((f): f is string => Boolean(f))
     .sort();
-    
+
   return {
-    desde: fechas[0] || '',
-    hasta: fechas[fechas.length - 1] || '',
-    totalDias: fechas.length
+    desde: fechas[0] ?? '',
+    hasta: fechas[fechas.length - 1] ?? '',
+    totalDias: fechas.length,
   };
 }
 
@@ -199,18 +200,20 @@ function calculateSummary(rawData: RawDashboardData) {
     totalRegistros: total,
     distribucion: { ingresos, produccion, pendientes },
     estadisticas: {
-      ingresosPromedioDiario: ingresos > 0 ? ingresos / Math.max(1, getUniqueDays(rawData.ingresos)) : 0,
-      produccionPromedioDiaria: produccion > 0 ? produccion / Math.max(1, getUniqueDays(rawData.produccion)) : 0,
+      ingresosPromedioDiario: ingresos > 0 ? ingresos / Math.max(1, getUniqueDays(rawData.ingresos, r=> r.fecha_ingreso)) : 0,
+      produccionPromedioDiaria: produccion > 0 ? produccion / Math.max(1, getUniqueDays(rawData.produccion, r=> r.fecha_produccion)) : 0,
       tasaPendientes: total > 0 ? (pendientes / total) * 100 : 0
     }
   };
 }
 
-function getUniqueDays(data: Array<Record<string, unknown>>): number {
+function getUniqueDays<T>(data: T[], selector: (row: T) => string | undefined): number {
   if (!data) return 1;
-  const fechas = new Set(data.map(item => 
-    item.fecha_produccion || item.fecha_ingreso || item.fechaexpendiente
-  ).filter(Boolean));
+  const fechas = new Set(
+    data
+      .map(selector)
+      .filter((d): d is string => Boolean(d))
+  );
   return Math.max(1, fechas.size);
 }
 
@@ -229,7 +232,7 @@ function structureIngresosData(data: RawIngresosRow[]) {
     unit: "expedientes por día",
     structure: "fecha -> cantidad",
     data: processedData,
-    aggregated: calculateIngresosAggregates(processedData)
+    aggregated: calculateIngresosAggregates(processedData as ProcessedIngresosRow[])
   };
 }
 
@@ -335,16 +338,25 @@ function getCriticality(dias: number): 'CRITICA' | 'ALTA' | 'MEDIA' | 'BAJA' {
   return 'BAJA';
 }
 
-function calculateIngresosAggregates(data: RawIngresosRow[]) {
-  const total = data.reduce((sum, item) => sum + item.total_ingresos, 0);
-  const sorted = data.sort((a, b) => b.total_ingresos - a.total_ingresos);
+interface ProcessedIngresosRow {
+  fecha: string;
+  total_ingresos: number;
+  completados: number;
+  otros_estados: number;
+}
+
+function calculateIngresosAggregates(data: ProcessedIngresosRow[]) {
+  const total = data.reduce((sum, item) => sum + (item.total_ingresos ?? 0), 0);
+  const sorted = [...data].sort((a, b) => (b.total_ingresos ?? 0) - (a.total_ingresos ?? 0));
   
   return {
     total_periodo: total,
     promedio_diario: total / Math.max(1, data.length),
     dias_con_datos: data.length,
     mejor_dia: sorted[0] ? { fecha: sorted[0].fecha, cantidad: sorted[0].total_ingresos } : null,
-    peor_dia: sorted[sorted.length - 1] ? { fecha: sorted[sorted.length - 1].fecha, cantidad: sorted[sorted.length - 1].total_ingresos } : null
+    peor_dia: sorted[sorted.length - 1]
+      ? { fecha: sorted[sorted.length - 1].fecha, cantidad: sorted[sorted.length - 1].total_ingresos }
+      : null,
   };
 }
 
