@@ -271,5 +271,5 @@ function IngresosChartComponent({
 }
 
 // Export memoized version
-// eslint-disable-next-line react/display-name
+ 
 export const IngresosChart = React.memo(IngresosChartComponent) as typeof IngresosChartComponent; 

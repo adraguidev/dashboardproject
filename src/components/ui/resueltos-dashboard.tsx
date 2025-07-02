@@ -35,7 +35,7 @@ function ResueltosDashboardComponent({ proceso }: { proceso: 'ccm' | 'prr' }) {
   );
 }
 
-// eslint-disable-next-line react/display-name
+ 
 export const ResueltosDashboard = React.memo(ResueltosDashboardComponent) as typeof ResueltosDashboardComponent;
 
 // Mantener exportación por defecto para compatibilidad con imports existentes

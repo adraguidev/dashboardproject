@@ -567,7 +567,7 @@ function AdvancedDataTableComponent<T>({
 // La comparación shallow de React.memo es suficiente porque las props
 // (data, columns, callbacks) ya se memorizan aguas arriba.
 
-// eslint-disable-next-line react/display-name
+ 
 export const AdvancedDataTable = React.memo(AdvancedDataTableComponent) as typeof AdvancedDataTableComponent;
  
  

@@ -156,5 +156,5 @@ function OperatorTrendModalComponent({ operatorData, fechas, onClose }: ModalPro
   )
 }
 
-// eslint-disable-next-line react/display-name
+ 
 export const OperatorTrendModal = React.memo(OperatorTrendModalComponent) as typeof OperatorTrendModalComponent; 

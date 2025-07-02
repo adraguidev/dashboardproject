@@ -82,7 +82,7 @@ function safeParseDate(dateInput: any): Date | null {
 
 function generateDateRange(startDate: Date, endDate: Date): string[] {
     const dates: string[] = []
-    let currentDate = new Date(startDate)
+    const currentDate = new Date(startDate)
     while (currentDate <= endDate) {
         dates.push(format(currentDate, 'yyyy-MM-dd'))
         currentDate.setDate(currentDate.getDate() + 1)

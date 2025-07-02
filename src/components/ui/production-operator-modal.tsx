@@ -189,5 +189,5 @@ function ProductionOperatorModalComponent({ operator, orderedDates, onClose }: M
   )
 }
 
-// eslint-disable-next-line react/display-name
+ 
 export const ProductionOperatorModal = React.memo(ProductionOperatorModalComponent) as typeof ProductionOperatorModalComponent; 

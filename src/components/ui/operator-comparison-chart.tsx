@@ -83,5 +83,5 @@ function OperatorComparisonChartComponent({ data }: ChartProps) {
   );
 }
 
-// eslint-disable-next-line react/display-name
+ 
 export const OperatorComparisonChart = React.memo(OperatorComparisonChartComponent) as typeof OperatorComparisonChartComponent; 

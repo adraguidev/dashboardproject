@@ -26,5 +26,5 @@ function SparklineChartComponent({ data, strokeColor = '#8884d8' }: SparklinePro
   )
 }
 
-// eslint-disable-next-line react/display-name
+ 
 export const SparklineChart = React.memo(SparklineChartComponent) as typeof SparklineChartComponent; 

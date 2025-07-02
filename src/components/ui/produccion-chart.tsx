@@ -289,7 +289,7 @@ function ProduccionChartComponent({
   )
 }
 
-// eslint-disable-next-line react/display-name
+ 
 export const ProduccionChart = React.memo(
   ProduccionChartComponent
 ) as typeof ProduccionChartComponent 
