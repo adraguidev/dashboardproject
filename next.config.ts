@@ -1,12 +1,5 @@
 import type { NextConfig } from 'next';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore - la librería no expone typings oficiales
 import withBundleAnalyzerFn from '@next/bundle-analyzer';
-
-// Declaración global mínima para `process` cuando los tipos de Node no están disponibles.
-declare const process: {
-  env: Record<string, string | undefined>
-};
 
 // Determinar si se debe habilitar el analizador de bundle
 const isAnalyze = process.env.NODE_ENV === 'development' || process.env.ANALYZE === 'true';
