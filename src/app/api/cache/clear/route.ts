@@ -5,6 +5,7 @@ import { logInfo, logError, logWarn } from '@/lib/logger'
 
 // Prefijo para los módulos antiguos que usan caché manual en Redis
 const LEGACY_CACHE_PREFIX = 'dashboard:*';
+const SPE_CACHE_PREFIX = 'spe:*';
 // Tag para los módulos nuevos que usan la caché integrada de Next.js
 const SPE_CACHE_TAG = 'spe-cache';
 
@@ -25,20 +26,30 @@ export async function POST(request: NextRequest) {
   // --- 1. Limpiar caché Legacy de Redis (si está habilitado) ---
   if (process.env.UPSTASH_REDIS_URL) {
     try {
-      const stream = redis.scanStream({ match: LEGACY_CACHE_PREFIX, count: 100 });
+      // Borrar dashboard:*
+      const stream1 = redis.scanStream({ match: LEGACY_CACHE_PREFIX, count: 100 });
       const pipeline = redis.pipeline();
       let keysFound = 0;
-      for await (const keys of stream) {
+      for await (const keys of stream1) {
         if (keys.length) {
           keysFound += keys.length;
           pipeline.del(...keys);
         }
       }
-      if (keysFound > 0) {
+      // Borrar spe:*
+      const stream2 = redis.scanStream({ match: SPE_CACHE_PREFIX, count: 100 });
+      let speKeysFound = 0;
+      for await (const keys of stream2) {
+        if (keys.length) {
+          speKeysFound += keys.length;
+          pipeline.del(...keys);
+        }
+      }
+      if (keysFound + speKeysFound > 0) {
         await pipeline.exec();
       }
-      results.legacyKeysDeleted = keysFound;
-      logInfo(`✅ Caché Legacy de Redis limpiado. ${results.legacyKeysDeleted} claves eliminadas.`);
+      results.legacyKeysDeleted = keysFound + speKeysFound;
+      logInfo(`✅ Caché Legacy de Redis limpiado. ${results.legacyKeysDeleted} claves eliminadas (dashboard:* y spe:*)`);
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : 'Error desconocido en Redis';
       logError('❌ Error limpiando caché Legacy de Redis:', e);

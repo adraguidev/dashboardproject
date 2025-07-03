@@ -88,6 +88,22 @@ export const historicoSpePendientes = pgTable(
   },
 )
 
+/**
+ * Tabla para almacenar el histórico agregado de producción SPE por evaluador y fecha
+ */
+export const historicoSpeProduccionAgg = pgTable(
+  'historico_spe_produccion_agg',
+  {
+    id: serial('id').primaryKey(),
+    fecha: date('fecha').notNull(),
+    evaluador: text('evaluador').notNull(),
+    total: integer('total').notNull(),
+    finalizadas: integer('finalizadas').notNull(),
+    iniciadas: integer('iniciadas').notNull(),
+    createdAt: timestamp('created_at').defaultNow(),
+  }
+)
+
 export type HistoricoPendientesOperador = typeof historicoPendientesOperador.$inferSelect
 export type NewHistoricoPendientesOperador = typeof historicoPendientesOperador.$inferInsert
 
@@ -96,3 +112,6 @@ export type NewHistoricoSinAsignar = typeof historicoSinAsignar.$inferInsert
 
 export type HistoricoSpePendientes = typeof historicoSpePendientes.$inferSelect
 export type NewHistoricoSpePendientes = typeof historicoSpePendientes.$inferInsert 
+
+export type HistoricoSpeProduccionAgg = typeof historicoSpeProduccionAgg.$inferSelect
+export type NewHistoricoSpeProduccionAgg = typeof historicoSpeProduccionAgg.$inferInsert 

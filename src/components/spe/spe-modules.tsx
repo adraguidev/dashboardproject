@@ -7,13 +7,17 @@ import { SpePendientesTable } from './spe-pendientes-table'
 import { SpeProcessSummaryTable } from './spe-process-summary-table'
 import { SpeIngresosView } from './spe-ingresos-view'
 import SpeAvancePendientesTable from './spe-avance-pendientes-table'
+import { SpeProduccionTable } from './spe-produccion-table'
+import { useSpeProduccion } from '@/hooks/use-spe-produccion'
 import { motion, AnimatePresence } from 'framer-motion'
 import { SectionCard } from '@/components/ui/section-card'
 
 export function SpeModules() {
   const [selectedModule, setSelectedModule] = useState('pendientes')
   const [groupBy, setGroupBy] = useState<'anio' | 'trimestre' | 'mes'>('anio')
+  const [produccionGroupBy, setProduccionGroupBy] = useState<'fechas' | 'meses' | 'anios'>('meses')
   const { data: apiResponse, isLoading, error } = useSpeData()
+  const { data: produccionData, isLoading: isLoadingProduccion, error: produccionError } = useSpeProduccion()
 
   const modules = [
     {
@@ -41,8 +45,8 @@ export function SpeModules() {
       id: 'produccion',
       name: 'Producción',
       icon: Construction,
-      status: 'coming-soon',
-      color: 'text-gray-400',
+      status: 'active',
+      color: 'text-green-600',
     }
   ]
   
@@ -95,6 +99,40 @@ export function SpeModules() {
         return (
           <div className="p-6">
             <SpeAvancePendientesTable />
+          </div>
+        )
+      case 'produccion':
+        if (isLoadingProduccion) {
+          return (
+            <div className="flex justify-center items-center h-64">
+              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+              <p className="ml-4 text-gray-600">Cargando datos de producción SPE...</p>
+            </div>
+          )
+        }
+        if (produccionError) {
+          return (
+            <div className="m-4 p-4 border border-red-200 bg-red-50 rounded-lg">
+              <div className="flex items-center text-red-700">
+                <AlertTriangle className="h-5 w-5 mr-3" />
+                <h3 className="font-semibold">Error al Cargar Datos de Producción</h3>
+              </div>
+              <p className="mt-2 text-red-600 text-sm">{produccionError.message}</p>
+            </div>
+          )
+        }
+        return (
+          <div className="p-6">
+            <SectionCard>
+              <SpeProduccionTable
+                data={produccionData?.data || []}
+                periodos={produccionData?.periodos || { fechas: [], meses: [], anios: [] }}
+                loading={isLoadingProduccion}
+                className="w-full"
+                groupBy={produccionGroupBy}
+                onGroupingChange={setProduccionGroupBy}
+              />
+            </SectionCard>
           </div>
         )
       default:
