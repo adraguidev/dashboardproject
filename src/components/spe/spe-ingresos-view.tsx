@@ -7,7 +7,17 @@ import { SpeProcessMetricsTable } from './spe-process-metrics-table'
 import { Card, CardContent } from '@/components/ui/card'
 
 export function SpeIngresosView() {
-  const { report, isLoading, error, setDays } = useSpeIngresos()
+  const { report, isLoading, error, setDays, month, setMonth } = useSpeIngresos()
+
+  const handleViewChange = (view: 'general' | 'monthly') => {
+    if (view === 'general') {
+      setMonth(undefined)
+    }
+  }
+
+  const handleMonthChange = (selectedMonth: number | undefined) => {
+    setMonth(selectedMonth)
+  }
 
   return (
     <div className="space-y-6">
@@ -30,7 +40,13 @@ export function SpeIngresosView() {
       )}
       
       {!isLoading && report?.processMetrics && (
-        <SpeProcessMetricsTable data={report.processMetrics} />
+        <SpeProcessMetricsTable 
+          data={report.processMetrics} 
+          month={month}
+          onViewChange={handleViewChange}
+          onMonthChange={handleMonthChange}
+          loading={isLoading}
+        />
       )}
     </div>
   )

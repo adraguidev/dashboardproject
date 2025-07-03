@@ -53,8 +53,9 @@ const apiResponseSchema = z.object({
     report: ingresosReportSchema
 })
 
-const fetchSpeIngresosReport = async (days: number): Promise<IngresosReport> => {
-  const response = await fetch(`/api/spe/ingresos?days=${days}`)
+const fetchSpeIngresosReport = async (days: number, month?: number): Promise<IngresosReport> => {
+  const monthParam = month ? `&month=${month}` : '';
+  const response = await fetch(`/api/spe/ingresos?days=${days}${monthParam}`)
   if (!response.ok) {
     const errorData = await response.json()
     throw new Error(errorData.error || 'Error al obtener el reporte de ingresos de SPE')
@@ -78,10 +79,11 @@ const fetchSpeIngresosReport = async (days: number): Promise<IngresosReport> => 
 
 export function useSpeIngresos() {
   const [days, setDays] = useState(30);
+  const [month, setMonth] = useState<number | undefined>(undefined);
 
   const { data, isLoading, error } = useQuery<IngresosReport, Error>({
-    queryKey: ['speIngresosReport', days],
-    queryFn: () => fetchSpeIngresosReport(days),
+    queryKey: ['speIngresosReport', days, month],
+    queryFn: () => fetchSpeIngresosReport(days, month),
     staleTime: 1000 * 60 * 15, // 15 minutos
   })
 
@@ -91,5 +93,7 @@ export function useSpeIngresos() {
     error: error?.message || null,
     days,
     setDays,
+    month,
+    setMonth,
   }
 } 

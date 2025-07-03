@@ -201,7 +201,7 @@ function generateWeeklyData(rawData: any[]): WeeklyIngresosData {
     }
 }
 
-function analyzeIngresosByProcess(rawData: any[]): ProcessMetrics[] {
+function analyzeIngresosByProcess(rawData: any[], monthFilter?: number): ProcessMetrics[] {
     const header = rawData.length > 0 ? rawData[0].map((h: any) => (typeof h === 'string' ? h.trim().toUpperCase() : '')) : [];
     const dataRows = rawData.slice(1);
 
@@ -228,6 +228,15 @@ function analyzeIngresosByProcess(rawData: any[]): ProcessMetrics[] {
         const fechaIngreso = safeParseDate(fechaIngresoValue);
 
         if (proceso && typeof proceso === 'string' && proceso.trim() !== '' && fechaIngreso && expediente) {
+            // Si hay filtro por mes, verificar que la fecha esté en el mes correcto del 2025
+            if (monthFilter !== undefined) {
+                const year = fechaIngreso.getFullYear();
+                const month = fechaIngreso.getMonth() + 1; // getMonth() returns 0-11
+                if (year !== 2025 || month !== monthFilter) {
+                    return; // Skip this row
+                }
+            }
+
             const trimmedProceso = proceso.trim();
             if (!processData.has(trimmedProceso)) {
                 processData.set(trimmedProceso, { expedientes: new Set(), dates: [] });
@@ -248,11 +257,20 @@ function analyzeIngresosByProcess(rawData: any[]): ProcessMetrics[] {
         const firstDate = sortedDates[0];
         const lastDate = sortedDates[sortedDates.length - 1];
         
-        // Usamos los días entre el primer y último ingreso para el promedio
-        const totalDays = Math.max(1, Math.ceil((lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24)));
+        let totalDays: number;
+        let dailyAvg: number;
         const totalEntries = data.expedientes.size;
 
-        const dailyAvg = totalEntries / totalDays;
+        if (monthFilter !== undefined) {
+            // Para vista mensual, calcular promedio basado en días del mes
+            const daysInMonth = new Date(2025, monthFilter, 0).getDate();
+            totalDays = daysInMonth;
+            dailyAvg = totalEntries / totalDays;
+        } else {
+            // Para vista general, usar el período entre primer y último ingreso
+            totalDays = Math.max(1, Math.ceil((lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24)));
+            dailyAvg = totalEntries / totalDays;
+        }
         
         results.push({
             proceso,
@@ -261,7 +279,7 @@ function analyzeIngresosByProcess(rawData: any[]): ProcessMetrics[] {
             lastEntry: format(lastDate, 'yyyy-MM-dd'),
             avgDiario: parseFloat(dailyAvg.toFixed(2)),
             avgSemanal: parseFloat((dailyAvg * 7).toFixed(2)),
-            avgMensual: parseFloat((dailyAvg * 30.44).toFixed(2))
+            avgMensual: monthFilter !== undefined ? 0 : parseFloat((dailyAvg * 30.44).toFixed(2)) // No mostrar mensual si es vista mensual
         });
     }
 
@@ -273,9 +291,14 @@ function analyzeIngresosByProcess(rawData: any[]): ProcessMetrics[] {
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const days = parseInt(searchParams.get('days') || '30', 10)
+    const month = searchParams.get('month') ? parseInt(searchParams.get('month')!, 10) : undefined
 
     if (![15, 30, 45, 60, 90].includes(days)) {
         return NextResponse.json({ success: false, error: 'Período de días no válido.' }, { status: 400 })
+    }
+
+    if (month !== undefined && (month < 1 || month > 12)) {
+        return NextResponse.json({ success: false, error: 'Mes no válido. Debe estar entre 1 y 12.' }, { status: 400 })
     }
 
     try {
@@ -352,10 +375,10 @@ export async function GET(request: NextRequest) {
         // --- 3. Analizar datos por proceso (nuevo) ---
         const getCachedProcessData = unstable_cache(
             async () => {
-                logInfo(`(Re)generando análisis de ingresos por proceso de SPE.`);
-                return analyzeIngresosByProcess(rawData);
+                logInfo(`(Re)generando análisis de ingresos por proceso de SPE${month ? ` para mes ${month}` : ''}.`);
+                return analyzeIngresosByProcess(rawData, month);
             },
-            [`spe-ingresos-proceso-v2`],
+            [`spe-ingresos-proceso-v2${month ? `-month-${month}` : ''}`],
             { revalidate: 3600, tags: ['spe-cache', 'spe-proceso'] }
         )
 

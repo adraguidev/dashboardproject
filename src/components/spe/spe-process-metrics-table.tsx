@@ -1,65 +1,251 @@
-import React from 'react';
-import type { ProcessMetrics } from '@/types/dashboard';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { BarChart, TrendingUp } from 'lucide-react';
+'use client'
+
+import React, { useState, useMemo } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { BarChart, Calendar, Filter, Users } from 'lucide-react'
+import { SectionCard } from '@/components/ui/section-card'
+import { SectionHeader } from '@/components/ui/section-header'
+import { FilterSelect } from '@/components/ui/filter-select'
+import type { ProcessMetrics } from '@/types/dashboard'
 
 interface SpeProcessMetricsTableProps {
-  data: ProcessMetrics[];
+  data: ProcessMetrics[]
+  month?: number
+  onViewChange?: (view: 'general' | 'monthly') => void
+  onMonthChange?: (month: number | undefined) => void
+  loading?: boolean
 }
 
-export function SpeProcessMetricsTable({ data }: SpeProcessMetricsTableProps) {
-  if (!data || data.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Análisis de Ingresos por Proceso</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p>No hay datos de procesos para analizar.</p>
-        </CardContent>
-      </Card>
-    );
+const MONTHS_2025 = [
+  { value: 1, label: 'Enero 2025' },
+  { value: 2, label: 'Febrero 2025' },
+  { value: 3, label: 'Marzo 2025' },
+  { value: 4, label: 'Abril 2025' },
+  { value: 5, label: 'Mayo 2025' },
+  { value: 6, label: 'Junio 2025' },
+  { value: 7, label: 'Julio 2025' },
+  { value: 8, label: 'Agosto 2025' },
+  { value: 9, label: 'Septiembre 2025' },
+  { value: 10, label: 'Octubre 2025' },
+  { value: 11, label: 'Noviembre 2025' },
+  { value: 12, label: 'Diciembre 2025' }
+]
+
+export function SpeProcessMetricsTable({ 
+  data, 
+  month, 
+  onViewChange, 
+  onMonthChange, 
+  loading = false 
+}: SpeProcessMetricsTableProps) {
+  const [view, setView] = useState<'general' | 'monthly'>('general')
+
+  const handleViewChange = (newView: 'general' | 'monthly') => {
+    setView(newView)
+    onViewChange?.(newView)
+    if (newView === 'general') {
+      onMonthChange?.(undefined)
+    }
   }
 
+  const handleMonthChange = (selectedMonth: number) => {
+    onMonthChange?.(selectedMonth)
+  }
+
+  const displayData = useMemo(() => {
+    if (!data || data.length === 0) return []
+    return data.filter(item => item.totalEntries > 0)
+  }, [data])
+
+  const totals = useMemo(() => {
+    if (!displayData.length) return { totalEntries: 0, avgDiario: 0, avgSemanal: 0, avgMensual: 0 }
+    
+    const totalEntries = displayData.reduce((sum, item) => sum + item.totalEntries, 0)
+    const avgDiario = displayData.reduce((sum, item) => sum + item.avgDiario, 0)
+    const avgSemanal = displayData.reduce((sum, item) => sum + item.avgSemanal, 0)
+    const avgMensual = view === 'general' ? displayData.reduce((sum, item) => sum + item.avgMensual, 0) : 0
+    
+    return { totalEntries, avgDiario, avgSemanal, avgMensual }
+  }, [displayData, view])
+
+  if (loading) {
+    return (
+      <SectionCard>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Cargando métricas por proceso...</p>
+          </div>
+        </div>
+      </SectionCard>
+    )
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <SectionCard>
+        <SectionHeader
+          icon={<BarChart className="h-6 w-6 text-blue-600" />}
+          title="Métricas de Ingresos por Proceso"
+          description="No hay datos de procesos para analizar."
+        />
+      </SectionCard>
+    )
+  }
+
+  const selectedMonthLabel = month ? MONTHS_2025.find(m => m.value === month)?.label : undefined
+
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-gray-50/50">
-        <CardTitle className="text-lg font-semibold text-gray-800">
-          Métricas de Ingresos por Proceso
-        </CardTitle>
-        <BarChart className="h-5 w-5 text-gray-500" />
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-              <thead className="bg-gray-100">
-                <tr className="border-b">
-                  <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Proceso</th>
-                  <th className="px-6 py-3 text-right text-xs font-bold text-gray-600 uppercase tracking-wider">Total Ingresos</th>
-                  <th className="px-6 py-3 text-right text-xs font-bold text-gray-600 uppercase tracking-wider">Prom. Diario</th>
-                  <th className="px-6 py-3 text-right text-xs font-bold text-gray-600 uppercase tracking-wider">Prom. Semanal</th>
-                  <th className="px-6 py-3 text-right text-xs font-bold text-gray-600 uppercase tracking-wider">Prom. Mensual</th>
+    <SectionCard className="overflow-hidden">
+      <SectionHeader
+        icon={<BarChart className="h-6 w-6 text-blue-600" />}
+        title="Métricas de Ingresos por Proceso"
+        description={
+          view === 'monthly' && selectedMonthLabel 
+            ? `Análisis de ingresos para ${selectedMonthLabel}` 
+            : "Análisis general de ingresos por proceso"
+        }
+      />
+      
+      {/* Controles de filtrado */}
+      <div className="my-4 flex flex-col sm:flex-row gap-4 items-center justify-between">
+        {/* Selector de vista GENERAL vs MES */}
+        <div className="flex items-center space-x-1 bg-white p-1.5 rounded-lg shadow-sm border border-gray-200">
+          <button
+            onClick={() => handleViewChange('general')}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+              view === 'general'
+                ? 'bg-blue-600 text-white shadow-lg'
+                : 'text-gray-600 hover:bg-blue-50'
+            }`}
+          >
+            General
+          </button>
+          <button
+            onClick={() => handleViewChange('monthly')}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+              view === 'monthly'
+                ? 'bg-blue-600 text-white shadow-lg'
+                : 'text-gray-600 hover:bg-blue-50'
+            }`}
+          >
+            Por Mes
+          </button>
+        </div>
+
+        {/* Selector de mes (solo visible cuando está en vista mensual) */}
+        {view === 'monthly' && (
+          <FilterSelect
+            value={month || ''}
+            onChange={e => handleMonthChange(Number(e.target.value))}
+            icon={<Calendar className="h-4 w-4" />}
+            containerClassName="w-full sm:w-48"
+          >
+            <option value="">Seleccionar mes...</option>
+            {MONTHS_2025.map(monthOption => (
+              <option key={monthOption.value} value={monthOption.value}>
+                {monthOption.label}
+              </option>
+            ))}
+          </FilterSelect>
+        )}
+      </div>
+
+      {/* Mensaje cuando no hay mes seleccionado en vista mensual */}
+      {view === 'monthly' && !month && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+          <div className="flex items-center">
+            <Calendar className="h-5 w-5 text-blue-600 mr-3" />
+            <p className="text-blue-800 text-sm">
+              Selecciona un mes para ver las métricas específicas de ese período.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Tabla de datos */}
+      {(view === 'general' || (view === 'monthly' && month)) && (
+        <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 text-gray-600">
+                <tr className="border-b border-gray-200">
+                  <th className="px-6 py-3 text-left font-semibold uppercase text-xs tracking-wider">
+                    <div className="flex items-center gap-2">
+                      <Filter className="w-4 h-4 text-gray-400" />
+                      <span>Proceso</span>
+                    </div>
+                  </th>
+                  <th className="px-6 py-3 text-right font-semibold uppercase text-xs tracking-wider">
+                    Total Ingresos
+                  </th>
+                  <th className="px-6 py-3 text-right font-semibold uppercase text-xs tracking-wider">
+                    Prom. Diario
+                  </th>
+                  <th className="px-6 py-3 text-right font-semibold uppercase text-xs tracking-wider">
+                    Prom. Semanal
+                  </th>
+                  {view === 'general' && (
+                    <th className="px-6 py-3 text-right font-semibold uppercase text-xs tracking-wider">
+                      Prom. Mensual
+                    </th>
+                  )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
-                {data.map((metric) => (
-                  <tr key={metric.proceso} className="hover:bg-gray-50 transition-colors duration-150">
-                      <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900 max-w-xs break-words">{metric.proceso}</div>
-                        <div className="text-xs text-gray-500 whitespace-nowrap">
-                          {metric.firstEntry} a {metric.lastEntry}
-                        </div>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {displayData.map((metric, index) => (
+                  <tr key={metric.proceso} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-medium text-gray-900 max-w-xs break-words">
+                        {metric.proceso}
+                      </div>
+                      <div className="text-xs text-gray-500 whitespace-nowrap">
+                        {metric.firstEntry} a {metric.lastEntry}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-700 font-semibold">
+                      {metric.totalEntries.toLocaleString('es-PE')}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-600 font-mono">
+                      {metric.avgDiario.toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-600 font-mono">
+                      {metric.avgSemanal.toFixed(2)}
+                    </td>
+                    {view === 'general' && (
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-600 font-mono">
+                        {metric.avgMensual.toFixed(2)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-700 font-semibold">{metric.totalEntries.toLocaleString('es-PE')}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-600">{metric.avgDiario}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-600">{metric.avgSemanal}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-600">{metric.avgMensual}</td>
+                    )}
                   </tr>
                 ))}
               </tbody>
+              {/* Fila de totales */}
+              <tfoot className="bg-gray-100">
+                <tr className="border-t-2 border-gray-200">
+                  <th className="px-6 py-3 text-left text-sm font-bold text-gray-800">
+                    TOTAL
+                  </th>
+                  <th className="px-6 py-3 text-right text-sm font-bold text-gray-800">
+                    {totals.totalEntries.toLocaleString('es-PE')}
+                  </th>
+                  <th className="px-6 py-3 text-right text-sm font-bold text-gray-800 font-mono">
+                    {totals.avgDiario.toFixed(2)}
+                  </th>
+                  <th className="px-6 py-3 text-right text-sm font-bold text-gray-800 font-mono">
+                    {totals.avgSemanal.toFixed(2)}
+                  </th>
+                  {view === 'general' && (
+                    <th className="px-6 py-3 text-right text-sm font-bold text-gray-800 font-mono">
+                      {totals.avgMensual.toFixed(2)}
+                    </th>
+                  )}
+                </tr>
+              </tfoot>
             </table>
+          </div>
         </div>
-      </CardContent>
-    </Card>
-  );
+      )}
+    </SectionCard>
+  )
 } 
