@@ -30,29 +30,31 @@ export function formatDate(date: Date | string | undefined): string {
  */
 export function parseDateSafe(dateStr: string | null | undefined): Date | null {
   if (!dateStr) return null
-  
   try {
-    // Regex para YYYY-MM-DD. Evita que JS interprete mal la fecha.
-    const isoDateRegex = /^(\d{4})-(\d{2})-(\d{2})/;
-    const match = dateStr.match(isoDateRegex);
-
-    if (match) {
-      const year = parseInt(match[1], 10);
-      const month = parseInt(match[2], 10) - 1; // Meses en JS son 0-11
-      const day = parseInt(match[3], 10);
-      
-      // Creamos la fecha en UTC para evitar desplazamientos por zona horaria.
+    // Regex para YYYY-MM-DD
+    const isoDateRegex = /^([0-9]{4})-([0-9]{2})-([0-9]{2})/;
+    const matchIso = dateStr.match(isoDateRegex);
+    if (matchIso) {
+      const year = parseInt(matchIso[1], 10);
+      const month = parseInt(matchIso[2], 10) - 1;
+      const day = parseInt(matchIso[3], 10);
       return new Date(Date.UTC(year, month, day));
     }
-    
-    // Fallback para otros formatos, aunque es menos seguro.
+    // Regex para dd/mm/yyyy o d/m/yyyy
+    const latamDateRegex = /^([0-9]{1,2})\/([0-9]{1,2})\/([0-9]{4})/;
+    const matchLatam = dateStr.match(latamDateRegex);
+    if (matchLatam) {
+      const day = parseInt(matchLatam[1], 10);
+      const month = parseInt(matchLatam[2], 10) - 1;
+      const year = parseInt(matchLatam[3], 10);
+      return new Date(Date.UTC(year, month, day));
+    }
+    // Fallback para otros formatos
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) {
       return null;
     }
-    // Para el fallback, también lo normalizamos a UTC 
     return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-
   } catch (error) {
     console.warn('Error parsing date:', dateStr, error)
     return null

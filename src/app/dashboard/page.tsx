@@ -9,6 +9,7 @@ import { ErrorDisplay } from '@/components/ui/error-boundary'
 import { clearAllCache as clearLocalStorageCache } from '@/lib/frontend-cache'
 import { ProcessKey } from '@/types/dashboard'
 import { SpeModules } from '@/components/spe/spe-modules'
+import { SolModules } from '@/components/sol/sol-modules'
 import { useSmartPrefetch } from '@/hooks/use-smart-prefetch'
 
 export default function DashboardPage() {
@@ -89,12 +90,9 @@ export default function DashboardPage() {
             />
           ) : selectedProcess === 'spe' ? (
             <SpeModules />
-          ) : (
-            <div className="p-12 text-center text-gray-600">
-              <h2 className="text-2xl font-semibold mb-4">Módulos para {selectedProcess.toUpperCase()} en desarrollo</h2>
-              Próximamente se mostrará información específica para este proceso.
-            </div>
-          )}
+          ) : selectedProcess === 'sol' ? (
+            <SolModules />
+          ) : null}
         </div>
       </div>
     </div>
