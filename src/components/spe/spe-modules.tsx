@@ -2,12 +2,13 @@
 
 import React, { useState } from 'react'
 import { useSpeData } from '@/hooks/use-spe-data'
-import { Loader2, AlertTriangle, BarChart3, Construction, TrendingUp, Activity } from 'lucide-react'
+import { Loader2, AlertTriangle, BarChart3, Construction, TrendingUp, Activity, ClipboardList } from 'lucide-react'
 import { SpePendientesTable } from './spe-pendientes-table'
 import { SpeProcessSummaryTable } from './spe-process-summary-table'
 import { SpeIngresosView } from './spe-ingresos-view'
 import SpeAvancePendientesTable from './spe-avance-pendientes-table'
 import { SpeProduccionTable } from './spe-produccion-table'
+import { SpeAsignacionesTable } from './spe-asignaciones-table'
 import { useSpeProduccion } from '@/hooks/use-spe-produccion'
 import { motion, AnimatePresence } from 'framer-motion'
 import { SectionCard } from '@/components/ui/section-card'
@@ -48,6 +49,13 @@ export function SpeModules() {
       icon: Construction,
       status: 'active',
       color: 'text-green-600',
+    },
+    {
+      id: 'asignaciones',
+      name: 'Asignaciones',
+      icon: ClipboardList,
+      status: 'active',
+      color: 'text-blue-600',
     }
   ]
   
@@ -139,6 +147,12 @@ export function SpeModules() {
             <div className="mt-6">
               <RankingFechasErradas className="w-full" />
             </div>
+          </div>
+        )
+      case 'asignaciones':
+        return (
+          <div className="p-6">
+            <SpeAsignacionesTable className="w-full" />
           </div>
         )
       default:
