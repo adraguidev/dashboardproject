@@ -11,6 +11,7 @@ import { SpeProduccionTable } from './spe-produccion-table'
 import { useSpeProduccion } from '@/hooks/use-spe-produccion'
 import { motion, AnimatePresence } from 'framer-motion'
 import { SectionCard } from '@/components/ui/section-card'
+import { RankingFechasErradas } from './ranking-fechas-erradas'
 
 export function SpeModules() {
   const [selectedModule, setSelectedModule] = useState('pendientes')
@@ -133,6 +134,11 @@ export function SpeModules() {
                 onGroupingChange={setProduccionGroupBy}
               />
             </SectionCard>
+            
+            {/* Ranking de fechas erróneas */}
+            <div className="mt-6">
+              <RankingFechasErradas className="w-full" />
+            </div>
           </div>
         )
       default:
