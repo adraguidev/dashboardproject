@@ -16,6 +16,7 @@ import { ThroughputChart } from '../ui/throughput-chart'
 import ResueltosDashboard from '../ui/resueltos-dashboard'
 import { useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
+import posthog from 'posthog-js'
 
 interface ProcessModulesProps {
   selectedProcess: 'ccm' | 'prr'
@@ -121,6 +122,18 @@ export function ProcessModules({
   ]
 
   const queryClient = useQueryClient()
+
+  // Track tab changes with PostHog
+  useEffect(() => {
+    const activeModule = modules.find(m => m.id === selectedModule)
+    if (activeModule) {
+      posthog.capture('cambio_pestana', {
+        modulo_id: activeModule.id,
+        modulo_nombre: activeModule.name,
+        proceso: selectedProcess.toUpperCase(),
+      })
+    }
+  }, [selectedModule, selectedProcess])
 
   const renderModuleContent = () => {
     switch (selectedModule) {

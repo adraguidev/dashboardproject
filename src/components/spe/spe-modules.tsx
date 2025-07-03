@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useSpeData } from '@/hooks/use-spe-data'
 import { Loader2, AlertTriangle, BarChart3, Construction, TrendingUp, Activity, ClipboardList } from 'lucide-react'
 import { SpePendientesTable } from './spe-pendientes-table'
@@ -13,6 +13,7 @@ import { useSpeProduccion } from '@/hooks/use-spe-produccion'
 import { motion, AnimatePresence } from 'framer-motion'
 import { SectionCard } from '@/components/ui/section-card'
 import { RankingFechasErradas } from './ranking-fechas-erradas'
+import posthog from 'posthog-js'
 
 export function SpeModules() {
   const [selectedModule, setSelectedModule] = useState('pendientes')
@@ -59,6 +60,18 @@ export function SpeModules() {
     }
   ]
   
+  // Track tab changes with PostHog
+  useEffect(() => {
+    const activeModule = modules.find(m => m.id === selectedModule)
+    if (activeModule) {
+      posthog.capture('cambio_pestana', {
+        modulo_id: activeModule.id,
+        modulo_nombre: activeModule.name,
+        contexto: 'SPE'
+      })
+    }
+  }, [selectedModule])
+
   const renderModuleContent = () => {
     if (isLoading) {
       return (

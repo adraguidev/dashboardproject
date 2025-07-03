@@ -7,6 +7,7 @@ import { stackServerApp } from "../stack";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { ToastContainer } from "@/components/ui/toast";
+import PostHogProvider from '@/components/providers/posthog-provider'
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,14 +35,16 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <StackProvider app={stackServerApp}>
-          <QueryProvider>
-          <StackTheme>
-            <ErrorBoundary>
-              {children}
-              <ToastContainer />
-            </ErrorBoundary>
-          </StackTheme>
-          </QueryProvider>
+          <PostHogProvider>
+            <QueryProvider>
+              <StackTheme>
+                <ErrorBoundary>
+                  {children}
+                  <ToastContainer />
+                </ErrorBoundary>
+              </StackTheme>
+            </QueryProvider>
+          </PostHogProvider>
         </StackProvider>
       </body>
     </html>
