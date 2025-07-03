@@ -1,9 +1,11 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useRef, useEffect } from 'react'
 import ExcelJS from 'exceljs'
 import { Users, BarChart, FileStack, Search, Download, Calendar, Construction } from 'lucide-react'
-import { format, parseISO } from 'date-fns'
+import { format, parseISO, subDays } from 'date-fns'
+import { FilterSelect } from '@/components/ui/filter-select'
+import { SpeEvaluadorProduccionModal } from './spe-evaluador-produccion-modal'
 
 interface ProduccionItem {
   evaluador: string;
@@ -22,8 +24,8 @@ interface ProduccionTableProps {
   };
   loading?: boolean;
   className?: string;
-  groupBy: 'fechas' | 'meses' | 'anios';
-  onGroupingChange: (groupBy: 'fechas' | 'meses' | 'anios') => void;
+  groupBy?: 'fechas' | 'meses'; // Ahora solo permitimos fechas o meses
+  onGroupingChange: (groupBy: 'fechas' | 'meses') => void;
 }
 
 // Utilidades para bolitas
@@ -39,64 +41,118 @@ function getCell(val: any): { total: number, finalizadas: number, iniciadas: num
   return { total: 0, finalizadas: 0, iniciadas: 0 };
 }
 
+// Helper para verificar si un evaluador está inactivo (0 expedientes en los últimos 40 días)
+function isEvaluadorInactivo(evaluador: ProduccionItem, fechasDisponibles: string[]): boolean {
+  if (evaluador.evaluador === 'YMAGALLANES') return true; // Siempre inactivo
+  const hoy = new Date();
+  const fecha40DiasAtras = subDays(hoy, 40);
+  
+  // Filtrar fechas de los últimos 40 días
+  const fechasRecientes = fechasDisponibles.filter(fecha => {
+    const fechaDate = parseISO(fecha);
+    return fechaDate >= fecha40DiasAtras && fechaDate <= hoy;
+  });
+  
+  // Verificar si tiene expedientes en alguna fecha reciente
+  const tieneExpedientesRecientes = fechasRecientes.some(fecha => {
+    const cell = getCell(evaluador.expedientesPorFecha[fecha]);
+    return cell.total > 0;
+  });
+  
+  return !tieneExpedientesRecientes;
+}
+
 export function SpeProduccionTable({
   data,
   periodos,
   loading = false,
   className = '',
-  groupBy,
+  groupBy: groupByProp,
   onGroupingChange
 }: ProduccionTableProps) {
+  // Por defecto, selector en 'fechas'
+  const [groupBy, setGroupBy] = useState<'fechas' | 'meses'>(groupByProp || 'fechas')
   const [searchTerm, setSearchTerm] = useState('')
+  const [diasMostrar, setDiasMostrar] = useState(30)
+  const [selectedEvaluador, setSelectedEvaluador] = useState<ProduccionItem | null>(null)
+  const tableContainerRef = useRef<HTMLDivElement>(null)
+
+  // Scroll horizontal al fondo al montar o al cambiar de agrupación
+  useEffect(() => {
+    if (tableContainerRef.current) {
+      const el = tableContainerRef.current;
+      el.scrollLeft = el.scrollWidth;
+    }
+  }, [groupBy, periodos.fechas, periodos.meses, diasMostrar])
 
   // Mapeo de datos según agrupación
   const dataMapKey = useMemo(() => {
-    return groupBy === 'fechas' ? 'expedientesPorFecha' :
-           groupBy === 'meses' ? 'expedientesPorMes' : 'expedientesPorAnio'
+    return groupBy === 'fechas' ? 'expedientesPorFecha' : 'expedientesPorMes'
   }, [groupBy])
 
   // Períodos visibles según agrupación
   const visiblePeriods = useMemo(() => {
-    let periods = groupBy === 'fechas' ? periodos.fechas :
-                 groupBy === 'meses' ? periodos.meses : periodos.anios
-    // Para fechas, mostrar solo las últimas 30 para no sobrecargar la tabla
+    let periods = groupBy === 'fechas' ? periodos.fechas : periodos.meses
+    // Para fechas, mostrar según la cantidad de días seleccionada
     if (groupBy === 'fechas') {
-      return periods.slice(-30)
+      return periods.slice(-diasMostrar)
     }
-    // Filtrar meses y años < 2025
+    // Filtrar meses < 2025
     if (groupBy === 'meses') {
       periods = periods.filter(mes => parseInt(mes.split('-')[0], 10) >= 2025)
     }
-    if (groupBy === 'anios') {
-      periods = periods.filter(anio => parseInt(anio, 10) >= 2025)
-    }
     return periods
-  }, [groupBy, periodos])
+  }, [groupBy, periodos, diasMostrar])
 
-  // Filtrar datos por término de búsqueda
-  const filteredData = useMemo(() => {
-    if (!searchTerm) return data
-    return data.filter(item => 
-      item.evaluador.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  }, [data, searchTerm])
+  // Filtrar y ordenar datos
+  const filteredAndSortedData = useMemo(() => {
+    let filtered = data;
+    
+    // Aplicar filtro de búsqueda
+    if (searchTerm) {
+      filtered = filtered.filter(item => 
+        item.evaluador.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    // Separar activos e inactivos
+    const activos: ProduccionItem[] = [];
+    const inactivos: ProduccionItem[] = [];
+    
+    filtered.forEach(item => {
+      if (isEvaluadorInactivo(item, periodos.fechas)) {
+        inactivos.push(item);
+      } else {
+        activos.push(item);
+      }
+    });
+    
+    // Ordenar por total general (descendente)
+    activos.sort((a, b) => b.totalGeneral - a.totalGeneral);
+    inactivos.sort((a, b) => b.totalGeneral - a.totalGeneral);
+    
+    // Concatenar: activos primero, inactivos al final
+    return [...activos, ...inactivos];
+  }, [data, searchTerm, periodos.fechas])
 
-  // Calcular totales por período
+  // Calcular totales por período y total por fila según el periodo visible
   const totals = useMemo(() => {
     const periodTotals: { [key: string]: number } = {}
     let grandTotal = 0
 
     visiblePeriods.forEach(period => {
-      periodTotals[period] = filteredData.reduce((sum, item) => {
+      periodTotals[period] = filteredAndSortedData.reduce((sum, item) => {
         const cell = getCell(item[dataMapKey]?.[period]);
         return sum + cell.total;
       }, 0)
     })
 
-    grandTotal = filteredData.reduce((sum, item) => sum + item.totalGeneral, 0)
+    grandTotal = filteredAndSortedData.reduce((sum, item) => sum + (groupBy === 'fechas'
+      ? visiblePeriods.reduce((acc, period) => acc + getCell(item[dataMapKey]?.[period]).total, 0)
+      : item.totalGeneral), 0)
 
     return { ...periodTotals, grandTotal } as { [key: string]: number; grandTotal: number }
-  }, [filteredData, visiblePeriods, dataMapKey])
+  }, [filteredAndSortedData, visiblePeriods, dataMapKey, groupBy])
 
   const exportToExcel = async () => {
     const workbook = new ExcelJS.Workbook();
@@ -110,7 +166,7 @@ export function SpeProduccionTable({
     worksheet.columns = headers;
     worksheet.getRow(1).font = { bold: true };
 
-    filteredData.forEach(item => {
+    filteredAndSortedData.forEach(item => {
       const rowData: any = {
         evaluador: item.evaluador,
         total: item.totalGeneral,
@@ -172,16 +228,18 @@ export function SpeProduccionTable({
             <p className="text-sm text-gray-500">Todos los expedientes procesados por evaluador y fecha de trabajo.</p>
           </div>
         </div>
-        {/* Selector de agrupación */}
+        {/* Selector de agrupación solo Fecha y Mes */}
         <div className="flex items-center space-x-1 bg-white p-1.5 rounded-lg shadow-sm border border-gray-200">
           {([
             { label: 'Fecha', key: 'fechas' },
             { label: 'Mes', key: 'meses' },
-            { label: 'Año', key: 'anios' },
           ] as const).map(({ label, key }) => (
             <button
               key={key}
-              onClick={() => onGroupingChange(key)}
+              onClick={() => {
+                setGroupBy(key);
+                onGroupingChange(key);
+              }}
               className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                 groupBy === key
                   ? 'bg-green-600 text-white shadow-lg'
@@ -202,7 +260,7 @@ export function SpeProduccionTable({
           </div>
           <div>
             <span className="text-sm text-gray-500 block">Total Evaluadores</span>
-            <span className="text-2xl font-bold text-gray-900">{filteredData.length}</span>
+            <span className="text-2xl font-bold text-gray-900">{filteredAndSortedData.length}</span>
           </div>
         </div>
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex items-center">
@@ -218,15 +276,30 @@ export function SpeProduccionTable({
 
       {/* Controls */}
       <div className="mb-4 flex flex-col sm:flex-row gap-4 items-center justify-between">
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <input
-            type="text"
-            placeholder="Buscar evaluador..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full h-10 pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
-          />
+        <div className="flex flex-col sm:flex-row gap-4 items-center">
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Buscar evaluador..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full h-10 pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
+            />
+          </div>
+          {groupBy === 'fechas' && (
+            <FilterSelect
+              value={diasMostrar}
+              onChange={e => setDiasMostrar(Number(e.target.value))}
+              icon={<Calendar className="h-4 w-4" />}
+              containerClassName="w-full sm:w-40"
+            >
+              <option value={15}>15 días</option>
+              <option value={30}>30 días</option>
+              <option value={60}>60 días</option>
+              <option value={90}>90 días</option>
+            </FilterSelect>
+          )}
         </div>
         <button
           onClick={exportToExcel}
@@ -239,7 +312,7 @@ export function SpeProduccionTable({
 
       {/* Tabla visual */}
       <div className="bg-white rounded-lg shadow-md border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" ref={tableContainerRef}>
           <table className="w-full">
             <thead className="bg-slate-50 text-slate-600">
               <tr className="border-b border-slate-200">
@@ -263,28 +336,45 @@ export function SpeProduccionTable({
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-slate-100">
-              {filteredData.map((item) => (
-                <tr key={item.evaluador} className="hover:bg-slate-50 transition-colors">
-                  <td className="sticky left-0 bg-white group-hover:bg-slate-50 w-64 px-4 py-3 text-sm font-medium text-slate-800 border-r border-slate-200">
-                    {item.evaluador}
-                  </td>
-                  {visiblePeriods.map(period => {
-                    const cell = getCell(item[dataMapKey]?.[period]);
-                    return (
-                      <td key={period} className="w-28 px-4 py-3 text-center text-sm font-mono text-slate-600">
-                        <div>{cell.total}</div>
-                        <div className="flex justify-center gap-2 mt-0.5">
-                          {cell.finalizadas > 0 && <EtapaDot color="#22c55e">{cell.finalizadas}</EtapaDot>}
-                          {cell.iniciadas > 0 && <EtapaDot color="#eab308">{cell.iniciadas}</EtapaDot>}
-                        </div>
-                      </td>
-                    );
-                  })}
-                  <td className="w-32 px-4 py-3 text-center text-sm font-bold text-slate-800 bg-slate-100 border-l border-slate-200">
-                    {item.totalGeneral}
-                  </td>
-                </tr>
-              ))}
+              {filteredAndSortedData.map((item) => {
+                const esInactivo = isEvaluadorInactivo(item, periodos.fechas);
+                // Calcular total visible solo para fechas
+                const totalVisible = groupBy === 'fechas'
+                  ? visiblePeriods.reduce((acc, period) => acc + getCell(item[dataMapKey]?.[period]).total, 0)
+                  : item.totalGeneral;
+                return (
+                  <tr key={item.evaluador} className="hover:bg-slate-50 transition-colors">
+                    <td 
+                      className="sticky left-0 bg-white group-hover:bg-slate-50 w-64 px-4 py-3 text-sm font-medium text-slate-800 border-r border-slate-200 cursor-pointer"
+                      onClick={() => setSelectedEvaluador(item)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="hover:text-green-600 transition-colors">{item.evaluador}</span>
+                        {esInactivo && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700 border border-red-200" style={{ lineHeight: '1.1' }}>
+                            INACTIVO
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    {visiblePeriods.map(period => {
+                      const cell = getCell(item[dataMapKey]?.[period]);
+                      return (
+                        <td key={period} className="w-28 px-4 py-3 text-center text-sm font-mono text-slate-600">
+                          <div>{cell.total}</div>
+                          <div className="flex justify-center gap-2 mt-0.5">
+                            {cell.finalizadas > 0 && <EtapaDot color="#22c55e">{cell.finalizadas}</EtapaDot>}
+                            {cell.iniciadas > 0 && <EtapaDot color="#eab308">{cell.iniciadas}</EtapaDot>}
+                          </div>
+                        </td>
+                      );
+                    })}
+                    <td className="w-32 px-4 py-3 text-center text-sm font-bold text-slate-800 bg-slate-100 border-l border-slate-200">
+                      {totalVisible}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot className="bg-slate-100">
               <tr className="border-t-2 border-slate-200">
@@ -295,7 +385,7 @@ export function SpeProduccionTable({
                   // Calcular totales de finalizadas/iniciadas para el periodo
                   let totalFinalizadas = 0;
                   let totalIniciadas = 0;
-                  filteredData.forEach(item => {
+                  filteredAndSortedData.forEach(item => {
                     const cell = getCell(item[dataMapKey]?.[period]);
                     totalFinalizadas += cell.finalizadas;
                     totalIniciadas += cell.iniciadas;
@@ -318,6 +408,15 @@ export function SpeProduccionTable({
           </table>
         </div>
       </div>
+
+      {/* Modal de evolución de producción */}
+      {selectedEvaluador && (
+        <SpeEvaluadorProduccionModal
+          evaluador={selectedEvaluador}
+          fechasVisibles={visiblePeriods}
+          onClose={() => setSelectedEvaluador(null)}
+        />
+      )}
     </div>
   )
 } 

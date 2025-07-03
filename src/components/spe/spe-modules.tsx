@@ -15,7 +15,7 @@ import { SectionCard } from '@/components/ui/section-card'
 export function SpeModules() {
   const [selectedModule, setSelectedModule] = useState('pendientes')
   const [groupBy, setGroupBy] = useState<'anio' | 'trimestre' | 'mes'>('anio')
-  const [produccionGroupBy, setProduccionGroupBy] = useState<'fechas' | 'meses' | 'anios'>('meses')
+  const [produccionGroupBy, setProduccionGroupBy] = useState<'fechas' | 'meses'>('fechas')
   const { data: apiResponse, isLoading, error } = useSpeData()
   const { data: produccionData, isLoading: isLoadingProduccion, error: produccionError } = useSpeProduccion()
 
