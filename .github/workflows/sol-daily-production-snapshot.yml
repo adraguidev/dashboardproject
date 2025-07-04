@@ -28,8 +28,9 @@ jobs:
           # Construir el payload JSON. Si la fecha está vacía, se envía un objeto vacío.
           # Si hay fecha, se construye el JSON con la fecha.
           if [ -z "${{ github.event.inputs.date }}" ]; then
-            echo "🔍 Iniciando snapshot automático de producción SOL (procesando día de ayer)..."
-            json_payload="{}"
+            TODAY_DATE=$(TZ='America/Lima' date +%Y-%m-%d)
+            echo "🔍 Iniciando snapshot automático de producción SOL (procesando día de hoy: $TODAY_DATE)..."
+            json_payload="{\"date\": \"$TODAY_DATE\"}"
           else
             echo "🔍 Iniciando snapshot manual de producción SOL para la fecha: ${{ github.event.inputs.date }}"
             json_payload="{\"date\": \"${{ github.event.inputs.date }}\"}"
