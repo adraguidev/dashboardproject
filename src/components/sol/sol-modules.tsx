@@ -9,6 +9,7 @@ import { SolEstadoSummaryTable } from './sol-estado-summary-table'
 import { SolIngresosView } from './sol-ingresos-view'
 import SolAvancePendientesTable from './sol-avance-pendientes-table'
 import { SolProduccionTable } from './sol-produccion-table'
+import { SolAsignacionesTable } from './sol-asignaciones-table'
 import { motion, AnimatePresence } from 'framer-motion'
 import { SectionCard } from '@/components/ui/section-card'
 
@@ -146,7 +147,7 @@ export function SolModules() {
       case 'asignaciones':
         return (
           <div className="p-6">
-            {/* SolAsignacionesTable */}
+            <SolAsignacionesTable />
           </div>
         )
       default:

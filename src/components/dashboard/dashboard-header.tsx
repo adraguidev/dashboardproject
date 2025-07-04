@@ -4,6 +4,8 @@ import React, { useState, useRef, useEffect } from 'react'
 import { RefreshCcw, Settings, Bell, ChevronDown, Users, Upload } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
 import { FileUploadModal } from '@/components/ui/file-upload-modal'
+import { SystemStatusModal } from '@/components/ui/system-status-modal'
+import { useSystemStatus } from '@/hooks/use-system-status'
 import { ProcessKey } from '@/types/dashboard'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -22,7 +24,10 @@ export function DashboardHeader({
 }: DashboardHeaderProps) {
   const [showDropdown, setShowDropdown] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
+  const [showStatusModal, setShowStatusModal] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  const { data: statusData, isLoading: isStatusLoading, error: statusError } = useSystemStatus()
 
   const processes: Record<ProcessKey, { name: string; fullName: string; color: string }> = {
     ccm: { name: 'CCM', fullName: 'Cambio de Calidad Migratoria', color: 'bg-blue-500' },
@@ -51,6 +56,11 @@ export function DashboardHeader({
     onProcessChange?.(process)
     setShowDropdown(false)
   }
+
+  const handleTeamManagementClick = () => {
+    const targetProcess = (selectedProcess === 'spe' || selectedProcess === 'sol') ? 'ccm' : selectedProcess;
+    window.location.href = `/gestion-equipos?proceso=${targetProcess}`;
+  };
 
   return (
     <div className="bg-gradient-to-b from-white to-gray-50 border-b border-gray-200/60 shadow-sm backdrop-blur-sm sticky top-0 z-40">
@@ -165,7 +175,7 @@ export function DashboardHeader({
                         <span>Subir</span>
                     </button>
                      <button
-                        onClick={() => window.location.href = `/gestion-equipos?proceso=${selectedProcess}`}
+                        onClick={handleTeamManagementClick}
                         className="flex flex-col items-center justify-center gap-1 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors text-xs"
                         title="Gestión de Equipos"
                     >
@@ -173,6 +183,7 @@ export function DashboardHeader({
                         <span>Equipos</span>
                     </button>
                     <button
+                        onClick={() => setShowStatusModal(true)}
                         className="flex flex-col items-center justify-center gap-1 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors text-xs"
                         title="Configuración"
                     >
@@ -211,7 +222,7 @@ export function DashboardHeader({
               </button>
 
               <button
-                onClick={() => window.location.href = `/gestion-equipos?proceso=${selectedProcess}`}
+                onClick={handleTeamManagementClick}
                 className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                 title="Gestión de Equipos"
               >
@@ -219,6 +230,7 @@ export function DashboardHeader({
               </button>
               
               <button
+                onClick={() => setShowStatusModal(true)}
                 className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                 title="Configuración"
               >
@@ -236,6 +248,14 @@ export function DashboardHeader({
         onUploadComplete={() => {
           onRefresh?.() // Refrescar datos después de subir archivos
         }}
+      />
+
+      <SystemStatusModal
+        isOpen={showStatusModal}
+        onClose={() => setShowStatusModal(false)}
+        statusData={statusData}
+        isLoading={isStatusLoading}
+        error={statusError}
       />
     </div>
   )

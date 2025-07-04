@@ -46,6 +46,7 @@ export default function RootLayout({
             </QueryProvider>
           </PostHogProvider>
         </StackProvider>
+        <div id="modal-root"></div>
       </body>
     </html>
   );
