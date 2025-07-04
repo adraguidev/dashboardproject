@@ -146,3 +146,4 @@ export function SystemStatusModal({ isOpen, onClose, statusData, isLoading, erro
     </AnimatePresence>,
     document.getElementById('modal-root') as HTMLElement
   );
+}
