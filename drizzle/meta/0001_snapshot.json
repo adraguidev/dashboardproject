@@ -1,0 +1,840 @@
+{
+  "id": "063f752d-5803-40f9-a871-1011046b7673",
+  "prevId": "22684f7a-2259-470c-8387-209c0e0471e7",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.historico_pendientes_operador": {
+      "name": "historico_pendientes_operador",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "fecha": {
+          "name": "fecha",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trimestre": {
+          "name": "trimestre",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "proceso": {
+          "name": "proceso",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operador": {
+          "name": "operador",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "anio_expediente": {
+          "name": "anio_expediente",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pendientes": {
+          "name": "pendientes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "fecha_proceso_operador_anio_idx": {
+          "name": "fecha_proceso_operador_anio_idx",
+          "columns": [
+            {
+              "expression": "fecha",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "proceso",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "operador",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "anio_expediente",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.historico_sin_asignar": {
+      "name": "historico_sin_asignar",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "fecha": {
+          "name": "fecha",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trimestre": {
+          "name": "trimestre",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "proceso": {
+          "name": "proceso",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "anio_expediente": {
+          "name": "anio_expediente",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "sin_asignar": {
+          "name": "sin_asignar",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "fecha_proceso_sin_asignar_anio_idx": {
+          "name": "fecha_proceso_sin_asignar_anio_idx",
+          "columns": [
+            {
+              "expression": "fecha",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "proceso",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "anio_expediente",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.historico_sol_pendientes": {
+      "name": "historico_sol_pendientes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "fecha": {
+          "name": "fecha",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trimestre": {
+          "name": "trimestre",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operador": {
+          "name": "operador",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pendientes": {
+          "name": "pendientes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "sol_fecha_operador_idx": {
+          "name": "sol_fecha_operador_idx",
+          "columns": [
+            {
+              "expression": "fecha",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "operador",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.historico_spe_pendientes": {
+      "name": "historico_spe_pendientes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "fecha": {
+          "name": "fecha",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trimestre": {
+          "name": "trimestre",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operador": {
+          "name": "operador",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pendientes": {
+          "name": "pendientes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "spe_fecha_operador_idx": {
+          "name": "spe_fecha_operador_idx",
+          "columns": [
+            {
+              "expression": "fecha",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "operador",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.historico_spe_produccion_agg": {
+      "name": "historico_spe_produccion_agg",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "fecha": {
+          "name": "fecha",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "evaluador": {
+          "name": "evaluador",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "total": {
+          "name": "total",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "finalizadas": {
+          "name": "finalizadas",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "iniciadas": {
+          "name": "iniciadas",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.evaluadores_ccm": {
+      "name": "evaluadores_ccm",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "nombres_apellidos": {
+          "name": "nombres_apellidos",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nombre_en_base": {
+          "name": "nombre_en_base",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "regimen": {
+          "name": "regimen",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "turno": {
+          "name": "turno",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "modalidad": {
+          "name": "modalidad",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sub_equipo": {
+          "name": "sub_equipo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.evaluadores_prr": {
+      "name": "evaluadores_prr",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "nombres_apellidos": {
+          "name": "nombres_apellidos",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nombre_en_base": {
+          "name": "nombre_en_base",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "regimen": {
+          "name": "regimen",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "turno": {
+          "name": "turno",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "modalidad": {
+          "name": "modalidad",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sub_equipo": {
+          "name": "sub_equipo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.file_processing_jobs": {
+      "name": "file_processing_jobs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "file_name": {
+          "name": "file_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "progress": {
+          "name": "progress",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.table_ccm": {
+      "name": "table_ccm",
+      "schema": "",
+      "columns": {
+        "textbox4": {
+          "name": "textbox4",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dependencia": {
+          "name": "dependencia",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "anio": {
+          "name": "anio",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "mes": {
+          "name": "mes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "numerotramite": {
+          "name": "numerotramite",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ultimaetapa": {
+          "name": "ultimaetapa",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fechaexpendiente": {
+          "name": "fechaexpendiente",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fechaetapaaprobacionmasivafin": {
+          "name": "fechaetapaaprobacionmasivafin",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fechapre": {
+          "name": "fechapre",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "operadorpre": {
+          "name": "operadorpre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "estadopre": {
+          "name": "estadopre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "estadotramite": {
+          "name": "estadotramite",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "archivo_origen": {
+          "name": "archivo_origen",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "operador": {
+          "name": "operador",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fecha_asignacion": {
+          "name": "fecha_asignacion",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "modalidad": {
+          "name": "modalidad",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "regimen": {
+          "name": "regimen",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "meta_antigua": {
+          "name": "meta_antigua",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "meta_nueva": {
+          "name": "meta_nueva",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "equipo": {
+          "name": "equipo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.table_prr": {
+      "name": "table_prr",
+      "schema": "",
+      "columns": {
+        "textbox4": {
+          "name": "textbox4",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dependencia": {
+          "name": "dependencia",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "anio": {
+          "name": "anio",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "mes": {
+          "name": "mes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "numerotramite": {
+          "name": "numerotramite",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ultimaetapa": {
+          "name": "ultimaetapa",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fechaexpendiente": {
+          "name": "fechaexpendiente",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fechaetapaaprobacionmasivafin": {
+          "name": "fechaetapaaprobacionmasivafin",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fechapre": {
+          "name": "fechapre",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "operadorpre": {
+          "name": "operadorpre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "estadopre": {
+          "name": "estadopre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "estadotramite": {
+          "name": "estadotramite",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "archivo_origen": {
+          "name": "archivo_origen",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "operador": {
+          "name": "operador",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fecha_asignacion": {
+          "name": "fecha_asignacion",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "modalidad": {
+          "name": "modalidad",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "regimen": {
+          "name": "regimen",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "meta_antigua": {
+          "name": "meta_antigua",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "meta_nueva": {
+          "name": "meta_nueva",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "equipo": {
+          "name": "equipo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

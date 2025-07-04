@@ -14,7 +14,7 @@ const schema = {
 
 // Reexportamos los esquemas individuales para que sigan estando disponibles donde se necesiten
 export const { tableCCM, tablePRR, evaluadoresCCM, evaluadoresPRR, fileProcessingJobs } = mainSchema;
-export const { historicoPendientesOperador, historicoSinAsignar, historicoSpePendientes } = historicosSchema;
+export const { historicoPendientesOperador, historicoSinAsignar, historicoSpePendientes, historicoSolPendientes } = historicosSchema;
 
 // Función para obtener conexión a la base de datos (POOLED o DIRECTA)
 export async function getDrizzleDB(options: { type: 'pooled' | 'direct' } = { type: 'pooled' }) {
@@ -1079,6 +1079,126 @@ export class DirectDatabaseAPI {
   async deleteHistoricoDelDiaSpe(fecha: string) {
     return this.db.delete(historicoSpePendientes).where(
       eq(historicoSpePendientes.fecha, fecha)
+    );
+  }
+
+  // ============= MÉTODOS PARA SOL =============
+
+  /**
+   * Función auxiliar para obtener datos de pendientes SOL desde Google Sheets.
+   * Usa llamada directa en lugar de HTTP para evitar problemas de red.
+   */
+  async getAllSolPendientes(): Promise<any[]> {
+    try {
+      // Importar directamente la función de Google Sheets
+      const { getSheetData } = await import('@/lib/google-sheets');
+      
+      const SPREADSHEET_ID = '1G9HIEiliCgkasTTwdAtoeHB4z9-er2DBboUr91yXsLM';
+      const SHEET_NAME = 'MATRIZ_VISAS';
+      const SHEET_RANGE = `${SHEET_NAME}!A:J`;
+
+      console.log('📊 Obteniendo datos SOL directamente de Google Sheets...');
+      const rawData = await getSheetData(SPREADSHEET_ID, SHEET_RANGE);
+      
+      if (!rawData || rawData.length < 2) {
+        console.log('⚠️ No hay datos SOL en Google Sheets');
+        return [];
+      }
+
+      const header = rawData[0].map((h: any) => typeof h === 'string' ? h.trim().toUpperCase() : '');
+      const dataRows = rawData.slice(1);
+
+      // Estados a excluir según los requerimientos de SOL
+      const ESTADOS_EXCLUIDOS = [
+        'PRE APROBADO',
+        'PRE DENEGADO', 
+        'PRE ABANDONO',
+        'PRE NO PRESENTADO',
+        'APROBADO',
+        'DENEGADO',
+        'ANULADO',
+        'DESISTIDO',
+        'ABANDONO',
+        'NO PRESENTADO',
+        'PRE DESISTIDO'
+      ];
+
+      // Mapeo de columnas
+      const getIndex = (name: string, fallbackIndex: number): number => {
+        const index = header.indexOf(name);
+        return index !== -1 ? index : fallbackIndex;
+      };
+      
+      const COL_EXPEDIENTE = getIndex('EXPEDIENTE', 1); // Columna B es índice 1
+      const COL_ESTADO = getIndex('ESTADO', 7); // Columna H es índice 7
+      const COL_EVALUADOR = getIndex('EVALUADOR', 9); // Columna J es índice 9
+
+      // Procesar datos y agrupar por evaluador
+      const pendientesAgrupados = dataRows.reduce((acc: any, row: any) => {
+        const estadoRaw = (row[COL_ESTADO] || '').toString();
+        const estadoClean = estadoRaw.trim().toUpperCase();
+        
+        // Aplicar filtros SOL: excluir estados específicos
+        if (ESTADOS_EXCLUIDOS.includes(estadoClean)) {
+          return acc; // Ignorar expedientes con estados excluidos
+        }
+
+        const evaluador = row[COL_EVALUADOR] || 'Sin Asignar';
+        const expediente = row[COL_EXPEDIENTE];
+        
+        // Validar que tengamos expediente
+        if (!expediente) {
+          return acc;
+        }
+        
+        if (!acc[evaluador]) {
+          acc[evaluador] = 0;
+        }
+        acc[evaluador]++;
+        
+        return acc;
+      }, {});
+
+      // Convertir a array para el snapshot
+      const registrosPendientes = Object.entries(pendientesAgrupados).map(([evaluador, pendientes]) => ({
+        evaluador,
+        pendientes: pendientes as number
+      }));
+
+      console.log(`✅ Datos SOL procesados: ${registrosPendientes.length} evaluadores`);
+      return registrosPendientes;
+      
+    } catch (error) {
+      console.error('❌ Error obteniendo datos SOL para snapshot:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Insertar/actualizar registros de histórico SOL pendientes
+   */
+  async upsertHistoricoSolPendientes(data: (typeof historicoSolPendientes.$inferInsert)[]) {
+    if (data.length === 0) return;
+    
+    return this.db.insert(historicoSolPendientes)
+      .values(data)
+      .onConflictDoUpdate({
+        target: [
+          historicoSolPendientes.fecha,
+          historicoSolPendientes.operador,
+        ],
+        set: {
+          pendientes: sql`excluded.pendientes`,
+        },
+      });
+  }
+
+  /**
+   * Eliminar registros históricos de SOL para una fecha específica
+   */
+  async deleteHistoricoDelDiaSol(fecha: string) {
+    return this.db.delete(historicoSolPendientes).where(
+      eq(historicoSolPendientes.fecha, fecha)
     );
   }
 }

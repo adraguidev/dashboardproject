@@ -104,6 +104,32 @@ export const historicoSpeProduccionAgg = pgTable(
   }
 )
 
+/**
+ * Tabla para almacenar el histórico de expedientes pendientes SOL por operador.
+ * Similar a historicoSpePendientes pero específica para SOL.
+ */
+export const historicoSolPendientes = pgTable(
+  'historico_sol_pendientes',
+  {
+    id: serial('id').primaryKey(),
+    fecha: date('fecha').notNull(),
+    trimestre: integer('trimestre').notNull(),
+    operador: text('operador').notNull(),
+    // Para SOL no usamos años de expediente como CCM/PRR
+    pendientes: integer('pendientes').notNull(),
+    createdAt: timestamp('created_at').defaultNow(),
+  },
+  table => {
+    return {
+      // Índice único para evitar duplicados en SOL
+      fechaOperadorUnico: uniqueIndex('sol_fecha_operador_idx').on(
+        table.fecha,
+        table.operador,
+      ),
+    }
+  },
+)
+
 export type HistoricoPendientesOperador = typeof historicoPendientesOperador.$inferSelect
 export type NewHistoricoPendientesOperador = typeof historicoPendientesOperador.$inferInsert
 
@@ -115,3 +141,6 @@ export type NewHistoricoSpePendientes = typeof historicoSpePendientes.$inferInse
 
 export type HistoricoSpeProduccionAgg = typeof historicoSpeProduccionAgg.$inferSelect
 export type NewHistoricoSpeProduccionAgg = typeof historicoSpeProduccionAgg.$inferInsert 
+
+export type HistoricoSolPendientes = typeof historicoSolPendientes.$inferSelect
+export type NewHistoricoSolPendientes = typeof historicoSolPendientes.$inferInsert 

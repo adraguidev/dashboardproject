@@ -6,6 +6,7 @@ import { useSolData } from '@/hooks/use-sol-data'
 import { SolPendientesTable } from './sol-pendientes-table'
 import { SolEstadoSummaryTable } from './sol-estado-summary-table'
 import { SolIngresosView } from './sol-ingresos-view'
+import SolAvancePendientesTable from './sol-avance-pendientes-table'
 import { motion, AnimatePresence } from 'framer-motion'
 import { SectionCard } from '@/components/ui/section-card'
 
@@ -120,7 +121,7 @@ export function SolModules() {
       case 'avance-pendientes':
         return (
           <div className="p-6">
-            {/* SolAvancePendientesTable */}
+            <SolAvancePendientesTable />
           </div>
         )
       case 'produccion':
