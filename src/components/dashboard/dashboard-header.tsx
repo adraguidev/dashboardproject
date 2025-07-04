@@ -33,8 +33,7 @@ export function DashboardHeader({
     ccm: { name: 'CCM', fullName: 'Cambio de Calidad Migratoria', color: 'bg-blue-500' },
     prr: { name: 'PRR', fullName: 'Prórroga de Residencia', color: 'bg-emerald-500' },
     spe: { name: 'SPE', fullName: 'Servicios Prestados por Exclusividad', color: 'bg-purple-500' },
-    sol: { name: 'VISAS', fullName: 'Visas de Residente', color: 'bg-pink-500' },
-    pas: { name: 'PAS', fullName: 'Permiso para Ausencia del País', color: 'bg-yellow-500' },
+    sol: { name: 'VISAS', fullName: 'Solicitud de Visas', color: 'bg-pink-500' },
   }
 
   const currentProcess = processes[selectedProcess]
