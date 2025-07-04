@@ -60,13 +60,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     let targetDateStr = body.date; // Permite pasar una fecha específica para backfilling
 
-    // Si no se provee una fecha, por defecto se procesa el día de ayer
+    // Si no se provee una fecha, por defecto se procesa el día actual en Lima
     if (!targetDateStr) {
+      // Ahora el snapshot automático procesa el día actual en Lima (no el día anterior)
       const limaTimeZone = 'America/Lima'
       const nowInLima = toZonedTime(new Date(), limaTimeZone)
-      const yesterdayInLima = subDays(nowInLima, 1)
-      targetDateStr = format(yesterdayInLima, 'yyyy-MM-dd')
-      console.log(`🤖 Snapshot automático de Producción SOL invocado. Fecha objetivo (ayer): ${targetDateStr}`)
+      targetDateStr = format(nowInLima, 'yyyy-MM-dd')
+      console.log(`🤖 Snapshot automático de Producción SOL invocado. Fecha objetivo (hoy): ${targetDateStr}`)
     } else {
       console.log(`🔑 Snapshot manual de Producción SOL invocado para la fecha: ${targetDateStr}`)
     }

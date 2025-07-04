@@ -3,8 +3,8 @@ name: SOL Daily Production Snapshot
 
 on:
   schedule:
-    # Ejecutar todos los días a la 1 AM hora de Perú (6 AM UTC) para asegurar que el día anterior ha terminado
-    - cron: '0 6 * * *'
+    # Ejecutar todos los días a las 11 PM hora de Perú (4 AM UTC del día siguiente)
+    - cron: '0 4 * * *'
   
   # Permitir ejecución manual con fecha opcional para backfilling
   workflow_dispatch:
