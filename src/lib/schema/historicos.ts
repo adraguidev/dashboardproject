@@ -105,6 +105,20 @@ export const historicoSpeProduccionAgg = pgTable(
 )
 
 /**
+ * Tabla para almacenar el histórico agregado de producción SOL por evaluador y fecha
+ */
+export const historicoSolProduccionAgg = pgTable(
+  'historico_sol_produccion_agg',
+  {
+    id: serial('id').primaryKey(),
+    fecha: date('fecha').notNull(),
+    evaluador: text('evaluador').notNull(),
+    total: integer('total').notNull(),
+    createdAt: timestamp('created_at').defaultNow(),
+  }
+)
+
+/**
  * Tabla para almacenar el histórico de expedientes pendientes SOL por operador.
  * Similar a historicoSpePendientes pero específica para SOL.
  */
@@ -141,6 +155,9 @@ export type NewHistoricoSpePendientes = typeof historicoSpePendientes.$inferInse
 
 export type HistoricoSpeProduccionAgg = typeof historicoSpeProduccionAgg.$inferSelect
 export type NewHistoricoSpeProduccionAgg = typeof historicoSpeProduccionAgg.$inferInsert 
+
+export type HistoricoSolProduccionAgg = typeof historicoSolProduccionAgg.$inferSelect
+export type NewHistoricoSolProduccionAgg = typeof historicoSolProduccionAgg.$inferInsert 
 
 export type HistoricoSolPendientes = typeof historicoSolPendientes.$inferSelect
 export type NewHistoricoSolPendientes = typeof historicoSolPendientes.$inferInsert 

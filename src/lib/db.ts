@@ -14,7 +14,7 @@ const schema = {
 
 // Reexportamos los esquemas individuales para que sigan estando disponibles donde se necesiten
 export const { tableCCM, tablePRR, evaluadoresCCM, evaluadoresPRR, fileProcessingJobs } = mainSchema;
-export const { historicoPendientesOperador, historicoSinAsignar, historicoSpePendientes, historicoSolPendientes } = historicosSchema;
+export const { historicoPendientesOperador, historicoSinAsignar, historicoSpePendientes, historicoSpeProduccionAgg, historicoSolPendientes, historicoSolProduccionAgg } = historicosSchema;
 
 // Función para obtener conexión a la base de datos (POOLED o DIRECTA)
 export async function getDrizzleDB(options: { type: 'pooled' | 'direct' } = { type: 'pooled' }) {
@@ -1199,6 +1199,122 @@ export class DirectDatabaseAPI {
   async deleteHistoricoDelDiaSol(fecha: string) {
     return this.db.delete(historicoSolPendientes).where(
       eq(historicoSolPendientes.fecha, fecha)
+    );
+  }
+
+  /**
+   * Función auxiliar para obtener datos de producción SOL desde Google Sheets.
+   * Usa FECHA_DE_TRABAJO (col K) como fecha de producción.
+   */
+  async getProduccionSolFromGoogleSheets(): Promise<any[]> {
+    try {
+      const { getSheetData } = await import('@/lib/google-sheets');
+      
+      const SPREADSHEET_ID = '1G9HIEiliCgkasTTwdAtoeHB4z9-er2DBboUr91yXsLM';
+      const SHEET_NAME = 'MATRIZ_VISAS';
+      const SHEET_RANGE = `${SHEET_NAME}!A:K`; // Incluir hasta col K (FECHA_DE_TRABAJO)
+
+      console.log('📊 Obteniendo datos SOL producción directamente de Google Sheets...');
+      const rawData = await getSheetData(SPREADSHEET_ID, SHEET_RANGE);
+      
+      if (!rawData || rawData.length < 2) {
+        console.log('⚠️ No hay datos SOL producción en Google Sheets');
+        return [];
+      }
+
+      const header = rawData[0].map((h: any) => typeof h === 'string' ? h.trim().toUpperCase() : '');
+      const dataRows = rawData.slice(1);
+
+      // Mapeo de columnas
+      const getIndex = (name: string, fallbackIndex: number): number => {
+        const index = header.indexOf(name);
+        return index !== -1 ? index : fallbackIndex;
+      };
+      
+      const COL_EXPEDIENTE = getIndex('EXPEDIENTE', 1); // Columna B es índice 1
+      const COL_EVALUADOR = getIndex('EVALUADOR', 9); // Columna J es índice 9
+      const COL_FECHA_TRABAJO = getIndex('FECHA_DE_TRABAJO', 10); // Columna K es índice 10
+
+      // Procesar datos y agrupar por evaluador y fecha de trabajo
+      const produccionAgrupada = dataRows.reduce((acc: any, row: any) => {
+        const evaluador = row[COL_EVALUADOR] || 'Sin Asignar';
+        const expediente = row[COL_EXPEDIENTE];
+        const fechaTrabajoRaw = row[COL_FECHA_TRABAJO];
+        
+        // Validar que tengamos expediente y fecha de trabajo
+        if (!expediente || !fechaTrabajoRaw) {
+          return acc;
+        }
+
+        // Parsear fecha de trabajo
+        let fechaTrabajo: string | null = null;
+        if (typeof fechaTrabajoRaw === 'number' && fechaTrabajoRaw > 20000) {
+          // Fecha de Excel/Sheets
+          const date = new Date(1900, 0, fechaTrabajoRaw - 1);
+          fechaTrabajo = date.toISOString().split('T')[0]; // YYYY-MM-DD
+        } else if (typeof fechaTrabajoRaw === 'string' && fechaTrabajoRaw.includes('/')) {
+          // Formato DD/MM/YYYY
+          const parts = fechaTrabajoRaw.split('/');
+          if (parts.length === 3) {
+            const day = parts[0].padStart(2, '0');
+            const month = parts[1].padStart(2, '0');
+            const year = parts[2];
+            fechaTrabajo = `${year}-${month}-${day}`;
+          }
+        }
+
+        if (!fechaTrabajo) {
+          return acc; // Ignorar si no podemos determinar la fecha
+        }
+
+        const key = `${evaluador}_${fechaTrabajo}`;
+        if (!acc[key]) {
+          acc[key] = {
+            evaluador,
+            fechaTrabajo,
+            total: 0
+          };
+        }
+        acc[key].total++;
+        
+        return acc;
+      }, {});
+
+      const registrosProduccion = Object.values(produccionAgrupada);
+      console.log(`✅ Datos SOL producción procesados: ${registrosProduccion.length} registros`);
+      return registrosProduccion;
+      
+    } catch (error) {
+      console.error('❌ Error obteniendo datos SOL producción:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Insertar/actualizar registros de histórico SOL producción
+   */
+  async upsertHistoricoSolProduccion(data: (typeof historicoSolProduccionAgg.$inferInsert)[]) {
+    if (data.length === 0) return;
+    
+    return this.db.insert(historicoSolProduccionAgg)
+      .values(data)
+      .onConflictDoUpdate({
+        target: [
+          historicoSolProduccionAgg.fecha,
+          historicoSolProduccionAgg.evaluador,
+        ],
+        set: {
+          total: sql`excluded.total`,
+        },
+      });
+  }
+
+  /**
+   * Eliminar registros históricos de SOL producción para una fecha específica
+   */
+  async deleteHistoricoDelDiaSolProduccion(fecha: string) {
+    return this.db.delete(historicoSolProduccionAgg).where(
+      eq(historicoSolProduccionAgg.fecha, fecha)
     );
   }
 }

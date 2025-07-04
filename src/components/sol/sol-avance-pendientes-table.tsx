@@ -189,6 +189,18 @@ export default function SolAvancePendientesTable({
   }, 0);
   // --------------------
 
+  // Ordenar operadores de mayor a menor según la última fecha
+  const operadoresOrdenados = [...processedData.operadores].sort((a, b) => {
+    const valB = (b[ultimaFechaRaw] as number) || 0;
+    const valA = (a[ultimaFechaRaw] as number) || 0;
+    return valB - valA;
+  });
+
+  // Calcular totales por fecha para la fila TOTAL
+  const totalesPorFecha = fechasFiltradas.map(fecha =>
+    operadoresOrdenados.reduce((sum, op) => sum + ((op[fecha] as number) || 0), 0)
+  );
+
   return (
     <SectionCard className={className}>
       {/* Header */}
@@ -302,7 +314,7 @@ export default function SolAvancePendientesTable({
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-100">
-            {processedData.operadores.map((operador, index) => (
+            {operadoresOrdenados.map((operador, index) => (
               <motion.tr 
                 key={operador.operador}
                 initial={{ opacity: 0, y: 10 }}
@@ -333,6 +345,17 @@ export default function SolAvancePendientesTable({
                 })}
               </motion.tr>
             ))}
+            {/* Fila TOTAL */}
+            <tr className="bg-slate-100 font-bold">
+              <td className="sticky left-0 z-10 bg-slate-100 px-4 py-3 text-left text-sm font-bold text-gray-900 border-r border-gray-200">
+                TOTAL
+              </td>
+              {totalesPorFecha.map((total, idx) => (
+                <td key={fechasFiltradas[idx]} className="px-3 py-3 text-center text-sm font-bold text-gray-900">
+                  {total.toLocaleString()}
+                </td>
+              ))}
+            </tr>
           </tbody>
         </table>
       </div>

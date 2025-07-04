@@ -3,10 +3,12 @@
 import React, { useState, useEffect } from 'react'
 import { Loader2, AlertTriangle, BarChart3, Construction, TrendingUp, Activity, ClipboardList } from 'lucide-react'
 import { useSolData } from '@/hooks/use-sol-data'
+import { useSolProduccion } from '@/hooks/use-sol-produccion'
 import { SolPendientesTable } from './sol-pendientes-table'
 import { SolEstadoSummaryTable } from './sol-estado-summary-table'
 import { SolIngresosView } from './sol-ingresos-view'
 import SolAvancePendientesTable from './sol-avance-pendientes-table'
+import { SolProduccionTable } from './sol-produccion-table'
 import { motion, AnimatePresence } from 'framer-motion'
 import { SectionCard } from '@/components/ui/section-card'
 
@@ -21,7 +23,9 @@ declare global {
 export function SolModules() {
   const [selectedModule, setSelectedModule] = useState('pendientes')
   const [groupBy, setGroupBy] = useState<'anio' | 'trimestre' | 'mes'>('anio')
+  const [produccionGroupBy, setProduccionGroupBy] = useState<'fechas' | 'meses'>('fechas')
   const { data: apiResponse, isLoading, error } = useSolData()
+  const { data: produccionData, isLoading: isLoadingProduccion, error: produccionError } = useSolProduccion()
 
   const modules = [
     {
@@ -128,7 +132,14 @@ export function SolModules() {
         return (
           <div className="p-6">
             <SectionCard>
-              {/* SolProduccionTable */}
+              <SolProduccionTable
+                data={produccionData?.data || []}
+                periodos={produccionData?.periodos || { fechas: [], meses: [], anios: [] }}
+                loading={isLoadingProduccion}
+                className="w-full"
+                groupBy={produccionGroupBy}
+                onGroupingChange={setProduccionGroupBy}
+              />
             </SectionCard>
           </div>
         )

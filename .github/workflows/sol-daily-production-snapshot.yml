@@ -1,0 +1,63 @@
+# Workflow para Snapshot Automático Diario de Producción SOL
+name: SOL Daily Production Snapshot
+
+on:
+  schedule:
+    # Ejecutar todos los días a la 1 AM hora de Perú (6 AM UTC) para asegurar que el día anterior ha terminado
+    - cron: '0 6 * * *'
+  
+  # Permitir ejecución manual con fecha opcional para backfilling
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Fecha a procesar (YYYY-MM-DD). Dejar en blanco para procesar el día de ayer.'
+        required: false
+
+jobs:
+  sol-production-snapshot:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Show current time
+        run: |
+          echo "UTC Time: $(date -u)"
+          echo "Peru Time (UTC-5): $(TZ='America/Lima' date)"
+
+      - name: Take SOL Production Snapshot
+        run: |
+          # Construir el payload JSON. Si la fecha está vacía, se envía un objeto vacío.
+          # Si hay fecha, se construye el JSON con la fecha.
+          if [ -z "${{ github.event.inputs.date }}" ]; then
+            echo "🔍 Iniciando snapshot automático de producción SOL (procesando día de ayer)..."
+            json_payload="{}"
+          else
+            echo "🔍 Iniciando snapshot manual de producción SOL para la fecha: ${{ github.event.inputs.date }}"
+            json_payload="{\"date\": \"${{ github.event.inputs.date }}\"}"
+          fi
+          
+          # Llamar al endpoint con el payload correspondiente
+          response=$(curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.INTERNAL_API_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -w "%{http_code}" \
+            -s \
+            -o response.json \
+            -d "$json_payload" \
+            "${{ secrets.API_URL }}/api/historico/sol-produccion-snapshot")
+          
+          echo "📡 HTTP Status Code: $response"
+          echo "📋 Response body:"
+          cat response.json
+          
+          # Verificar si la llamada fue exitosa
+          if [ "$response" -eq 200 ]; then
+            echo "✅ Snapshot de Producción SOL creado exitosamente"
+          else
+            echo "❌ Error en snapshot de Producción SOL. Status code: $response"
+            exit 1
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f response.json 
