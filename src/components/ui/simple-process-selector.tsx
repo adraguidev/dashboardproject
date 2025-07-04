@@ -62,6 +62,17 @@ export function SimpleProcessSelector({
         >
           PAS
         </button>
+        <button
+          onClick={() => onProcessChange('sol')}
+          disabled={loading}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            selectedProcess === 'sol'
+              ? 'bg-pink-600 text-white shadow-sm'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+          }`}
+        >
+          VISAS
+        </button>
       </div>
     </div>
   )
