@@ -48,7 +48,7 @@ export async function getDrizzleDB(options: { type: 'pooled' | 'direct' } = { ty
 
 // Clase que reemplaza completamente a NeonDataAPI
 export class DirectDatabaseAPI {
-  private db: NeonHttpDatabase<typeof schema>;
+  public db: NeonHttpDatabase<typeof schema>;
 
   constructor(db: NeonHttpDatabase<typeof schema>) {
     this.db = db;
