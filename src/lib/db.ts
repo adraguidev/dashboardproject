@@ -802,18 +802,27 @@ export class DirectDatabaseAPI {
 
   async upsertHistoricoSinAsignar(data: (typeof historicoSinAsignar.$inferInsert)[]) {
     if (data.length === 0) return;
-    return this.db.insert(historicoSinAsignar)
-      .values(data)
-      .onConflictDoUpdate({
-        target: [
-          historicoSinAsignar.fecha,
-          historicoSinAsignar.proceso,
-          historicoSinAsignar.anioExpediente,
-        ],
-        set: {
-          sinAsignar: sql`excluded.sin_asignar`,
-        },
-      });
+    
+    try {
+      const result = await this.db.insert(historicoSinAsignar)
+        .values(data)
+        .onConflictDoUpdate({
+          target: [
+            historicoSinAsignar.fecha,
+            historicoSinAsignar.proceso,
+            historicoSinAsignar.anioExpediente,
+          ],
+          set: {
+            sinAsignar: sql`excluded.sin_asignar`,
+          },
+        })
+        .returning();
+      
+      return result;
+    } catch (error) {
+      console.error('❌ Error en upsertHistoricoSinAsignar:', error);
+      throw error;
+    }
   }
 
   // =========== MÉTODOS DE BORRADO PARA HISTÓRICOS ===========
@@ -828,8 +837,12 @@ export class DirectDatabaseAPI {
   }
 
   async deleteHistoricoDelDiaSinAsignar(fecha: string, proceso: 'CCM' | 'PRR') {
-    const table = proceso === 'CCM' ? historicoSinAsignar : historicoSinAsignar; // Ajusta si tienes tablas separadas
-    return this.db.delete(table).where(eq(table.fecha, fecha));
+    return this.db.delete(historicoSinAsignar).where(
+      and(
+        eq(historicoSinAsignar.fecha, fecha),
+        eq(historicoSinAsignar.proceso, proceso)
+      )
+    );
   }
 
   /**

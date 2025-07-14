@@ -60,18 +60,16 @@ async function takeSnapshot(api: import('@/lib/db').DirectDatabaseAPI) {
 
     const totalSinAsignar = allPendientes.filter(p => !p.operador || p.operador.trim() === '').length;
     
-    if (totalSinAsignar > 0) {
-      const historicosSinAsignar = [{
-        fecha,
-        trimestre,
-        proceso: process.name,
-        anioExpediente: 0,
-        sinAsignar: totalSinAsignar,
-      }];
-      
-      await api.upsertHistoricoSinAsignar(historicosSinAsignar);
-      results.sinAsignar[process.name] = historicosSinAsignar.length;
-    }
+    const historicosSinAsignar = [{
+      fecha,
+      trimestre,
+      proceso: process.name,
+      anioExpediente: 0,
+      sinAsignar: totalSinAsignar,
+    }];
+    
+    await api.upsertHistoricoSinAsignar(historicosSinAsignar);
+    results.sinAsignar[process.name] = historicosSinAsignar.length;
   }
   return results;
 }
