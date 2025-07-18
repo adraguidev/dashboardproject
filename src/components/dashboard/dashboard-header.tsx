@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useRef, useEffect } from 'react'
-import { RefreshCcw, Settings, Bell, ChevronDown, Users, Upload } from 'lucide-react'
+import { RefreshCcw, Settings, Bell, ChevronDown, Users, Upload, Monitor } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
 import { FileUploadModal } from '@/components/ui/file-upload-modal'
 import { SystemStatusModal } from '@/components/ui/system-status-modal'
@@ -165,7 +165,7 @@ export function DashboardHeader({
                         </select>
                     </div>
                 )}
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                      <button
                         onClick={() => setShowUploadModal(true)}
                         className="flex flex-col items-center justify-center gap-1 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors text-xs"
@@ -181,6 +181,14 @@ export function DashboardHeader({
                     >
                         <Users className="w-4 h-4" />
                         <span>Equipos</span>
+                    </button>
+                    <button
+                        onClick={() => window.open('/tv-dashboard', '_blank')}
+                        className="flex flex-col items-center justify-center gap-1 p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-100 rounded-lg transition-colors text-xs"
+                        title="Dashboard para TV"
+                    >
+                        <Monitor className="w-4 h-4" />
+                        <span>TV</span>
                     </button>
                     <button
                         onClick={() => setShowStatusModal(true)}
@@ -227,6 +235,14 @@ export function DashboardHeader({
                 title="Gestión de Equipos"
               >
                 <Users className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={() => window.open('/tv-dashboard', '_blank')}
+                className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-100 rounded-lg transition-colors"
+                title="Dashboard para TV"
+              >
+                <Monitor className="w-4 h-4" />
               </button>
               
               <button
